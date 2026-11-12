@@ -8,6 +8,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `Sheet.shade`: shades a rectangle or a polygon with strokes side by side as
+  a hand lays them, none quite straight or quite alike; the pressure can
+  change across the area.
 - Graphite pencils, `fusain.pencils`, from 9H to 9B, and `Sheet.stroke`: the
   tone depends on the grade, the pressure and the number of layers; a light
   touch marks only the peaks of the tooth, and the tooth fills up.

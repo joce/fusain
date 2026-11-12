@@ -188,6 +188,7 @@ from fusain import Sheet, papers, pencils, pastels, tools
 
 sheet = Sheet(1200, 800, paper=papers.CARTRIDGE, seed=1)
 sheet.stroke([(100, 300), (300, 220), (500, 320)], pencils.HB, pressure=0.4)
+sheet.shade((100, 360, 500, 520), pencils.HB, pressure=0.4, angle=30)
 sheet.stroke(path, pastels.soft("#c0392b"), pressure=(0.2, 0.8), side=True)
 sheet.smudge(path, tools.STUMP)
 sheet.erase(path, tools.KNEADED)

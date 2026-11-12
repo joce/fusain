@@ -30,6 +30,7 @@ make pre-push                  # what CI runs: tox (black, ruff, pyright, pytest
 - `paper.py`, `papers.py`: a paper's texture, tooth and colour, and the presets.
 - `sheet.py`: the `Sheet`, with the tooth, held and loose pigment, strokes and rendering.
 - `medium.py`, `pencils.py`: what a stick is made of, and the graphite grades.
+- `hatching.py`: the strokes of a shading, as a hand lays them.
 - `_engine.py`: the numba kernels that lay a medium on the paper, and their constants.
 - `docs/design.md`: the model and the build order. `examples/`: scripts and the images they write to `examples/output/`.
 
