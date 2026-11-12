@@ -260,6 +260,87 @@ def test_a_firm_line_keeps_the_grain_of_the_paper():
     assert pigment.std() > 0.3 * pigment.mean()
 
 
+def _marked_rows(sheet) -> int:
+    return int(np.count_nonzero(sheet.pigment()[:, 50:90].sum(axis=1)))
+
+
+def test_a_pencil_on_its_side_marks_a_band_several_times_wider():
+    marks = {}
+    for tilt in (0.0, 0.5, 1.0):
+        sheet = _sheet(Paper(depth=0))
+        sheet.stroke(Polyline([(30, 30), (110, 30)]), pencils.B2, 0.6, 5.0, tilt)
+        marks[tilt] = sheet.pigment()
+        # broader across the stroke: up to 5 times, no more
+        assert abs(_marked_rows(sheet) - 5.0 * (1 + 4 * tilt)) <= 2
+        # but no longer: it starts and stops where the point would
+        columns = np.nonzero(marks[tilt].sum(axis=0))[0]
+        assert 26 <= columns.min() <= 28 and 111 <= columns.max() <= 113
+    # its edges are soft: the tone falls away from the middle of the band,
+    # where the point's is flat right up to its rim
+    across = marks[1.0][:, 50:90].mean(axis=1)
+    assert across[30 - 9 : 30 + 9].min() < 0.75 * across[29:31].mean()
+    point = marks[0.0][:, 50:90].mean(axis=1)
+    assert point[29:31].min() > 0.8 * point.max()
+
+
+def test_the_side_of_a_lead_lays_a_lighter_grainier_tone_than_its_point():
+    def middle(tilt, pressure) -> tuple[float, float]:
+        sheet = _sheet()
+        sheet.stroke([(10, 30), (130, 30)], pencils.B2, pressure, 5.0, tilt)
+        rows = (slice(29, 31), slice(30, 110))
+        return float(sheet.pigment()[rows].mean()), float(sheet.cover[rows].mean())
+
+    for pressure in (0.3, 0.6, 1.0):
+        point, side = middle(0.0, pressure), middle(1.0, pressure)
+        assert side[0] < 0.75 * point[0]  # lighter
+        assert side[1] < point[1] - 0.1  # and it skips more of the valleys
+
+    # all the same it lays more in all, over its wider band
+    def laid(tilt) -> float:
+        return _sheet().stroke([(10, 30), (130, 30)], pencils.B2, 0.6, 5.0, tilt)
+
+    assert laid(0.0) < laid(1.0) < 5 * laid(0.0)
+
+
+def test_shading_with_the_side_takes_fewer_broader_strokes(monkeypatch):
+    def shaded(tilt) -> tuple[float, float]:
+        sheet = Sheet(200, 150, seed=2)
+        sheet.shade((20, 20, 180, 130), pencils.B2, 0.6, 5.0, tilt=tilt)
+        middle = (slice(50, 100), slice(50, 150))
+        return float(sheet.cover[middle].mean()), float(sheet.pigment()[middle].mean())
+
+    point, side = shaded(0.0), shaded(1.0)
+    assert 0.3 < side[0] < point[0] - 0.1 and side[1] < point[1]
+
+    # the default spacing follows the width of the mark: a fifth of the
+    # strokes, each five times wider
+    def strokes(tilt) -> list[float]:
+        sheet, widths = Sheet(200, 150, seed=2), []
+        draw = sheet.stroke
+
+        def counting(path, medium, pressure, width, tilt):
+            widths.append(width)
+            return draw(path, medium, pressure, width, tilt)
+
+        monkeypatch.setattr(sheet, "stroke", counting)
+        sheet.shade((20, 20, 180, 130), pencils.B2, 0.6, 5.0, hand=0.0, tilt=tilt)
+        return widths
+
+    point, side = strokes(0.0), strokes(1.0)
+    assert 4 * len(side) <= len(point) <= 6 * len(side)
+    assert set(point) == set(side) == {5.0}  # the point's width, either way
+
+
+@pytest.mark.parametrize("tilt", [-0.1, 1.5, float("nan")])
+def test_tilt_is_between_point_and_side(tilt):
+    sheet = _sheet()
+    with pytest.raises(ValueError, match="tilt must be between 0"):
+        sheet.stroke([(20, 30), (120, 30)], pencils.HB, 0.5, 4.0, tilt)
+    with pytest.raises(ValueError, match="tilt must be between 0"):
+        sheet.shade((20, 20, 100, 50), pencils.HB, tilt=tilt)
+    assert not sheet.pigment().any()
+
+
 def test_how_a_path_is_given_does_not_change_the_line():
     two = _sheet().stroke(Polyline([(20, 30), (120, 30)]), pencils.B2, 0.5)
     many = _sheet().stroke(

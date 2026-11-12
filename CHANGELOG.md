@@ -8,6 +8,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `tilt`, for `Sheet.stroke` and `Sheet.shade`: a stick held on its side marks
+  a band up to five times wider than its point, lighter, grainier and soft at
+  the edges. The tip is now an ellipse, as long along the stroke as the point
+  is wide.
 - Charcoal, `fusain.charcoal`: vine, compressed and charcoal pencil. Most of
   what it lays is dust.
 - `Sheet.smudge` and `Sheet.erase`, with the tools of `fusain.tools`: stump,

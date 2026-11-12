@@ -25,6 +25,7 @@ sheet = Sheet(800, 600, paper=papers.CARTRIDGE, seed=1)
 sheet.stroke([(100, 300), (300, 220), (500, 320)], pencils.B2, pressure=0.6)
 sheet.shade((100, 360, 500, 520), pencils.HB, pressure=0.4)             # an even tone
 sheet.shade((100, 360, 500, 520), pencils.HB, pressure=0.4, angle=-40)  # a second layer, across
+sheet.stroke([(100, 560), (500, 550)], pencils.B4, tilt=1)             # with the side of the lead
 sheet.save("drawing.png")
 ```
 
@@ -32,7 +33,9 @@ sheet.save("drawing.png")
 
 Top: 4H, 2H, HB, 2B, 4B, 6B and 8B, each shaded with the pressure rising from
 left to right. Bottom left: HB at a light pressure in 1, 2, 4 and 8 layers.
-Bottom right: 2B lines drawn lightly, firmly and hard, and cross-hatching.
+Bottom middle: a 4B held on its side (`tilt=1`), which marks a broad, soft,
+grainy band. Bottom right: 2B lines drawn lightly, firmly and hard, and
+cross-hatching.
 
 Sizes are in pixels, and the paper's `grain` sets the scale: a pencil line is
 two or three grains wide.

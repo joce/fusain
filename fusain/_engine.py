@@ -44,6 +44,14 @@ JITTER = 0.3
 #: A tip is flat across, and rounded off over this share of its radius (and
 #: half a pixel) at the rim.
 RIM = 0.35
+#: A pencil held on its side marks with the side of its lead: at full tilt
+#: the mark is this many times wider than the point's, no more.
+SIDE = 5.0
+#: Its weight is then spread over more paper: the share of its reach into
+#: the tooth it loses at full tilt, and how much more of the tip (the share
+#: of what is not rim already) is rounded off, which softens its edges.
+TILT_REACH = 0.25
+TILT_RIM = 0.7
 #: A lead is not even: across the tip it bears up to this much more or less,
 #: in bands about STREAK_WIDTH pixels wide that run the length of the stroke.
 STREAK = 0.35
@@ -113,6 +121,8 @@ def lay_stroke(
     pressures,
     steps,
     radius,
+    length,
+    tilt,
     k,
     s,
     softness,
@@ -122,16 +132,20 @@ def lay_stroke(
     give,
     salt,
 ):
-    """Draw one pass of a round tip of ``radius`` pixels through the points
-    (``xs``, ``ys``), bearing with ``pressures`` (0..1) and moving ``steps``
-    pixels at each: lay the medium (absorption ``k`` per band and scattering
-    ``s`` per unit volume, ``softness`` and ``binding`` 0..1) on the paper
-    (``depth``, ``bite``, ``give``) where the tip touches its tooth.
+    """Draw one pass of a tip through the points (``xs``, ``ys``), bearing
+    with ``pressures`` (0..1) and moving ``steps`` pixels at each. The tip is
+    an ellipse, ``radius`` pixels across the stroke and ``length`` along it
+    (both half-widths; equal for a point), and ``tilt`` (0..1) says how far
+    over on its side the stick is held. Lay the medium (absorption ``k`` per
+    band and scattering ``s`` per unit volume, ``softness`` and ``binding``
+    0..1) on the paper (``depth``, ``bite``, ``give``) where the tip touches
+    its tooth.
 
     Returns the volume laid, which is the volume worn off the tip.
     """
     height, width = tooth.shape
     reach = (REACH_HARD + REACH_SOFT * softness) * (GIVE_NONE + GIVE_FULL * give)
+    reach *= 1.0 - TILT_REACH * tilt
     # (a level paper is touched all over: any pressure reaches all of it)
     reach = reach / depth if depth > 1e-6 else 1e9
     shape = FILL_HARD + (1.0 - FILL_HARD) * softness**1.5
@@ -142,10 +156,11 @@ def lay_stroke(
         * (FILL_FLAT + (1.0 - FILL_FLAT) * min(depth, 2.0))
         * (0.5 + 0.5 * bite)
     )
-    bound = radius + 0.5
-    rim = RIM * bound + 0.5
+    wide, long = radius + 0.5, length + 0.5
+    bound = max(wide, long)
+    rounded = RIM + (1.0 - RIM) * TILT_RIM * tilt
     # a pixel on the path of the tip's centre gets one pass's worth in all
-    per_pass = 1.0 / (2.0 * bound - rim)
+    per_pass = 1.0 / (2.0 * long - (rounded * long + 0.5))
     total = 0.0
     for i in range(xs.shape[0]):
         pressure = pressures[i]
@@ -161,11 +176,17 @@ def lay_stroke(
         for iy in range(y0, y1):
             for ix in range(x0, x1):
                 dx, dy = ix + 0.5 - x, iy + 0.5 - y
-                d = math.sqrt(dx * dx + dy * dy)
-                edge = min(bound - d, 1.0)
-                if edge <= 0.0:
+                # how far out in the tip this is (1 at its edge), and how
+                # far in from the edge, in pixels
+                forward, sideways = dx * tx + dy * ty, dy * tx - dx * ty
+                out = math.sqrt((forward / long) ** 2 + (sideways / wide) ** 2)
+                if out >= 1.0:
                     continue
-                local = pressure * min((bound - d) / rim, 1.0)
+                d = math.sqrt(dx * dx + dy * dy)
+                across = d / out if out > 1e-9 else min(wide, long)
+                inside = across - d
+                edge = min(inside, 1.0)
+                local = pressure * min(inside / (rounded * across + 0.5), 1.0)
                 local *= streak_at(dx, dy, tx, ty, salt)
                 level = 1.0 - reach * local**REACH_POWER
                 level += JITTER * (unit_noise(ix, iy, salt) - 0.5)
