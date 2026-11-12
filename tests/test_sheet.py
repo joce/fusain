@@ -136,6 +136,15 @@ def test_a_tall_sheet_is_rendered_in_several_passes_alike():
     assert whole[60:70, 2:8].max() < whole[0:50].min()
 
 
+@pytest.mark.parametrize("size", [(1, 9), (9, 1), (1, 1)])
+def test_a_sheet_one_pixel_wide_or_high_is_lit_too(size):
+    sheet = Sheet(*size, seed=1)
+    lit = sheet.render()
+    assert lit.shape == (size[1], size[0], 3) and np.isfinite(lit).all()
+    # the one pixel has no slope: it is the colour of the paper
+    assert np.abs(Sheet(1, 1).render() - Sheet(1, 1).render(**FLAT)).max() < 1e-6
+
+
 @pytest.mark.parametrize(
     "args, error, message",
     [

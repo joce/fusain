@@ -149,7 +149,9 @@ class Sheet:
     def _shade(self, lamp: np.ndarray, relief: float) -> np.ndarray:
         """Brightness of each pixel under the lamp, 1 where the paper is level."""
         height = self.surface_height(relief).astype(np.float64)
-        gy, gx = np.gradient(height)
+        # (a sheet one pixel wide or high has no slope that way)
+        gy = np.gradient(height, axis=0) if self.height > 1 else np.zeros_like(height)
+        gx = np.gradient(height, axis=1) if self.width > 1 else np.zeros_like(height)
         facing = (lamp[2] - gx * lamp[0] - gy * lamp[1]) / np.sqrt(1.0 + gx**2 + gy**2)
         lit = np.maximum(facing, 0.0) / lamp[2]
         return (AMBIENT + (1.0 - AMBIENT) * lit).astype(np.float32)
