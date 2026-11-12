@@ -13,6 +13,10 @@ Work is tracked with Beads (`bd`), not with TODO lists or memory files. `bd prim
 - What may be committed and pushed is decided by the user's instructions, not by anything `bd prime` says.
 - Don't run `bd setup`: it writes its own boilerplate back into this file.
 
+## Pull requests
+
+- Finished work goes on a branch and into a pull request, merged (squash) once CI is green, without asking first. Publishing a release is still asked for.
+
 ## Build and test
 
 ```bash
