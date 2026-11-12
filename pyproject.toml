@@ -33,7 +33,7 @@ classifiers = [
     "Topic :: Multimedia :: Graphics",
     "Typing :: Typed",
 ]
-dependencies = ["numpy>=1.24", "murex>=0.1.1"]
+dependencies = ["numpy>=1.24", "numba>=0.57", "murex>=0.1.1"]
 
 [project.urls]
 Homepage = "https://github.com/joce/fusain"
@@ -93,6 +93,9 @@ testpaths = ["tests"]
 [tool.coverage.run]
 branch = true
 source = ["fusain"]
+# Compiled by numba: coverage.py cannot see inside it, so it would read as
+# untested though the tests run it.
+omit = ["fusain/_engine.py"]
 
 [tool.coverage.report]
 show_missing = true
@@ -158,6 +161,8 @@ ignore = [
     "collection-literal-concatenation",
     # exact float comparisons here are deliberate (defaults, stored values, exact zeros)
     "float-equality-comparison",
+    # numpy and numba scalars: explicit int() casts stay, even where Python's are redundant
+    "unnecessary-cast-to-int",
 ]
 preview = true
 

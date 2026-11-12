@@ -12,15 +12,25 @@ media (ink, felt-tip markers, paint) are out of scope; for oil paint, see the
 sister project [oilpaint](https://github.com/joce/oilpaint). The two share their
 colour science and stroke paths through [murex](https://github.com/joce/murex).
 
-Early days. So far there is the paper, and a sheet of it that can be rendered;
-nothing to draw with yet. The plan is in [docs/design.md](docs/design.md).
+Early days. So far there are papers and graphite pencils: grades from 9H to
+9B, whose tone depends on how hard they are pressed and how many layers are
+laid, as on real paper. Charcoal, pastel, colour, stumps and erasers are still
+to come; the plan is in [docs/design.md](docs/design.md).
 
 ```python
-from fusain import Sheet, papers
+from fusain import Sheet, papers, pencils
 
-sheet = Sheet(800, 600, paper=papers.INGRES, seed=1)
-sheet.save("paper.png", light=(-0.6, -0.8, 0.45))   # a raking light
+sheet = Sheet(800, 600, paper=papers.CARTRIDGE, seed=1)
+sheet.stroke([(100, 300), (300, 220), (500, 320)], pencils.B2, pressure=0.6)
+sheet.stroke([(120, 400), (480, 380)], pencils.HB, pressure=lambda u: 1 - u, width=3)
+sheet.save("drawing.png")
 ```
+
+![Graphite pencils on cartridge paper](examples/output/pencils.png)
+
+Top: 4H, 2H, HB, 2B, 4B, 6B and 8B, each shaded with the pressure rising from
+left to right. Bottom left: HB at a light pressure in 1, 2, 4, 8 and 16
+layers. Bottom right: a 2B line drawn lightly, then firmly, and cross-hatching.
 
 ![The papers under a raking light](examples/output/papers.png)
 
@@ -32,7 +42,7 @@ tan, black.
 
 ```bash
 uv sync --group dev --frozen   # install the package and the development tools
-uv run pytest                  # run the tests
+uv run pytest                  # run the tests (the first run compiles the numba kernels)
 make pre-push                  # what CI runs: tox, coverage, spelling
 ```
 

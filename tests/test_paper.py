@@ -63,6 +63,7 @@ def test_sanded_card_is_mostly_low_with_sharp_peaks():
         ({"depth": -0.1}, "depth must be"),
         ({"depth": float("inf")}, "depth must be"),
         ({"bite": 1.5}, "bite must be"),
+        ({"give": -0.5}, "give must be"),
         ({"color": "paper white"}, "#rrggbb"),
     ],
 )

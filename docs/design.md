@@ -1,6 +1,6 @@
 # Core model: design proposal
 
-Status: accepted (issue `fusain-ilv`). Step 1 of the build order is built; the rest is not.
+Status: accepted (issue `fusain-ilv`). Steps 1 and 2 of the build order are built; the rest is not.
 
 ## What fusain has to get right
 
@@ -35,10 +35,11 @@ Per pixel, all `float32`:
 | --- | --- |
 | `tooth` | Height of the paper surface, 0 (valley) to 1 (peak). Set once from the paper's texture. |
 | `press` | How far the tooth has been crushed or polished here (0 to 1): burnishing, and lines indented with a stylus. |
+| `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
 | `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, and how much of the volume is wax. |
 | `loose` | Pigment lying on the surface as dust: K, S and volume. |
 
-That is about 0.22 KB per pixel (oilpaint needs 0.35). As there, storing
+That is about 0.23 KB per pixel (oilpaint needs 0.35). As there, storing
 summed absorption and scattering lets any number of pigments mix correctly at
 a fixed cost.
 
@@ -48,7 +49,7 @@ later stroke shifts `loose`; only a hard eraser or a blade touches `held`.
 Pressure moves pigment from `loose` to `held`. So does fixative.
 
 The paper itself is described by a `Paper` (texture, tooth size in pixels,
-depth of the tooth, how abrasive it is, colour), with presets such as
+depth of the tooth, how abrasive it is, how much it gives under a tip, colour), with presets such as
 cartridge paper, hot-pressed, cold-pressed, laid (Ingres) and sanded pastel
 paper.
 
@@ -85,35 +86,50 @@ A tool is a tip plus, usually, a medium.
 
 ## One step of a stroke
 
-A stroke is sampled along its path as in oilpaint; pressure, tilt and speed
-can vary along it. At each step, for each pixel under the tip:
+A stroke is sampled along its path as in oilpaint; pressure can vary along it
+(tilt and speed are still to come). At each step, for each pixel under the
+tip:
 
-1. **Reach.** Pressure and softness set how far down the tooth the tip gets.
-2. **Contact.** A pixel touches the tip if its surface (tooth, raised by what
-   already fills it, lowered by `press`) is above that level. The edge is soft,
-   so a pixel can be partly touched: tooth finer than a pixel still works.
-3. **Bite.** The paper's abrasiveness, reduced as the tooth fills and as wax
-   films over it.
-4. **Deposit** = softness × pressure × contact × bite × distance moved. It is
-   taken from the stick (which wears the tip) and split between `held` and
-   `loose` by the medium's `binding`. A share that does not stick is dust.
-5. **Working what is there.** The tip presses some `loose` into `held` and
-   drags some of it along. High pressure on a waxy layer raises `press`.
+1. **Reach.** Pressure, the softness of the medium and the give of the paper
+   set how far down the tooth the tip gets. A rounded tip bears hardest at its
+   centre. No two passes meet the paper alike: each pass shifts the level it
+   reaches a little, at random, pixel by pixel. That is what lets light layers
+   build tone.
+2. **Contact.** A pixel is not level, so a tip that reaches near its height
+   touches part of it. That share becomes the pixel's `cover`, which only
+   grows: the highest parts are always the first touched.
+3. **Room.** The tooth holds only so much: more if it is deep and abrasive,
+   more of a soft lead than of a hard one, more under a firm touch than a
+   light one. What a pass lays shrinks as the room runs out.
+4. **Deposit.** What one pass lays depends on the medium, the pressure and
+   the paper's bite, not on how much the tooth holds; so a toothier paper
+   takes more passes to fill. It is split between `held` and `loose` by the
+   medium's `binding`, and it is what the tip loses.
+5. **Working what is there** (still to come). The tip presses some `loose`
+   into `held` and drags some of it along. High pressure on a waxy layer
+   raises `press`.
 
 These are numba kernels under the same rules as oilpaint's (no `fastmath`, no
-`parallel`), so a drawing repeats exactly.
+`parallel`), so a drawing repeats exactly. Their constants are in
+`fusain/_engine.py`. They were set so that tones land near these figures,
+which are estimates from experience, not measurements of real drawings: on
+cartridge paper, one even layer of HB reflects about 0.8 of what the paper
+does at a light pressure and 0.4 at full pressure; 6B about 0.5 and 0.13; 4H
+at full pressure about 0.75; and light layers of HB level off near 0.5.
 
 ## Rendering
 
-Per pixel: Kubelka-Munk reflectance of the `held` and `loose` layers over the
-paper's own colour, with the uncovered share of the pixel showing bare paper.
+Per pixel: Kubelka-Munk reflectance of the `loose` layer over the `held` layer
+over the paper's own colour, on the covered share of the pixel; the rest shows
+bare paper.
 By default a fairly high lamp shows the tooth faintly, as on a scan; a raking
 light brings it out, and `lighting=False` renders the sheet flat. Still to
 come: a specular term for graphite's shine where it is thick and polished.
 
 ## What the prototype showed
 
-A throwaway numpy script ran steps 1 to 4 with a grey ramp for colour:
+A throwaway numpy script ran an early form of this step law with a grey ramp
+for colour, before anything was built:
 `docs/design/prototype.png`. Rows, top to bottom: HB hatching with pressure
 rising left to right; 6B the same; the side of a charcoal stick with a stump
 dragged through it; one, two, four and eight light layers of HB.
@@ -121,13 +137,13 @@ dragged through it; one, two, four and eight light layers of HB.
 - **Works:** grain at light pressure, valleys filling as pressure rises, a
   soft lead far darker than a hard one at the same pressure (mean reflectance
   0.28 against 0.83 near full pressure), a broad grainy charcoal band.
-- **Does not work yet:** layering. Eight light passes are barely darker than
+- **Did not work:** layering. Eight light passes are barely darker than
   one (0.897 against 0.913), where a real pencil builds tone steadily. The
-  contact rule is too exact: every pass touches the same pixels. A real tip
-  meets the paper slightly differently each time, so contact needs a random
-  part per pass.
-- **Too crude:** the stump blurs to a clean grey band. It should leave
-  streaks along its direction.
+  contact rule was too exact: every pass touched the same pixels. The step
+  law above now has a random part per pass, and eight light layers of HB come
+  out at 0.60 against 0.84 for one.
+- **Too crude:** the stump blurred to a clean grey band. It should leave
+  streaks along its direction (step 3).
 
 ## What is shared with oilpaint
 

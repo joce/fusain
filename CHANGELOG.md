@@ -8,6 +8,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Graphite pencils, `fusain.pencils`, from 9H to 9B, and `Sheet.stroke`: the
+  tone depends on the grade, the pressure and the number of layers; a light
+  touch marks only the peaks of the tooth, and the tooth fills up.
+- `Medium`: what a stick is made of (pigment, softness, binding).
+- `Paper.give`: how much the surface yields under a tip.
 - `Paper` and the presets of `fusain.papers`: wove, laid, rough and sanded
   textures, with the size, depth and bite of their tooth.
 - `Sheet`: a sheet of paper holding its tooth and the pigment held on it or

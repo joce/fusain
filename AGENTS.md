@@ -21,18 +21,22 @@ Work is tracked with Beads (`bd`), not with TODO lists or memory files. `bd prim
 
 ```bash
 uv sync --group dev --frozen   # install the package and the development tools
-uv run pytest                  # run the tests
+uv run pytest                  # run the tests (the first run compiles the numba kernels)
 make pre-push                  # what CI runs: tox (black, ruff, pyright, pytest), coverage (80% required), spelling
 ```
 
 ## Layout
 
 - `paper.py`, `papers.py`: a paper's texture, tooth and colour, and the presets.
-- `sheet.py`: the `Sheet`, with the tooth, held and loose pigment, and rendering.
+- `sheet.py`: the `Sheet`, with the tooth, held and loose pigment, strokes and rendering.
+- `medium.py`, `pencils.py`: what a stick is made of, and the graphite grades.
+- `_engine.py`: the numba kernels that lay a medium on the paper, and their constants.
 - `docs/design.md`: the model and the build order. `examples/`: scripts and the images they write to `examples/output/`.
 
 ## Conventions
 
+- Kernels are `@njit(cache=True, error_model="numpy")`, without `fastmath` and without `parallel`, so that a drawing repeats exactly. Constants they use live in `_engine.py`.
+- The medium is conserved: what leaves the tip is on the paper. Tests check this.
 - A change meant to alter the picture is judged by measurements, not by looking at two renders side by side, and regenerates every image in `examples/output/` with the final code.
 - Colour (pigments, Kubelka-Munk mixing), stroke paths, noise, reference images and PNG output come from `murex`, which `oilpaint` shares. What both libraries need goes there, not here.
 - ruff caps function complexity at 13.
