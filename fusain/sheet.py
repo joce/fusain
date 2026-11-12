@@ -11,6 +11,7 @@ from murex import spline, write_png
 from murex.spline import Profile
 
 from . import _engine as eng
+from . import hatching
 from ._engine import HELD, IS, IV, LOOSE, N
 from .medium import Medium
 from .paper import Paper
@@ -224,6 +225,58 @@ class Sheet:
         facing = (lamp[2] - gx * lamp[0] - gy * lamp[1]) / np.sqrt(1.0 + gx**2 + gy**2)
         lit = np.maximum(facing, 0.0) / lamp[2]
         return (AMBIENT + (1.0 - AMBIENT) * lit).astype(np.float32)
+
+    def shade(
+        self,
+        area,
+        medium: Medium,
+        pressure: hatching.Pressure = 0.5,
+        width: float = 6.0,
+        angle: float = 30.0,
+        spacing: float | None = None,
+        hand: float = 1.0,
+    ) -> float:
+        """Shade ``area`` with one layer of strokes side by side, as a hand
+        does: none quite straight or quite alike, each lighter where the tip
+        lands and where it lifts.
+
+        ``area`` is a rectangle (x0, y0, x1, y1) or a polygon (three or more
+        points). ``pressure`` is a number, or a function of where on the
+        sheet (called with arrays of x and of y), for a tone that changes
+        across the area. ``width`` is the width of the tip in pixels and
+        ``angle`` the direction of the strokes in degrees (0 runs across the
+        sheet, 90 up it). ``spacing`` is how far apart they are (by default
+        a little over half a width, so that they overlap). ``hand`` is how
+        unsteady the hand is: 1 for a natural one, 0 for ruler-straight
+        strokes, evenly spaced and all alike.
+
+        Shade again at another angle to cross-hatch or to build tone.
+        Returns the volume of medium laid.
+
+        Raises ValueError or TypeError, before anything is drawn, unless
+        ``width`` and ``spacing`` are finite numbers above 0, ``angle`` is
+        finite and ``hand`` is finite and not negative.
+        """
+        if not isinstance(medium, Medium):
+            raise TypeError(f"medium must be a Medium, such as pencils.HB: {medium!r}")
+        outline = hatching.as_outline(area)
+        gap = hatching.SPACING * width if spacing is None else spacing
+        for name, value in (("width", width), ("spacing", gap)):
+            if not (math.isfinite(value) and value > 0):
+                raise ValueError(
+                    f"{name} must be a number of pixels above 0: {value!r}"
+                )
+        if not math.isfinite(angle):
+            raise ValueError(f"angle must be a finite number of degrees: {angle!r}")
+        if not (math.isfinite(hand) and hand >= 0):
+            raise ValueError(f"hand must be 0 (ruler-straight) or more, got {hand!r}")
+        laid = 0.0
+        for path, firm, tip in hatching.strokes(
+            outline, angle, width, gap, hand, self._rng
+        ):
+            along = hatching.bearing(pressure, path, firm, hand)
+            laid += self.stroke(path, medium, pressure=along, width=tip)
+        return laid
 
     def save(self, path: str, **render_options) -> None:
         """Render and save as PNG."""

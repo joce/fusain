@@ -22,7 +22,8 @@ from fusain import Sheet, papers, pencils
 
 sheet = Sheet(800, 600, paper=papers.CARTRIDGE, seed=1)
 sheet.stroke([(100, 300), (300, 220), (500, 320)], pencils.B2, pressure=0.6)
-sheet.stroke([(120, 400), (480, 380)], pencils.HB, pressure=lambda u: 1 - u, width=6)
+sheet.shade((100, 360, 500, 520), pencils.HB, pressure=0.4)             # an even tone
+sheet.shade((100, 360, 500, 520), pencils.HB, pressure=0.4, angle=-40)  # a second layer, across
 sheet.save("drawing.png")
 ```
 
