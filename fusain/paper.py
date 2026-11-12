@@ -9,6 +9,7 @@ import numpy as np
 from murex import ColorLike
 from murex import noise as nz
 from murex import spectral as sp
+from murex.filters import box_blur
 
 TEXTURES = ("wove", "laid", "rough", "sanded")
 
@@ -34,8 +35,10 @@ class Paper:
         ``"rough"`` (the bumps of cold-pressed and rough watercolour paper)
         or ``"sanded"`` (the sharp grit of pastel card).
     grain:
-        Size of the tooth in pixels: the width of a fibre bundle, the spacing
-        of the laid lines, the size of a bump or of a grain of grit.
+        Size of the tooth in pixels: the distance between neighbouring bumps
+        of a wove paper, the spacing of the laid lines, the size of a bump of
+        a rough paper or of a grain of grit. This is what sets the scale of a
+        drawing: on drawing paper a pencil line is two or three grains wide.
     depth:
         How deep the tooth is (0 = flat): how far a tip has to reach to touch
         the valleys, how many layers the paper takes, and how strongly the
@@ -96,7 +99,20 @@ def _unit(a: np.ndarray) -> np.ndarray:
 
 
 def _wove(h, w, grain, rng) -> np.ndarray:
-    return nz.paper(h, w, grain, rng)
+    """Felted fibres: small bumps about ``grain`` apart with short fibres
+    running through them, and nothing broader: at the scale of a pencil line
+    the sheet is even."""
+    bumps = nz.value_noise_2d(h, w, max(0.5 * grain, 1.0), rng)
+    fibres = sum(
+        nz.aniso_noise(h, w, 3.0 * grain, max(0.5 * grain, 1.0), angle, rng, octaves=1)
+        for angle in (20, 80, 140)
+    )
+    return _no_broad(0.6 * bumps + 0.4 * fibres / 3, grain)
+
+
+def _no_broad(a: np.ndarray, grain: float) -> np.ndarray:
+    """``a`` without what varies over more than a few ``grain``."""
+    return a - box_blur(a, max(round(1.5 * grain), 1))
 
 
 def _laid(h, w, grain, rng) -> np.ndarray:

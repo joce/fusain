@@ -48,6 +48,11 @@ The difference between them is what can still move: a stump, an eraser or a
 later stroke shifts `loose`; only a hard eraser or a blade touches `held`.
 Pressure moves pigment from `loose` to `held`. So does fixative.
 
+Sizes are in pixels, and the paper's grain sets the scale of a drawing: the
+tooth of a drawing paper is finer than a pencil line, which is two or three
+grains wide. (The first version of the tooth had patches several grains
+across, and shading came out in blotches wider than the pencil.)
+
 The paper itself is described by a `Paper` (texture, tooth size in pixels,
 depth of the tooth, how abrasive it is, how much it gives under a tip, colour), with presets such as
 cartridge paper, hot-pressed, cold-pressed, laid (Ingres) and sanded pastel
@@ -91,13 +96,19 @@ A stroke is sampled along its path as in oilpaint; pressure can vary along it
 tip:
 
 1. **Reach.** Pressure, the softness of the medium and the give of the paper
-   set how far down the tooth the tip gets. A rounded tip bears hardest at its
-   centre. No two passes meet the paper alike: each pass shifts the level it
-   reaches a little, at random, pixel by pixel. That is what lets light layers
-   build tone.
+   set how far down the tooth the tip gets. A tip is flat across with a
+   rounded rim. A light touch reaches further than in proportion, and only the
+   softest leads pressed hard reach every valley: a firm HB line still has
+   white specks in it. No two passes meet the paper alike: each pass shifts
+   the level it reaches a little, at random, pixel by pixel. That is what lets
+   light layers build tone.
 2. **Contact.** A pixel is not level, so a tip that reaches near its height
    touches part of it. That share becomes the pixel's `cover`, which only
-   grows: the highest parts are always the first touched.
+   grows: the highest parts are always the first touched. The tip bears
+   hardest on what stands highest, so the high ground takes more than the
+   low: that is the grain inside a line. A lead is not even either: across
+   the tip it bears more in some bands than in others, which leaves fine
+   streaks along the stroke.
 3. **Room.** The tooth holds only so much: more if it is deep and abrasive,
    more of a soft lead than of a hard one, more under a firm touch than a
    light one. What a pass lays shrinks as the room runs out.
@@ -141,7 +152,7 @@ dragged through it; one, two, four and eight light layers of HB.
   one (0.897 against 0.913), where a real pencil builds tone steadily. The
   contact rule was too exact: every pass touched the same pixels. The step
   law above now has a random part per pass, and eight light layers of HB come
-  out at 0.60 against 0.84 for one.
+  out at 0.62 against 0.85 for one.
 - **Too crude:** the stump blurred to a clean grey band. It should leave
   streaks along its direction (step 3).
 

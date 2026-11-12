@@ -11,6 +11,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - Graphite pencils, `fusain.pencils`, from 9H to 9B, and `Sheet.stroke`: the
   tone depends on the grade, the pressure and the number of layers; a light
   touch marks only the peaks of the tooth, and the tooth fills up.
+- A line has the grain of the paper inside it, ragged edges and fine streaks
+  along it: the tip is flat across, bears hardest on the high ground, and only
+  the softest leads pressed hard reach every valley.
+- Wove papers have a fine, even tooth, about `grain` pixels from bump to
+  bump, so that shading no longer comes out in blotches wider than the pencil.
 - `Medium`: what a stick is made of (pigment, softness, binding).
 - `Paper.give`: how much the surface yields under a tip.
 - `Paper` and the presets of `fusain.papers`: wove, laid, rough and sanded

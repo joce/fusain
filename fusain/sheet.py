@@ -24,7 +24,7 @@ DEFAULT_LIGHT = (-0.6, -0.8, 2.4)
 #: Share of the light that comes from all around rather than from the lamp.
 AMBIENT = 0.3
 #: Height of the deepest tooth of a paper of depth 1, as a share of its grain.
-TOOTH_HEIGHT = 0.3
+TOOTH_HEIGHT = 0.12
 #: Rows rendered at a time (bounds the float64 working memory).
 ROWS = 64
 
@@ -120,7 +120,7 @@ class Sheet:
         path,
         medium: Medium,
         pressure: Profile = 0.5,
-        width: float = 2.0,
+        width: float = 4.0,
     ) -> float:
         """Draw one pass of ``medium`` along ``path``.
 
@@ -130,7 +130,9 @@ class Sheet:
         tone: a light touch marks only the peaks of the tooth, a firm one
         reaches the valleys. A number, one value per point of the path, or a
         function of u (0 at the start of the stroke, 1 at its end).
-        ``width`` is the width of the tip in pixels.
+        ``width`` is the width of the tip in pixels. A pencil point is a few
+        times wider than the paper's grain; one narrower than the grain draws
+        a dotted line.
 
         Returns the volume of medium laid, which is what the tip lost.
 

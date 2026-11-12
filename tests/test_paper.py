@@ -42,6 +42,18 @@ def test_grain_sets_the_size_of_the_tooth():
         assert step[0] > 1.5 * step[1], texture
 
 
+def test_wove_paper_is_even_at_the_scale_of_a_pencil_line():
+    # (broad patches of high and low tooth made shading come out in blotches
+    # wider than the pencil that drew it)
+    tooth = _tooth(Paper(texture="wove", grain=3.0)).astype(np.float64)
+    blocks = tooth[:120, :160].reshape(10, 12, 16, 10).mean(axis=(1, 3))
+    assert blocks.std() < 0.02 and tooth.std() > 0.15
+    # its bumps are about a grain across: the runs of high ground along a row
+    high = np.pad(tooth > 0.5, ((0, 0), (1, 1)))
+    starts = (~high[:, :-1] & high[:, 1:]).sum()
+    assert 2.0 < high.sum() / starts < 4.5
+
+
 def test_rough_paper_has_broader_bumps_than_wove_of_the_same_grain():
     wove = _tooth(Paper(texture="wove", grain=4.0))
     rough = _tooth(Paper(texture="rough", grain=4.0))

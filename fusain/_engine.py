@@ -20,26 +20,42 @@ IS, IV, IW = N, N + 1, N + 2
 LOOSE, HELD = N + 2, N + 3
 
 #: How far down the tooth a tip reaches at full pressure, as a share of a
-#: tooth of depth 1: the hardest lead, and what the softest adds to it.
-REACH_HARD = 0.4
-REACH_SOFT = 2.2
+#: tooth of depth 1: the hardest lead, and what the softest adds to it. Only
+#: the softest leads pressed hard reach every valley: a firm HB line still
+#: has white specks in it.
+REACH_HARD = 0.26
+REACH_SOFT = 1.13
+#: A light touch reaches further than in proportion (the paper gives and the
+#: tip rides on its fibres): the reach goes as the pressure to this power.
+REACH_POWER = 0.6
 #: Share of that reach a paper with no give leaves, and what full give adds.
 GIVE_NONE = 0.6
 GIVE_FULL = 0.8
 #: A pixel is not level: its surface lies within this much of its height
 #: (in tooth units), so a tip that reaches near it touches part of it.
 MICRO = 0.2
+#: The tip bears hardest on what stands highest: ground this far (in tooth
+#: units) above the level the tip reaches gets a full pass's worth, lower
+#: ground in proportion. That is the grain inside a line.
+SPAN = 0.8
 #: No two passes meet the paper alike: each shifts the level it reaches at
 #: each pixel by up to half of this, either way.
 JITTER = 0.3
+#: A tip is flat across, and rounded off over this share of its radius (and
+#: half a pixel) at the rim.
+RIM = 0.35
+#: A lead is not even: across the tip it bears up to this much more or less,
+#: in bands about STREAK_WIDTH pixels wide that run the length of the stroke.
+STREAK = 0.35
+STREAK_WIDTH = 1.3
 #: Thickness at which the tooth of a paper of depth 1 and bite 1 is full of
 #: the softest lead pressed hard, and the share of it the hardest fills.
-FILL = 2.1
+FILL = 2.6
 FILL_HARD = 0.03
 #: Thickness the softest lead lays in one pass at full pressure on an empty
 #: tooth, on a paper of bite 0.5. A paper's tooth sets how much it holds,
 #: not how much a pass lays, so a toothier paper takes more passes to fill.
-LAY = 1.1
+LAY = 1.7
 #: A light touch fills the tooth less: the share of the full thickness that
 #: no pressure at all would reach.
 FILL_LIGHT = 0.5
@@ -99,23 +115,29 @@ def lay_stroke(
         * (0.5 + 0.5 * bite)
     )
     bound = radius + 0.5
+    rim = RIM * bound + 0.5
     # a pixel on the path of the tip's centre gets one pass's worth in all
-    per_pass = 2.0 / (math.pi * bound)
+    per_pass = 1.0 / (2.0 * bound - rim)
+    count = xs.shape[0]
     total = 0.0
-    for i in range(xs.shape[0]):
+    for i in range(count):
         pressure = pressures[i]
         step = steps[i]
         if pressure <= 0.0 or step <= 0.0:
             continue
         x, y = xs[i], ys[i]
-        x0, x1 = (
-            max(int(math.floor(x - bound)), 0),
-            min(int(math.ceil(x + bound)), width),
-        )
-        y0, y1 = (
-            max(int(math.floor(y - bound)), 0),
-            min(int(math.ceil(y + bound)), height),
-        )
+        # which way the tip is going, to know what is across it
+        ahead, behind = min(i + 1, count - 1), max(i - 1, 0)
+        tx, ty = xs[ahead] - xs[behind], ys[ahead] - ys[behind]
+        going = math.sqrt(tx * tx + ty * ty)
+        if going > 1e-9:
+            tx, ty = tx / going, ty / going
+        else:
+            tx, ty = 1.0, 0.0
+        x0 = max(int(math.floor(x - bound)), 0)
+        x1 = min(int(math.ceil(x + bound)), width)
+        y0 = max(int(math.floor(y - bound)), 0)
+        y1 = min(int(math.ceil(y + bound)), height)
         for iy in range(y0, y1):
             for ix in range(x0, x1):
                 dx, dy = ix + 0.5 - x, iy + 0.5 - y
@@ -123,29 +145,35 @@ def lay_stroke(
                 edge = min(bound - d, 1.0)
                 if edge <= 0.0:
                     continue
-                # a rounded tip bears hardest at its centre
-                local = pressure * math.sqrt(max(1.0 - (d / bound) ** 2, 0.0))
-                level = 1.0 - local * reach
+                # a streak of the lead, by how far across the tip this is
+                across = (dy * tx - dx * ty) / STREAK_WIDTH + 64.0
+                band = int(math.floor(across))
+                blend = across - band
+                streak = unit_noise(band, 0, salt + 1) * (1.0 - blend)
+                streak += unit_noise(band + 1, 0, salt + 1) * blend
+                local = pressure * min((bound - d) / rim, 1.0)
+                local *= 1.0 + STREAK * (2.0 * streak - 1.0)
+                level = 1.0 - reach * local**REACH_POWER
                 level += JITTER * (unit_noise(ix, iy, salt) - 0.5)
-                touch = (tooth[iy, ix] + MICRO - level) / (2.0 * MICRO)
-                touch = min(max(touch, 0.0), 1.0) * edge
+                above = tooth[iy, ix] + MICRO - level
+                touch = min(max(above / (2.0 * MICRO), 0.0), 1.0) * edge
                 if touch <= 0.0:
                     continue
                 covered = max(cover[iy, ix], touch)
+                cover[iy, ix] = covered
                 thick = (held[iy, ix, IV] + loose[iy, ix, IV]) / covered
-                room = full * (FILL_LIGHT + (1.0 - FILL_LIGHT) * local) - thick
+                bearing = min(local, 1.0)
+                room = full * (FILL_LIGHT + (1.0 - FILL_LIGHT) * bearing) - thick
                 if room <= 0.0:
-                    cover[iy, ix] = covered
                     continue
                 # (a light pass takes less, but not in proportion: the lead
                 # still slides over all it touches)
-                dv = lay * math.sqrt(local) * (room / full) * per_pass * step
-                dv = min(dv, room) * touch
-                cover[iy, ix] = covered
+                dv = lay * math.sqrt(bearing * min(above / SPAN, 1.0)) * (room / full)
+                dv = min(dv * per_pass * step, room) * touch
                 fixed, dust = dv * binding, dv * (1.0 - binding)
-                for band in range(N):
-                    held[iy, ix, band] += fixed * k[band]
-                    loose[iy, ix, band] += dust * k[band]
+                for band_k in range(N):
+                    held[iy, ix, band_k] += fixed * k[band_k]
+                    loose[iy, ix, band_k] += dust * k[band_k]
                 held[iy, ix, IS] += fixed * s
                 held[iy, ix, IV] += fixed
                 loose[iy, ix, IS] += dust * s
