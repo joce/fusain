@@ -84,7 +84,7 @@ target-version = ["py311"]
 line-length = 88
 
 [tool.pyright]
-include = ["fusain", "tests", "tools"]
+include = ["fusain", "tests", "tools", "examples"]
 typeCheckingMode = "standard"
 
 [tool.pytest.ini_options]
@@ -156,6 +156,8 @@ unfixable = []
 ignore = [
     # `[x] + rest` -> `[x, *rest]` changes the meaning when `rest` is a numpy array
     "collection-literal-concatenation",
+    # exact float comparisons here are deliberate (defaults, stored values, exact zeros)
+    "float-equality-comparison",
 ]
 preview = true
 

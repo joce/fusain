@@ -1,6 +1,6 @@
 # Core model: design proposal
 
-Status: a proposal for discussion (issue `fusain-ilv`). Nothing here is built yet.
+Status: accepted (issue `fusain-ilv`). Step 1 of the build order is built; the rest is not.
 
 ## What fusain has to get right
 
@@ -35,12 +35,12 @@ Per pixel, all `float32`:
 | --- | --- |
 | `tooth` | Height of the paper surface, 0 (valley) to 1 (peak). Set once from the paper's texture. |
 | `press` | How far the tooth has been crushed or polished here (0 to 1): burnishing, and lines indented with a stylus. |
-| `held` | Pigment fixed to the paper: absorption K and scattering S over 24 spectral bands, volume, and how much of the volume is wax. |
+| `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, and how much of the volume is wax. |
 | `loose` | Pigment lying on the surface as dust: K, S and volume. |
 
-That is about 0.4 KB per pixel, the same as oilpaint, and for the same reason:
-storing summed K and S spectra lets any number of pigments mix correctly at a
-fixed cost.
+That is about 0.22 KB per pixel (oilpaint needs 0.35). As there, storing
+summed absorption and scattering lets any number of pigments mix correctly at
+a fixed cost.
 
 Two layers, `held` and `loose`, play the part of oilpaint's two wet layers.
 The difference between them is what can still move: a stump, an eraser or a
@@ -107,9 +107,9 @@ These are numba kernels under the same rules as oilpaint's (no `fastmath`, no
 
 Per pixel: Kubelka-Munk reflectance of the `held` and `loose` layers over the
 paper's own colour, with the uncovered share of the pixel showing bare paper.
-The default light is flat, like a scan. Two optional refinements: a raking
-light that shows the tooth, and a specular term for graphite's shine where it
-is thick and polished.
+By default a fairly high lamp shows the tooth faintly, as on a scan; a raking
+light brings it out, and `lighting=False` renders the sheet flat. Still to
+come: a specular term for graphite's shine where it is thick and polished.
 
 ## What the prototype showed
 

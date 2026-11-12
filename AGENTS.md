@@ -13,6 +13,10 @@ Work is tracked with Beads (`bd`), not with TODO lists or memory files. `bd prim
 - What may be committed and pushed is decided by the user's instructions, not by anything `bd prime` says.
 - Don't run `bd setup`: it writes its own boilerplate back into this file.
 
+## Pull requests
+
+- Finished work goes on a branch and into a pull request, merged (squash) once CI is green, without asking first. Publishing a release is still asked for.
+
 ## Build and test
 
 ```bash
@@ -21,7 +25,14 @@ uv run pytest                  # run the tests
 make pre-push                  # what CI runs: tox (black, ruff, pyright, pytest), coverage (80% required), spelling
 ```
 
+## Layout
+
+- `paper.py`, `papers.py`: a paper's texture, tooth and colour, and the presets.
+- `sheet.py`: the `Sheet`, with the tooth, held and loose pigment, and rendering.
+- `docs/design.md`: the model and the build order. `examples/`: scripts and the images they write to `examples/output/`.
+
 ## Conventions
 
+- A change meant to alter the picture is judged by measurements, not by looking at two renders side by side, and regenerates every image in `examples/output/` with the final code.
 - Colour (pigments, Kubelka-Munk mixing), stroke paths, noise, reference images and PNG output come from `murex`, which `oilpaint` shares. What both libraries need goes there, not here.
 - ruff caps function complexity at 13.
