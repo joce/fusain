@@ -8,6 +8,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `Paper` and the presets of `fusain.papers`: wove, laid, rough and sanded
+  textures, with the size, depth and bite of their tooth.
+- `Sheet`: a sheet of paper holding its tooth and the pigment held on it or
+  lying loose, rendered by Kubelka-Munk over the paper, flat or under a lamp.
 - Project scaffolding: packaging, formatting, linting, type checking, tests,
   spelling, coverage, CI and Dependabot.
 

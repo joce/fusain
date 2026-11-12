@@ -26,6 +26,8 @@
     "python"
   ],
   "words": [
+    "allclose",
+    "corrcoef",
     "embeddeddolt",
     "fastmath",
     "fusain",
@@ -33,8 +35,14 @@
     "joce",
     "Kubelka",
     "Legault",
+    "linalg",
+    "mgrid",
     "Munk",
     "murex",
-    "oilpaint"
+    "oilpaint",
+    "rfft",
+    "rrggbb",
+    "rtol",
+    "sRGB"
   ]
 }
