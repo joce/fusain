@@ -24,9 +24,9 @@ sheet.save("paper.png", light=(-0.6, -0.8, 0.45))   # a raking light
 
 ![The papers under a raking light](examples/output/papers.png)
 
-The papers of `fusain.papers` under a raking light: cartridge, Bristol,
-newsprint, Ingres, cold-pressed; rough, sanded card, toned grey, toned tan,
-black.
+The papers of `fusain.papers` under a raking light: cartridge, printer paper,
+Bristol, newsprint, Ingres, cold-pressed; rough, sanded card, toned grey, toned
+tan, black.
 
 ## Development
 

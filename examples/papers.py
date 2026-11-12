@@ -16,7 +16,7 @@ from fusain import Sheet, papers
 
 SWATCH = 220
 GAP = 8
-PER_ROW = 5
+PER_ROW = 6
 RAKING = (-0.6, -0.8, 0.45)
 
 

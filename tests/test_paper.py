@@ -82,7 +82,7 @@ def test_with_changes_a_copy():
 
 def test_presets_are_named_and_distinct():
     names = [paper.name for paper in papers.ALL]
-    assert len(set(names)) == len(names) == 10
+    assert len(set(names)) == len(names) == 11
     assert len(set(papers.ALL)) == len(papers.ALL)
     for paper in papers.ALL:
         assert paper.reflectance().shape == (24,)
