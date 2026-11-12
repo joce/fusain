@@ -8,10 +8,21 @@ Quick start::
     sheet.save("paper.png", light=(-0.6, -0.8, 0.5))   # a raking light
 """
 
-from . import papers, pencils
+from . import charcoal, papers, pencils, tools
 from ._about import __version__
 from .medium import Medium
 from .paper import Paper
 from .sheet import Sheet
+from .tools import Tool
 
-__all__ = ["Medium", "Paper", "Sheet", "__version__", "papers", "pencils"]
+__all__ = [
+    "Medium",
+    "Paper",
+    "Sheet",
+    "Tool",
+    "__version__",
+    "charcoal",
+    "papers",
+    "pencils",
+    "tools",
+]

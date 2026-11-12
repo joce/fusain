@@ -15,6 +15,7 @@ from . import hatching
 from ._engine import HELD, IS, IV, LOOSE, N
 from .medium import Medium
 from .paper import Paper
+from .tools import KNEADED, STUMP, Tool
 
 __all__ = ["DEFAULT_LIGHT", "HELD", "IS", "IV", "LOOSE", "N", "Sheet"]
 
@@ -142,19 +143,7 @@ class Sheet:
         """
         if not isinstance(medium, Medium):
             raise TypeError(f"medium must be a Medium, such as pencils.HB: {medium!r}")
-        if not (math.isfinite(width) and width > 0):
-            raise ValueError(f"width must be a number of pixels above 0, got {width!r}")
-        line = spline.as_path(path)
-        spacing = max(0.25, width / 8.0)
-        points, _, u, knot = line.sample(spacing)
-        bearing = spline.evaluate_profile(pressure, u, knot, line.n_knots)
-        if not np.isfinite(bearing).all():
-            raise ValueError("pressure must be finite all along the stroke")
-        if len(points) > 1:
-            spacing = line.length / (len(points) - 1)
-        xs, ys, bearing, steps = eng.as_kernel_arrays(
-            points, np.clip(bearing, 0.0, 1.0), spacing
-        )
+        xs, ys, bearing, steps = self._sampled(path, pressure, width)
         paper, pigment = self.paper, medium.pigment
         return float(
             eng.lay_stroke(
@@ -225,6 +214,81 @@ class Sheet:
         facing = (lamp[2] - gx * lamp[0] - gy * lamp[1]) / np.sqrt(1.0 + gx**2 + gy**2)
         lit = np.maximum(facing, 0.0) / lamp[2]
         return (AMBIENT + (1.0 - AMBIENT) * lit).astype(np.float32)
+
+    def smudge(
+        self,
+        path,
+        tool: Tool = STUMP,
+        pressure: Profile = 0.5,
+        width: float | None = None,
+    ) -> float:
+        """Rub one pass of a stump, a finger or another :class:`fusain.Tool`
+        along ``path``: it drags the dust along, presses some of it into the
+        paper and pushes it into the valleys of the tooth, which softens and
+        greys what was drawn. What the paper holds hardly moves.
+
+        ``path`` and ``pressure`` are as for :meth:`stroke`; ``width`` is the
+        width of the tool in pixels (by default the tool's own).
+
+        Returns the volume of pigment left on the tool at the end.
+        """
+        return self._rub(path, tool, pressure, width)
+
+    def erase(
+        self,
+        path,
+        tool: Tool = KNEADED,
+        pressure: Profile = 0.5,
+        width: float | None = None,
+    ) -> float:
+        """Rub one pass of an eraser along ``path``. A kneaded eraser
+        (``tools.KNEADED``, the default) lifts the dust and a little of what
+        the paper holds; a vinyl one (``tools.ERASER``) takes nearly all.
+
+        ``path`` and ``pressure`` are as for :meth:`stroke`; ``width`` is the
+        width of the eraser in pixels (by default the tool's own).
+
+        Returns the volume of pigment taken off the sheet.
+        """
+        return self._rub(path, tool, pressure, width)
+
+    def _rub(self, path, tool: Tool, pressure: Profile, width: float | None) -> float:
+        if not isinstance(tool, Tool):
+            raise TypeError(f"tool must be a Tool, such as tools.STUMP, got {tool!r}")
+        width = tool.width if width is None else width
+        xs, ys, bearing, steps = self._sampled(path, pressure, width)
+        load = eng.rub_stroke(
+            self.cover,
+            self.held,
+            self.loose,
+            xs,
+            ys,
+            bearing,
+            steps,
+            0.5 * float(width),
+            float(tool.lift_loose),
+            float(tool.lift_held),
+            float(tool.lay),
+            float(tool.press),
+            float(tool.smear),
+            int(self._rng.integers(1 << 31)),
+        )
+        return float(load[IV])
+
+    def _sampled(self, path, pressure: Profile, width: float):
+        """``path`` sampled for a tip of ``width``: what the kernels take (see
+        :func:`fusain._engine.as_kernel_arrays`), or ValueError."""
+        if not (math.isfinite(width) and width > 0):
+            raise ValueError(f"width must be a number of pixels above 0, got {width!r}")
+        line = spline.as_path(path)
+        spacing = max(0.25, width / 8.0)
+        points, _, u, knot = line.sample(spacing)
+        bearing = spline.evaluate_profile(pressure, u, knot, line.n_knots)
+        if not np.isfinite(bearing).all():
+            raise ValueError("pressure must be finite all along the stroke")
+        if len(points) > 1:
+            spacing = line.length / (len(points) - 1)
+        return eng.as_kernel_arrays(points, np.clip(bearing, 0.0, 1.0), spacing)
 
     def shade(
         self,

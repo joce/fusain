@@ -46,6 +46,7 @@
     "rfft",
     "rrggbb",
     "rtol",
-    "sRGB"
+    "sRGB",
+    "tortillon"
   ]
 }

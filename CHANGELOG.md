@@ -8,6 +8,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Charcoal, `fusain.charcoal`: vine, compressed and charcoal pencil. Most of
+  what it lays is dust.
+- `Sheet.smudge` and `Sheet.erase`, with the tools of `fusain.tools`: stump,
+  tortillon, finger and chamois drag the dust along, rub it in and grey the
+  paper; kneaded and vinyl erasers take pigment off. `Tool` describes one.
+- Going over dust with a tip presses some of it into the paper.
+- Laid paper: softer laid lines, and chain lines that show pale, as furrows.
 - `Sheet.shade`: shades a rectangle or a polygon with strokes side by side as
   a hand lays them, none quite straight or quite alike; the pressure can
   change across the area.

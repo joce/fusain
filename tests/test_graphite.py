@@ -155,9 +155,14 @@ def test_what_leaves_the_tip_is_on_the_paper():
     laid = _shade(sheet, pencils.B2, 0.6, layers=3)
     assert laid > 0
     np.testing.assert_allclose(sheet.pigment().sum(dtype=np.float64), laid, rtol=1e-4)
-    # split between held and loose as the lead binds
+    # the paper holds at least the share the lead binds (going over it again
+    # presses in some of the dust), and some dust is left
     held = sheet.held[..., IV].sum(dtype=np.float64)
-    np.testing.assert_allclose(held, laid * pencils.B2.binding, rtol=1e-4)
+    assert laid * pencils.B2.binding <= held < 0.99 * laid
+    one_pass = _sheet()
+    once = one_pass.stroke([(20, 30), (120, 30)], pencils.B2, 0.6, 4.0)
+    held = one_pass.held[..., IV].sum(dtype=np.float64)
+    assert once * pencils.B2.binding <= held < 1.02 * once * pencils.B2.binding
     # and it is that lead: its absorption and scattering, in that volume
     pigment = pencils.B2.pigment
     for layer in (sheet.held, sheet.loose):

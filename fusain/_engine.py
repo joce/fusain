@@ -61,6 +61,9 @@ LAY = 1.7
 FILL_LIGHT = 0.5
 #: A paper with hardly any tooth still holds this share of a full one's.
 FILL_FLAT = 0.45
+#: Share of the dust under a tip that one pass at full pressure presses into
+#: the paper, where it is held.
+PRESS_IN = 0.15
 
 
 @njit(cache=True, error_model="numpy")
@@ -72,6 +75,31 @@ def unit_noise(ix: int, iy: int, salt: int) -> float:
     h = ((h ^ (h >> 16)) * 0x45D9F3B) & 0xFFFFFFFF
     h ^= h >> 16
     return (h & 0xFFFFFF) / 16777216.0
+
+
+@njit(cache=True, error_model="numpy")
+def heading(xs, ys, i):
+    """Which way the tip is going at sample ``i``, as a unit vector."""
+    count = xs.shape[0]
+    ahead, behind = min(i + 1, count - 1), max(i - 1, 0)
+    tx, ty = xs[ahead] - xs[behind], ys[ahead] - ys[behind]
+    going = math.sqrt(tx * tx + ty * ty)
+    if going > 1e-9:
+        return tx / going, ty / going
+    return 1.0, 0.0
+
+
+@njit(cache=True, error_model="numpy")
+def streak_at(dx, dy, tx, ty, salt):
+    """How much more or less than its share (1) the tip bears at the pixel
+    ``dx``, ``dy`` from its centre: by how far across the tip that is, the
+    same all along the stroke."""
+    across = (dy * tx - dx * ty) / STREAK_WIDTH + 64.0
+    band = int(math.floor(across))
+    blend = across - band
+    streak = unit_noise(band, 0, salt + 1) * (1.0 - blend)
+    streak += unit_noise(band + 1, 0, salt + 1) * blend
+    return 1.0 + STREAK * (2.0 * streak - 1.0)
 
 
 @njit(cache=True, error_model="numpy")
@@ -118,22 +146,14 @@ def lay_stroke(
     rim = RIM * bound + 0.5
     # a pixel on the path of the tip's centre gets one pass's worth in all
     per_pass = 1.0 / (2.0 * bound - rim)
-    count = xs.shape[0]
     total = 0.0
-    for i in range(count):
+    for i in range(xs.shape[0]):
         pressure = pressures[i]
         step = steps[i]
         if pressure <= 0.0 or step <= 0.0:
             continue
         x, y = xs[i], ys[i]
-        # which way the tip is going, to know what is across it
-        ahead, behind = min(i + 1, count - 1), max(i - 1, 0)
-        tx, ty = xs[ahead] - xs[behind], ys[ahead] - ys[behind]
-        going = math.sqrt(tx * tx + ty * ty)
-        if going > 1e-9:
-            tx, ty = tx / going, ty / going
-        else:
-            tx, ty = 1.0, 0.0
+        tx, ty = heading(xs, ys, i)
         x0 = max(int(math.floor(x - bound)), 0)
         x1 = min(int(math.ceil(x + bound)), width)
         y0 = max(int(math.floor(y - bound)), 0)
@@ -145,14 +165,8 @@ def lay_stroke(
                 edge = min(bound - d, 1.0)
                 if edge <= 0.0:
                     continue
-                # a streak of the lead, by how far across the tip this is
-                across = (dy * tx - dx * ty) / STREAK_WIDTH + 64.0
-                band = int(math.floor(across))
-                blend = across - band
-                streak = unit_noise(band, 0, salt + 1) * (1.0 - blend)
-                streak += unit_noise(band + 1, 0, salt + 1) * blend
                 local = pressure * min((bound - d) / rim, 1.0)
-                local *= 1.0 + STREAK * (2.0 * streak - 1.0)
+                local *= streak_at(dx, dy, tx, ty, salt)
                 level = 1.0 - reach * local**REACH_POWER
                 level += JITTER * (unit_noise(ix, iy, salt) - 0.5)
                 above = tooth[iy, ix] + MICRO - level
@@ -163,6 +177,12 @@ def lay_stroke(
                 cover[iy, ix] = covered
                 thick = (held[iy, ix, IV] + loose[iy, ix, IV]) / covered
                 bearing = min(local, 1.0)
+                # the tip presses some of the dust under it into the paper
+                pressed = min(PRESS_IN * bearing * per_pass * step, 1.0) * touch
+                for part in range(LOOSE):
+                    moved = loose[iy, ix, part] * pressed
+                    loose[iy, ix, part] -= moved
+                    held[iy, ix, part] += moved
                 room = full * (FILL_LIGHT + (1.0 - FILL_LIGHT) * bearing) - thick
                 if room <= 0.0:
                     continue
@@ -180,6 +200,98 @@ def lay_stroke(
                 loose[iy, ix, IV] += dust
                 total += dv
     return total
+
+
+@njit(cache=True, error_model="numpy")
+def rub_stroke(
+    cover,
+    held,
+    loose,
+    xs,
+    ys,
+    pressures,
+    steps,
+    radius,
+    lift_loose,
+    lift_held,
+    lay,
+    press,
+    smear,
+    salt,
+):
+    """Rub one pass of a round tool of ``radius`` pixels through the points
+    (``xs``, ``ys``), bearing with ``pressures`` (0..1) and moving ``steps``
+    pixels at each. Where it bears fully, one pass lifts the shares
+    ``lift_loose`` of the dust and ``lift_held`` of the held pigment onto the
+    tool, presses the share ``press`` of the dust into the paper and spreads
+    the share ``smear`` of it over the pixel; and over each of its own widths
+    the tool lays the share ``lay`` of what it carries back down, as dust.
+
+    Returns what the tool carries at the end: [K (N bands), S, volume].
+    """
+    height, width = cover.shape
+    bound = radius + 0.5
+    rim = RIM * bound + 0.5
+    per_pass = 1.0 / (2.0 * bound - rim)
+    # of what it carries, the share the tool lays on a pixel it bears fully
+    # on, per pixel moved
+    per_pixel = lay / (2.0 * bound * math.pi * bound * bound)
+    load = np.zeros(LOOSE)
+    for i in range(xs.shape[0]):
+        pressure = pressures[i]
+        step = steps[i]
+        if pressure <= 0.0 or step <= 0.0:
+            continue
+        x, y = xs[i], ys[i]
+        tx, ty = heading(xs, ys, i)
+        x0 = max(int(math.floor(x - bound)), 0)
+        x1 = min(int(math.ceil(x + bound)), width)
+        y0 = max(int(math.floor(y - bound)), 0)
+        y1 = min(int(math.ceil(y + bound)), height)
+        for iy in range(y0, y1):
+            for ix in range(x0, x1):
+                dx, dy = ix + 0.5 - x, iy + 0.5 - y
+                d = math.sqrt(dx * dx + dy * dy)
+                edge = min(bound - d, 1.0)
+                if edge <= 0.0:
+                    continue
+                local = pressure * min((bound - d) / rim, 1.0) * edge
+                local *= streak_at(dx, dy, tx, ty, salt)
+                share = local * per_pass * step  # of one pass at full pressure
+                # lift
+                up_loose = min(lift_loose * share, 1.0)
+                up_held = min(lift_held * share, 1.0)
+                for part in range(LOOSE):
+                    taken = loose[iy, ix, part] * up_loose
+                    loose[iy, ix, part] -= taken
+                    load[part] += taken
+                    taken = held[iy, ix, part] * up_held
+                    held[iy, ix, part] -= taken
+                    load[part] += taken
+                held[iy, ix, IW] -= held[iy, ix, IW] * up_held
+                # lay, as dust all over the pixel
+                before = held[iy, ix, IV] + loose[iy, ix, IV]
+                down = min(per_pixel * local * step, 1.0)
+                laid = load[IV] * down
+                for part in range(LOOSE):
+                    given = load[part] * down
+                    load[part] -= given
+                    loose[iy, ix, part] += given
+                after = before + laid
+                if after <= 1e-9:
+                    cover[iy, ix] = 0.0  # rubbed clean
+                    continue
+                bare = 1.0 - cover[iy, ix]
+                cover[iy, ix] += bare * (laid / after)
+                # press in, and push what is loose into the low ground
+                pressed = min(press * share, 1.0)
+                for part in range(LOOSE):
+                    moved = loose[iy, ix, part] * pressed
+                    loose[iy, ix, part] -= moved
+                    held[iy, ix, part] += moved
+                dusty = loose[iy, ix, IV] / after
+                cover[iy, ix] += (1.0 - cover[iy, ix]) * min(smear * share, 1.0) * dusty
+    return load
 
 
 def as_kernel_arrays(points: np.ndarray, pressure: np.ndarray, spacing: float):

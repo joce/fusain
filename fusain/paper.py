@@ -116,8 +116,9 @@ def _no_broad(a: np.ndarray, grain: float) -> np.ndarray:
 
 
 def _laid(h, w, grain, rng) -> np.ndarray:
-    """Laid lines ``grain`` apart, running across, slightly wavy; chain lines
-    down the sheet every :data:`CHAIN_SPACING` of them; fibres over both."""
+    """Laid lines ``grain`` apart, running across, slightly wavy; the furrows
+    of the chain lines down the sheet every :data:`CHAIN_SPACING` of them;
+    fibres over both."""
     y, x = np.mgrid[0:h, 0:w].astype(np.float64)
     wander = nz.fractal_noise_2d(h, w, grain * 12, rng, octaves=2) - 0.5
     lines = 0.5 + 0.5 * np.cos(2 * np.pi * (y + wander * grain * 0.8) / grain)
@@ -125,7 +126,9 @@ def _laid(h, w, grain, rng) -> np.ndarray:
     across = (x + wander * grain) % chain
     chains = np.exp(-0.5 * (np.minimum(across, chain - across) / (0.6 * grain)) ** 2)
     fibres = nz.paper(h, w, grain * 0.8, rng)
-    return 0.5 * lines + 0.2 * chains + 0.3 * fibres
+    # (the chain wires leave shallow furrows, which a stick skips: on a
+    # drawing they show as pale lines down the sheet)
+    return 0.3 * lines - 0.1 * chains + 0.5 * fibres
 
 
 def _rough(h, w, grain, rng) -> np.ndarray:
