@@ -129,12 +129,12 @@ dragged through it; one, two, four and eight light layers of HB.
 - **Too crude:** the stump blurs to a clean grey band. It should leave
   streaks along its direction.
 
-## What comes from oilpaint
+## What is shared with oilpaint
 
-Reused as they are: the colour science (`spectral.py`: colour to spectrum,
-Kubelka-Munk, spectrum to sRGB), paths and profiles along a stroke
-(`spline.py`), noise (`noise.py`, which already has a paper texture), PNG
-output, and reference images. Not reused: the paint engine, brushes and
+The shared code lives in a third package, `murex`: the colour science
+(colour to spectrum, Kubelka-Munk, spectrum to sRGB), pigments, paths and
+profiles along a stroke, noise (which already has a paper texture), PNG
+output and reference images. Not shared: oilpaint's paint engine, brushes and
 knives, which model a liquid.
 
 ## Build order
@@ -170,9 +170,9 @@ sheet.save("drawing.png")
 
 ## Decisions to make
 
-1. **Sharing code with oilpaint.** Copy the four or five shared modules into
-   fusain (proposed: independent, simple, some duplication), depend on the
-   `oilpaint` package, or move them to a third package both depend on.
+1. **Sharing code with oilpaint.** Decided: a third package, `murex`, holds
+   the shared modules. fusain uses it from the start; oilpaint moves onto it
+   later.
 2. **Units.** Pixels, as in oilpaint (proposed), or millimetres with a
    resolution, so that a 0.5 mm lead and an A4 sheet mean something.
 3. **Names.** `Sheet` and `Paper` (proposed) or oilpaint's `Canvas` and
