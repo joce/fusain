@@ -43,6 +43,10 @@ class Paper:
     bite:
         0..1: how abrasive the surface is, how much it takes off a stick that
         touches it. Smooth hot-pressed paper bites little, sanded card a lot.
+    give:
+        0..1: how much the surface yields under a tip. A thin sheet on a hard
+        desk, or a board, gives little; a thick soft paper, or a sheet on a
+        pad of others, lets the tip sink in and reach further into the tooth.
     color:
         Colour of the paper.
     name:
@@ -53,6 +57,7 @@ class Paper:
     grain: float = 3.0
     depth: float = 1.0
     bite: float = 0.5
+    give: float = 0.5
     color: ColorLike = "#f3f0e6"
     name: str = "paper"
 
@@ -63,8 +68,11 @@ class Paper:
             raise ValueError(f"grain must be a size in pixels above 0: {self.grain!r}")
         if not (math.isfinite(self.depth) and self.depth >= 0):
             raise ValueError(f"depth must be 0 (flat) or more, got {self.depth!r}")
-        if not 0.0 <= self.bite <= 1.0:
-            raise ValueError(f"bite must be between 0 and 1, got {self.bite!r}")
+        for field in ("bite", "give"):
+            if not 0.0 <= getattr(self, field) <= 1.0:
+                raise ValueError(
+                    f"{field} must be between 0 and 1, got {getattr(self, field)!r}"
+                )
         sp.parse_color(self.color)  # refused here rather than at the first sheet
 
     def with_(self, **changes) -> Paper:

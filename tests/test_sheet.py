@@ -14,8 +14,10 @@ FLAT: dict[str, Any] = {"lighting": False}
 RAKING: dict[str, Any] = {"light": (-0.6, -0.8, 0.45)}
 
 
-def _lay(layer, where, pigment, thickness):
-    """Put a layer of ``pigment`` straight into ``layer`` (held or loose)."""
+def _lay(sheet, layer, where, pigment, thickness):
+    """Put a layer of ``pigment`` straight into ``layer`` (held or loose) of
+    ``sheet``, all over the pixels ``where``."""
+    sheet.cover[where] = 1.0
     layer[*where, slice(0, N)] = pigment.K * thickness
     layer[*where, IS] = pigment.S * thickness
     layer[*where, IV] = thickness
@@ -80,7 +82,7 @@ def test_held_pigment_looks_like_that_pigment_on_that_paper():
     paper = papers.TONED_TAN
     sheet = Sheet(40, 30, paper=paper, seed=1)
     blue = Pigment("#2a4fa8", opacity=0.4)
-    _lay(sheet.held, (slice(5, 15), slice(10, 30)), blue, 0.7)
+    _lay(sheet, sheet.held, (slice(5, 15), slice(10, 30)), blue, 0.7)
     flat = sheet.render(**FLAT)
     expected = blue.appearance(0.7, over=paper.color)
     assert np.abs(flat[5:15, 10:30] - expected).max() < 1e-3
@@ -94,15 +96,15 @@ def test_loose_pigment_lies_over_held_pigment():
     white, black = Pigment("#f4f4f0"), Pigment("#101010")
     sheet = Sheet(20, 10, seed=1)
     left, right = (slice(None), slice(0, 10)), (slice(None), slice(10, 20))
-    _lay(sheet.held, left, black, 1.0)
-    _lay(sheet.loose, left, white, 1.0)
-    _lay(sheet.held, right, white, 1.0)
-    _lay(sheet.loose, right, black, 1.0)
+    _lay(sheet, sheet.held, left, black, 1.0)
+    _lay(sheet, sheet.loose, left, white, 1.0)
+    _lay(sheet, sheet.held, right, white, 1.0)
+    _lay(sheet, sheet.loose, right, black, 1.0)
     flat = _lum(sheet.render(**FLAT))
     assert flat[:, :10].min() > 0.6 and flat[:, 10:].max() < 0.1
     # loose pigment alone is seen over the bare paper
     alone = Sheet(20, 10, seed=1)
-    _lay(alone.loose, left, black, 0.005)
+    _lay(alone, alone.loose, left, black, 0.005)
     grey = _lum(alone.render(**FLAT))
     assert 0.05 < grey[:, :10].mean() < 0.6 and grey[:, 10:].min() > 0.8
 
@@ -110,7 +112,7 @@ def test_loose_pigment_lies_over_held_pigment():
 def test_a_copy_is_independent():
     sheet = Sheet(30, 20, seed=4)
     copy = sheet.copy()
-    _lay(copy.held, (slice(0, 5), slice(0, 5)), Pigment("#202020"), 1.0)
+    _lay(copy, copy.held, (slice(0, 5), slice(0, 5)), Pigment("#202020"), 1.0)
     copy.press[:] = 0.5
     assert not sheet.pigment().any() and not sheet.press.any()
     assert copy.pigment().any() and copy.paper is sheet.paper
@@ -130,7 +132,7 @@ def test_save_writes_a_png(tmp_path):
 
 def test_a_tall_sheet_is_rendered_in_several_passes_alike():
     sheet = Sheet(12, 150, seed=3)
-    _lay(sheet.held, (slice(60, 70), slice(2, 8)), Pigment("#303030"), 0.5)
+    _lay(sheet, sheet.held, (slice(60, 70), slice(2, 8)), Pigment("#303030"), 0.5)
     whole = sheet.render()
     assert whole.shape == (150, 12, 3)
     assert whole[60:70, 2:8].max() < whole[0:50].min()

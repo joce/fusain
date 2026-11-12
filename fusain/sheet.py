@@ -7,16 +7,15 @@ from collections.abc import Iterator, Sequence
 
 import numpy as np
 from murex import spectral as sp
-from murex import write_png
+from murex import spline, write_png
+from murex.spline import Profile
 
+from . import _engine as eng
+from ._engine import HELD, IS, IV, LOOSE, N
+from .medium import Medium
 from .paper import Paper
 
-N = sp.N_BANDS
-#: Pigment is packed per pixel as [K (N bands), S, volume], all extensive
-#: (summed over the pigment present); the held layer has a fourth part, the
-#: volume of wax in it.
-IS, IV, IW = N, N + 1, N + 2
-LOOSE, HELD = N + 2, N + 3
+__all__ = ["DEFAULT_LIGHT", "HELD", "IS", "IV", "LOOSE", "N", "Sheet"]
 
 #: The lamp a sheet is rendered under by default (x, y, z; y points down the
 #: image): from the upper left and fairly high, so that the tooth shows
@@ -47,7 +46,8 @@ class Sheet:
     1 peak), how far it has been crushed or polished (``press``, 0 to 1), the
     pigment fixed to the paper (``held``) and the pigment lying on it as dust
     (``loose``), which is what a stump, an eraser or a later stroke can still
-    move. Memory: about 0.22 KB per pixel.
+    move, and the share of the pixel that carries pigment (``cover``): the
+    rest shows bare paper. Memory: about 0.23 KB per pixel.
 
     Raises ValueError or TypeError unless ``width`` and ``height`` are whole
     numbers above 0.
@@ -67,6 +67,7 @@ class Sheet:
         self.ground = self.paper.reflectance()
         self.tooth = self.paper.tooth(H, W, self._rng)
         self.press = np.zeros((H, W), np.float32)
+        self.cover = np.zeros((H, W), np.float32)
         self.held = np.zeros((H, W, HELD), np.float32)
         self.loose = np.zeros((H, W, LOOSE), np.float32)
 
@@ -76,7 +77,7 @@ class Sheet:
         new.__dict__.update(self.__dict__)
         new._rng = np.random.default_rng()
         new._rng.bit_generator.state = self._rng.bit_generator.state
-        for name in ("tooth", "press", "held", "loose"):
+        for name in ("tooth", "press", "cover", "held", "loose"):
             setattr(new, name, getattr(self, name).copy())
         return new
 
@@ -103,10 +104,76 @@ class Sheet:
         out[:] = self.ground
         marked = (held[..., IV] > 0) | (loose[..., IV] > 0)
         if marked.any():
-            h, lo = held[marked].astype(np.float64), loose[marked].astype(np.float64)
+            # the pigment lies on the covered share of the pixel, that much
+            # thicker; the rest of the pixel is bare paper
+            share = np.clip(self.cover[rows][marked].astype(np.float64), 1e-6, 1.0)
+            h = held[marked].astype(np.float64) / share[:, None]
+            lo = loose[marked].astype(np.float64) / share[:, None]
             under = sp.km_layer(h[:, :N], h[:, IS], self.ground)
-            out[marked] = sp.km_layer(lo[:, :N], lo[:, IS], under)
+            over = sp.km_layer(lo[:, :N], lo[:, IS], under)
+            out[marked] = share[:, None] * over + (1.0 - share[:, None]) * self.ground
         return out
+
+    # ------------------------------------------------------------------
+    def stroke(
+        self,
+        path,
+        medium: Medium,
+        pressure: Profile = 0.5,
+        width: float = 2.0,
+    ) -> float:
+        """Draw one pass of ``medium`` along ``path``.
+
+        ``path`` is a list of points (a smooth curve through them) or a
+        :class:`murex.Path`; a single point is a dot. ``pressure`` (0 to 1,
+        clipped) is how hard the tip bears on the paper, and what sets the
+        tone: a light touch marks only the peaks of the tooth, a firm one
+        reaches the valleys. A number, one value per point of the path, or a
+        function of u (0 at the start of the stroke, 1 at its end).
+        ``width`` is the width of the tip in pixels.
+
+        Returns the volume of medium laid, which is what the tip lost.
+
+        Raises ValueError, before anything is drawn, unless ``width`` is a
+        finite number above 0 and the pressures are finite.
+        """
+        if not isinstance(medium, Medium):
+            raise TypeError(f"medium must be a Medium, such as pencils.HB: {medium!r}")
+        if not (math.isfinite(width) and width > 0):
+            raise ValueError(f"width must be a number of pixels above 0, got {width!r}")
+        line = spline.as_path(path)
+        spacing = max(0.25, width / 8.0)
+        points, _, u, knot = line.sample(spacing)
+        bearing = spline.evaluate_profile(pressure, u, knot, line.n_knots)
+        if not np.isfinite(bearing).all():
+            raise ValueError("pressure must be finite all along the stroke")
+        if len(points) > 1:
+            spacing = line.length / (len(points) - 1)
+        xs, ys, bearing, steps = eng.as_kernel_arrays(
+            points, np.clip(bearing, 0.0, 1.0), spacing
+        )
+        paper, pigment = self.paper, medium.pigment
+        return float(
+            eng.lay_stroke(
+                self.tooth,
+                self.cover,
+                self.held,
+                self.loose,
+                xs,
+                ys,
+                bearing,
+                steps,
+                0.5 * float(width),
+                np.ascontiguousarray(pigment.K, dtype=np.float64),
+                float(pigment.S),
+                float(medium.softness),
+                float(medium.binding),
+                float(paper.depth),
+                float(paper.bite),
+                float(paper.give),
+                int(self._rng.integers(1 << 31)),
+            )
+        )
 
     # ------------------------------------------------------------------
     def render(
