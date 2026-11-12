@@ -48,6 +48,11 @@ The difference between them is what can still move: a stump, an eraser or a
 later stroke shifts `loose`; only a hard eraser or a blade touches `held`.
 Pressure moves pigment from `loose` to `held`. So does fixative.
 
+Sizes are in pixels, and the paper's grain sets the scale of a drawing: the
+tooth of a drawing paper is finer than a pencil line, which is two or three
+grains wide. (The first version of the tooth had patches several grains
+across, and shading came out in blotches wider than the pencil.)
+
 The paper itself is described by a `Paper` (texture, tooth size in pixels,
 depth of the tooth, how abrasive it is, how much it gives under a tip, colour), with presets such as
 cartridge paper, hot-pressed, cold-pressed, laid (Ingres) and sanded pastel

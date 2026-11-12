@@ -51,7 +51,7 @@ def _shaded(medium, pressure, layers=1, paper=papers.CARTRIDGE) -> Sheet:
 def test_a_light_touch_marks_the_peaks_and_leaves_the_valleys_white():
     sheet = _shaded(pencils.HB, 0.3)
     tooth, pigment = sheet.tooth[INSIDE], sheet.pigment()[INSIDE]
-    marked = pigment > 0
+    marked = sheet.cover[INSIDE] > 0.5  # at least half covered
     assert 0.25 < marked.mean() < 0.75
     assert tooth[marked].mean() > tooth[~marked].mean() + 0.2
     low, high = tooth < np.quantile(tooth, 0.25), tooth > np.quantile(tooth, 0.75)

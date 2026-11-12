@@ -5,8 +5,9 @@ Run from the repository root: ``python examples/pencils.py``. Writes
 
 * top, one band per grade (4H, 2H, HB, 2B, 4B, 6B, 8B from the top), shaded
   with the pressure rising from left to right;
-* bottom left, HB at a light pressure in 1, 2, 4, 8 and 16 layers;
-* bottom right, lines: a 2B drawn lightly then firmly, and cross-hatching.
+* bottom left, HB at a light pressure in 1, 2, 4 and 8 layers, each layer at
+  another angle;
+* bottom right, 2B lines drawn lightly, firmly and hard, and cross-hatching.
 """
 
 from __future__ import annotations
@@ -18,43 +19,71 @@ import numpy as np
 from fusain import Sheet, papers, pencils
 
 GRADES = ("4H", "2H", "HB", "2B", "4B", "6B", "8B")
+#: Width of the pencil's tip, in pixels: about two grains of the paper.
+TIP = 6.0
 
 
-def shade(sheet, medium, pressure, x0, y0, x1, y1, width=3.0, gap=1.5) -> None:
-    """One even layer over a rectangle: strokes side by side, overlapping."""
-    for y in np.arange(y0, y1 + 0.5 * gap, gap):
-        sheet.stroke([(x0, y), (x1, y)], medium, pressure=pressure, width=width)
+def shade(sheet, medium, pressure, box, rng, angle=30.0, width=TIP) -> None:
+    """Shade the rectangle ``box`` (x0, y0, x1, y1) as a hand does: strokes
+    side by side at about ``angle`` degrees, none quite straight or quite
+    alike, each lighter where the pencil lands and where it lifts.
+    ``pressure`` is a number, or a function of x (0 at the left of the box,
+    1 at its right)."""
+    x0, y0, x1, y1 = box
+    turn = np.radians(angle)
+    along = np.array([np.cos(turn), -np.sin(turn)])
+    across = np.array([np.sin(turn), np.cos(turn)])
+    centre = np.array([0.5 * (x0 + x1), 0.5 * (y0 + y1)])
+    reach = 0.5 * np.hypot(x1 - x0, y1 - y0)
+    for offset in np.arange(-reach, reach, 0.55 * width):
+        line = centre + (offset + rng.normal(0, 0.15 * width)) * across
+        ends = [line + s * along for s in np.linspace(-reach, reach, 200)]
+        inside = [p for p in ends if x0 <= p[0] <= x1 and y0 <= p[1] <= y1]
+        if len(inside) < 3:
+            continue
+        start, end = inside[0], inside[-1]
+        knots = max(int(np.hypot(*(end - start)) / 25), 2)
+        path = [
+            start + (end - start) * k / knots + rng.normal(0, 0.1 * width, 2)
+            for k in range(knots + 1)
+        ]
+        firm = rng.uniform(0.85, 1.15)
+
+        def bearing(u, path=path, firm=firm):
+            x = path[0][0] + (path[-1][0] - path[0][0]) * u
+            wanted = pressure((x - x0) / (x1 - x0)) if callable(pressure) else pressure
+            landing = 0.55 + 0.45 * np.sin(np.pi * np.clip(u, 0.02, 0.98)) ** 0.5
+            return np.clip(wanted * firm * landing, 0.0, 1.0)
+
+        sheet.stroke(
+            path, medium, pressure=bearing, width=width * rng.uniform(0.9, 1.1)
+        )
 
 
 def main() -> None:
-    sheet = Sheet(900, 560, paper=papers.CARTRIDGE, seed=11)
-    for row, name in enumerate(GRADES):
-        top = 24 + row * 44
-        shade(
-            sheet,
-            pencils.grade(name),
-            lambda u: 0.05 + 0.95 * u,
-            30,
-            top,
-            870,
-            top + 32,
-        )
-    for i, layers in enumerate((1, 2, 4, 8, 16)):
-        left = 30 + i * 86
-        for _ in range(layers):
-            shade(sheet, pencils.HB, 0.35, left, 350, left + 70, 530)
+    sheet = Sheet(900, 600, paper=papers.CARTRIDGE, seed=11)
     rng = np.random.default_rng(5)
-    for pressure, top in ((0.25, 360), (0.9, 400)):
-        wave = [(480 + 26 * k, top + 14 * np.sin(k * 1.3)) for k in range(15)]
-        sheet.stroke(wave, pencils.B2, pressure=pressure, width=2.5)
+    for row, name in enumerate(GRADES):
+        top = 20 + row * 46
+        box = (30, top, 870, top + 36)
+        shade(sheet, pencils.grade(name), lambda x: 0.05 + 0.95 * x, box, rng)
+    for i, layers in enumerate((1, 2, 4, 8)):
+        left = 30 + i * 112
+        for layer in range(layers):
+            box = (left, 360, left + 96, 575)
+            shade(sheet, pencils.HB, 0.3, box, rng, angle=30 + 47 * layer)
+    for k, pressure in enumerate((0.2, 0.5, 0.95)):
+        wave = [
+            (500 + 28 * j, 380 + 34 * k + 11 * np.sin(j * 1.2 + k)) for j in range(14)
+        ]
+        sheet.stroke(wave, pencils.B2, pressure=pressure)
     for slant in (1, -1):
-        for x in np.arange(500, 860, 7.0):
-            x += rng.normal(0, 0.8)
+        for x in np.arange(510, 830, 9.0):
+            x += rng.normal(0, 1.0)
             sheet.stroke(
-                [(x, 450 + 40 * slant), (x + 40, 450 - 40 * slant)],
+                [(x, 525 + 45 * slant), (x + 45, 525 - 45 * slant)],
                 pencils.HB,
-                pressure=lambda u: 0.7 - 0.4 * u,
-                width=2.0,
+                pressure=lambda u: 0.75 - 0.45 * u,
             )
     out = Path(__file__).parent / "output" / "pencils.png"
     sheet.save(str(out))

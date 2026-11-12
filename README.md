@@ -22,15 +22,18 @@ from fusain import Sheet, papers, pencils
 
 sheet = Sheet(800, 600, paper=papers.CARTRIDGE, seed=1)
 sheet.stroke([(100, 300), (300, 220), (500, 320)], pencils.B2, pressure=0.6)
-sheet.stroke([(120, 400), (480, 380)], pencils.HB, pressure=lambda u: 1 - u, width=3)
+sheet.stroke([(120, 400), (480, 380)], pencils.HB, pressure=lambda u: 1 - u, width=6)
 sheet.save("drawing.png")
 ```
 
 ![Graphite pencils on cartridge paper](examples/output/pencils.png)
 
 Top: 4H, 2H, HB, 2B, 4B, 6B and 8B, each shaded with the pressure rising from
-left to right. Bottom left: HB at a light pressure in 1, 2, 4, 8 and 16
-layers. Bottom right: a 2B line drawn lightly, then firmly, and cross-hatching.
+left to right. Bottom left: HB at a light pressure in 1, 2, 4 and 8 layers.
+Bottom right: 2B lines drawn lightly, firmly and hard, and cross-hatching.
+
+Sizes are in pixels, and the paper's `grain` sets the scale: a pencil line is
+two or three grains wide.
 
 ![The papers under a raking light](examples/output/papers.png)
 
