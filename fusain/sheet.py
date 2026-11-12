@@ -123,6 +123,7 @@ class Sheet:
         medium: Medium,
         pressure: Profile = 0.5,
         width: float = 4.0,
+        tilt: float = 0.0,
     ) -> float:
         """Draw one pass of ``medium`` along ``path``.
 
@@ -134,15 +135,21 @@ class Sheet:
         function of u (0 at the start of the stroke, 1 at its end).
         ``width`` is the width of the tip in pixels. A pencil point is a few
         times wider than the paper's grain; one narrower than the grain draws
-        a dotted line.
+        a dotted line. ``tilt`` (0 to 1) is how far over the stick is held: 0
+        draws with its point, 1 with its side, which marks a band several
+        times wider than the point, across the stroke: broader, lighter and
+        grainier, with soft edges.
 
         Returns the volume of medium laid, which is what the tip lost.
 
         Raises ValueError, before anything is drawn, unless ``width`` is a
-        finite number above 0 and the pressures are finite.
+        finite number above 0, the pressures are finite and ``tilt`` is
+        between 0 and 1.
         """
         if not isinstance(medium, Medium):
             raise TypeError(f"medium must be a Medium, such as pencils.HB: {medium!r}")
+        if not 0.0 <= tilt <= 1.0:
+            raise ValueError(f"tilt must be between 0 (point) and 1 (side): {tilt!r}")
         xs, ys, bearing, steps = self._sampled(path, pressure, width)
         paper, pigment = self.paper, medium.pigment
         return float(
@@ -155,7 +162,9 @@ class Sheet:
                 ys,
                 bearing,
                 steps,
+                0.5 * float(width) * _spread(tilt),
                 0.5 * float(width),
+                float(tilt),
                 np.ascontiguousarray(pigment.K, dtype=np.float64),
                 float(pigment.S),
                 float(medium.softness),
@@ -299,6 +308,7 @@ class Sheet:
         angle: float = 30.0,
         spacing: float | None = None,
         hand: float = 1.0,
+        tilt: float = 0.0,
     ) -> float:
         """Shade ``area`` with one layer of strokes side by side, as a hand
         does: none quite straight or quite alike, each lighter where the tip
@@ -312,7 +322,9 @@ class Sheet:
         sheet, 90 up it). ``spacing`` is how far apart they are (by default
         a little over half a width, so that they overlap). ``hand`` is how
         unsteady the hand is: 1 for a natural one, 0 for ruler-straight
-        strokes, evenly spaced and all alike.
+        strokes, evenly spaced and all alike. ``tilt`` is as for
+        :meth:`stroke`: with the side of the stick the strokes are broader
+        (and fewer), lighter and softer.
 
         Shade again at another angle to cross-hatch or to build tone.
         Returns the volume of medium laid.
@@ -323,8 +335,11 @@ class Sheet:
         """
         if not isinstance(medium, Medium):
             raise TypeError(f"medium must be a Medium, such as pencils.HB: {medium!r}")
+        if not 0.0 <= tilt <= 1.0:
+            raise ValueError(f"tilt must be between 0 (point) and 1 (side): {tilt!r}")
         outline = hatching.as_outline(area)
-        gap = hatching.SPACING * width if spacing is None else spacing
+        broad = width * _spread(tilt)  # how wide a stroke's mark is
+        gap = hatching.SPACING * broad if spacing is None else spacing
         for name, value in (("width", width), ("spacing", gap)):
             if not (math.isfinite(value) and value > 0):
                 raise ValueError(
@@ -335,17 +350,22 @@ class Sheet:
         if not (math.isfinite(hand) and hand >= 0):
             raise ValueError(f"hand must be 0 (ruler-straight) or more, got {hand!r}")
         laid = 0.0
-        for path, firm, tip in hatching.strokes(
-            outline, angle, width, gap, hand, self._rng
+        for path, firm, mark in hatching.strokes(
+            outline, angle, broad, gap, hand, self._rng
         ):
             along = hatching.bearing(pressure, path, firm, hand)
-            laid += self.stroke(path, medium, pressure=along, width=tip)
+            laid += self.stroke(path, medium, along, mark / _spread(tilt), tilt)
         return laid
 
     def save(self, path: str, **render_options) -> None:
         """Render and save as PNG."""
         img = self.render(**render_options)
         write_png(path, np.round(img * 255).astype(np.uint8))
+
+
+def _spread(tilt: float) -> float:
+    """How many times wider than its point a stick marks at this tilt."""
+    return 1.0 + (eng.SIDE - 1.0) * float(tilt)
 
 
 def _size(name: str, value) -> int:

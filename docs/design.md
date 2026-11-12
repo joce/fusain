@@ -80,6 +80,10 @@ spectra.
 
 A tool is a tip plus, usually, a medium.
 
+- **Tilt** (built). A stick held on its side marks with the side of its lead:
+  an ellipse across the stroke, up to five times wider than the point, whose
+  weight is spread over more paper, so the mark is lighter, grainier and soft
+  at the edges.
 - **Tip.** A shape (point, flat, the side of a stick) and a size. In the first
   version the tip is a formula: a point whose flat grows with the volume worn
   off, and `sharpen()` to reset it. A worn tip stored as its own small height
@@ -199,6 +203,7 @@ from fusain import Sheet, papers, pencils, pastels, tools
 sheet = Sheet(1200, 800, paper=papers.CARTRIDGE, seed=1)
 sheet.stroke([(100, 300), (300, 220), (500, 320)], pencils.HB, pressure=0.4)
 sheet.shade((100, 360, 500, 520), pencils.HB, pressure=0.4, angle=30)
+sheet.stroke([(100, 560), (500, 550)], pencils.B4, tilt=1)   # the side of the lead
 sheet.stroke(path, pastels.soft("#c0392b"), pressure=(0.2, 0.8), side=True)
 sheet.smudge(path, tools.STUMP)
 sheet.erase(path, tools.KNEADED)
