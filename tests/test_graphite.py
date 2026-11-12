@@ -68,7 +68,10 @@ def test_pressing_harder_reaches_the_valleys_and_darkens():
     covers = [float(s.cover[INSIDE].mean()) for s in sheets]
     assert all(a > b + 0.03 for a, b in pairwise(tones))
     assert all(a < b for a, b in pairwise(covers))
-    assert covers[0] < 0.25 and covers[-1] > 0.97
+    # an HB pressed as hard as it goes still leaves white specks in the
+    # valleys; only the softest leads reach them all
+    assert covers[0] < 0.3 and 0.85 < covers[-1] < 0.97
+    assert _shaded(pencils.B8, 1.0).cover[INSIDE].mean() > 0.99
     assert tones[0] > 0.93 and tones[-1] < 0.5
 
 
@@ -112,7 +115,7 @@ def test_each_layer_darkens_less_and_then_the_tooth_is_full():
     per_layer = -np.diff(tones) / np.diff(counts)
     assert (per_layer > 0).all()  # it never lightens
     assert (np.diff(per_layer) < 0).all()  # each layer adds less than the last
-    assert per_layer[0] > 0.1 and per_layer[-1] < 0.001
+    assert per_layer[0] > 0.1 and per_layer[-1] < 0.01 * per_layer[0]
     assert 0.4 < tones[-1] < 0.6  # light layers never make it dark
 
 
@@ -128,7 +131,7 @@ def test_a_toothier_paper_takes_more_before_it_is_full():
     def volume(paper) -> float:
         return float(_shaded(pencils.B2, 0.6, 48, paper=paper).pigment()[INSIDE].mean())
 
-    assert volume(papers.BRISTOL) < volume(papers.CARTRIDGE) < volume(papers.SANDED)
+    assert volume(papers.BRISTOL) < volume(papers.CARTRIDGE) < volume(papers.ROUGH)
 
     def layers_to_fill(paper) -> int:
         sheet, last = _sheet(paper), 1.0
@@ -229,6 +232,27 @@ def test_a_line_is_darkest_along_its_middle():
     across = sheet.pigment()[:, 40:100].mean(axis=1)
     assert across[29:31].min() > across[27] > across[26] > across[25] > 0
     assert across[:25].max() == 0 and across[35:].max() == 0
+
+
+def test_a_line_has_streaks_along_it():
+    # on a level paper nothing but the lead itself varies: it bears more
+    # in some bands across the tip than in others, all along the stroke
+    sheet = _sheet(Paper(depth=0))
+    sheet.stroke(Polyline([(10, 30), (130, 30)]), pencils.B2, 0.6, 14.0)
+    middle = sheet.pigment()[25:35, 30:110].astype(np.float64)
+    assert middle.mean(axis=1).std() > 0.05 * middle.mean()
+    assert middle.std(axis=1).max() < 0.01 * middle.mean()
+
+
+def test_a_firm_line_keeps_the_grain_of_the_paper():
+    sheet = _sheet()
+    sheet.stroke(Polyline([(10, 30), (130, 30)]), pencils.HB, 0.8, 8.0)
+    rows = (slice(28, 32), slice(20, 120))  # along the middle of the line
+    tooth, pigment = sheet.tooth[rows].ravel(), sheet.pigment()[rows].ravel()
+    # the high ground took more than the low, and some valleys took nothing
+    assert np.corrcoef(tooth, pigment)[0, 1] > 0.5
+    assert 0.02 < (sheet.cover[rows] < 0.1).mean() < 0.3
+    assert pigment.std() > 0.3 * pigment.mean()
 
 
 def test_how_a_path_is_given_does_not_change_the_line():
