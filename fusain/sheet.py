@@ -350,11 +350,11 @@ class Sheet:
         if not (math.isfinite(hand) and hand >= 0):
             raise ValueError(f"hand must be 0 (ruler-straight) or more, got {hand!r}")
         laid = 0.0
-        for path, firm, mark in hatching.strokes(
-            outline, angle, broad, gap, hand, self._rng
+        for path, firm, tip in hatching.strokes(
+            outline, angle, width, gap, hand, self._rng, broad
         ):
             along = hatching.bearing(pressure, path, firm, hand)
-            laid += self.stroke(path, medium, along, mark / _spread(tilt), tilt)
+            laid += self.stroke(path, medium, along, tip, tilt)
         return laid
 
     def save(self, path: str, **render_options) -> None:

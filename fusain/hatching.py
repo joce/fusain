@@ -68,16 +68,21 @@ def strokes(
     spacing: float,
     hand: float,
     rng: np.random.Generator,
+    broad: float | None = None,
 ) -> Iterator[tuple[np.ndarray, float, float]]:
     """The strokes that shade the polygon ``outline``: for each, its path
     (points, (K, 2)), how firm it is against the others (about 1) and the
-    width of the tip for it."""
+    width of the tip for it. ``width`` is the width of the tip's point and
+    ``broad`` that of its mark across the stroke, wider if the stick is
+    tilted: what runs along a stroke goes by the first, where a stroke lands
+    among the others by the second."""
+    broad = width if broad is None else broad
     turn = math.radians(angle)
     across = np.array([math.sin(turn), math.cos(turn)])
     along = np.array([math.cos(turn), -math.sin(turn)])
     reach = outline @ across
     for offset in np.arange(reach.min() + 0.5 * spacing, reach.max(), spacing):
-        offset += rng.normal(0.0, STRAY_ACROSS * width * hand)
+        offset += rng.normal(0.0, STRAY_ACROSS * broad * hand)
         cuts = _crossings(outline, across, offset)
         for start, end in zip(cuts[0::2], cuts[1::2], strict=True):
             start = start + rng.uniform(-1.0, 1.0) * STRAY_ALONG * width * hand * along

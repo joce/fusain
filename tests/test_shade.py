@@ -146,6 +146,23 @@ def test_a_very_unsteady_hand_still_draws():
     assert sheet.shade((20, 20, 180, 130), pencils.B2, 0.5, hand=25.0) > 0
 
 
+def test_a_narrow_area_is_shaded_with_the_side_of_the_lead_too():
+    # (strokes shorter than half the broadened mark were dropped: all of them)
+    def laid(tilt) -> float:
+        sheet = _sheet()
+        return sheet.shade(
+            (20, 20, 30, 100), pencils.B2, 0.6, 5.0, 0.0, hand=0, tilt=tilt
+        )
+
+    assert laid(1.0) > 0.2 * laid(0.0) > 0
+    # and its strokes stray no further past the ends than the point's do
+    for tilt in (0.0, 1.0):
+        sheet = _sheet()
+        sheet.shade((60, 30, 140, 120), pencils.B2, 0.6, 5.0, 0.0, tilt=tilt)
+        columns = np.nonzero(sheet.pigment().sum(axis=0))[0]
+        assert columns.min() >= 60 - 6 and columns.max() <= 140 + 6
+
+
 def test_spacing_sets_how_many_strokes_there_are():
     def laid(spacing) -> float:
         return _sheet(LEVEL).shade(
