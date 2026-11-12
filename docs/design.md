@@ -1,6 +1,6 @@
 # Core model: design proposal
 
-Status: accepted (issue `fusain-ilv`). Steps 1 and 2 of the build order are built; the rest is not.
+Status: accepted (issue `fusain-ilv`). Steps 1 to 3 of the build order are built; the rest is not.
 
 ## What fusain has to get right
 
@@ -116,9 +116,18 @@ tip:
    the paper's bite, not on how much the tooth holds; so a toothier paper
    takes more passes to fill. It is split between `held` and `loose` by the
    medium's `binding`, and it is what the tip loses.
-5. **Working what is there** (still to come). The tip presses some `loose`
-   into `held` and drags some of it along. High pressure on a waxy layer
-   raises `press`.
+5. **Working what is there.** The tip presses some of the `loose` pigment
+   under it into `held`. Still to come: dragging some of it along, and high
+   pressure on a waxy layer raising `press`.
+
+A stump, a finger or an eraser runs the same way but lays nothing of its own.
+Where it bears, it lifts a share of the `loose` pigment (and, for an eraser,
+of the `held`), carries it, and lays a share of what it carries back down a
+little further on, as dust spread over the whole pixel. It presses some dust
+into the paper and pushes the dust on the high ground into the low, so
+`cover` rises and the white specks grey over. An eraser lays nothing back.
+What a tool still carries at the end of a pass is returned, so nothing is
+lost.
 
 These are numba kernels under the same rules as oilpaint's (no `fastmath`, no
 `parallel`), so a drawing repeats exactly. Their constants are in
@@ -153,8 +162,9 @@ dragged through it; one, two, four and eight light layers of HB.
   contact rule was too exact: every pass touched the same pixels. The step
   law above now has a random part per pass, and eight light layers of HB come
   out at 0.62 against 0.85 for one.
-- **Too crude:** the stump blurred to a clean grey band. It should leave
-  streaks along its direction (step 3).
+- **Too crude:** the stump blurred to a clean grey band. The stump now built
+  bears unevenly across its width, like a lead, and leaves streaks along its
+  way.
 
 ## What is shared with oilpaint
 

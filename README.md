@@ -12,10 +12,11 @@ media (ink, felt-tip markers, paint) are out of scope; for oil paint, see the
 sister project [oilpaint](https://github.com/joce/oilpaint). The two share their
 colour science and stroke paths through [murex](https://github.com/joce/murex).
 
-Early days. So far there are papers and graphite pencils: grades from 9H to
-9B, whose tone depends on how hard they are pressed and how many layers are
-laid, as on real paper. Charcoal, pastel, colour, stumps and erasers are still
-to come; the plan is in [docs/design.md](docs/design.md).
+Early days. So far there are papers, graphite pencils from 9H to 9B, charcoal,
+stumps and erasers. Tone depends on how hard a stick is pressed and how many
+layers are laid, as on real paper; charcoal leaves dust that a stump drags
+about and an eraser lifts, while graphite mostly stays put. Pastel, colour and
+worn tips are still to come; the plan is in [docs/design.md](docs/design.md).
 
 ```python
 from fusain import Sheet, papers, pencils
@@ -35,6 +36,21 @@ Bottom right: 2B lines drawn lightly, firmly and hard, and cross-hatching.
 
 Sizes are in pixels, and the paper's `grain` sets the scale: a pencil line is
 two or three grains wide.
+
+```python
+from fusain import charcoal, tools
+
+sheet.shade((100, 60, 500, 200), charcoal.VINE, pressure=0.6, width=14)
+sheet.smudge([(120, 130), (560, 130)], tools.STUMP)    # drags the dust along
+sheet.erase([(100, 170), (500, 170)], tools.KNEADED)   # lifts it
+```
+
+![Charcoal, a stump and erasers](examples/output/charcoal.png)
+
+Vine charcoal, compressed charcoal and a 4B pencil on Ingres paper. Across all
+three, from the top: untouched; a stump dragged through and out onto the bare
+paper; a finger rubbed to and fro; a kneaded eraser pulled through three
+times; a vinyl eraser pulled through once.
 
 ![The papers under a raking light](examples/output/papers.png)
 

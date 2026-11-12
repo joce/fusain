@@ -89,7 +89,8 @@ def strokes(
             path = start + (end - start) * np.linspace(0.0, 1.0, knots + 1)[:, None]
             path += rng.normal(0.0, WANDER * width * hand, path.shape)
             firm = rng.uniform(1.0 - FIRMNESS * hand, 1.0 + FIRMNESS * hand)
-            tip = width * rng.uniform(1.0 - WIDTH * hand, 1.0 + WIDTH * hand)
+            # (however unsteady the hand, a tip keeps some width)
+            tip = width * max(rng.uniform(1.0 - WIDTH * hand, 1.0 + WIDTH * hand), 0.25)
             yield path, firm, tip
 
 

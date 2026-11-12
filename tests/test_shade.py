@@ -140,6 +140,12 @@ def test_shading_twice_builds_tone_and_repeats_with_the_seed():
     assert not np.array_equal(_sheet(seed=3).tooth, once.tooth)
 
 
+def test_a_very_unsteady_hand_still_draws():
+    # (its strokes' widths were drawn from a range that went below zero)
+    sheet = _sheet()
+    assert sheet.shade((20, 20, 180, 130), pencils.B2, 0.5, hand=25.0) > 0
+
+
 def test_spacing_sets_how_many_strokes_there_are():
     def laid(spacing) -> float:
         return _sheet(LEVEL).shade(
