@@ -23,4 +23,5 @@ make pre-push                  # what CI runs: tox (black, ruff, pyright, pytest
 
 ## Conventions
 
+- Colour (pigments, Kubelka-Munk mixing), stroke paths, noise, reference images and PNG output come from `murex`, which `oilpaint` shares. What both libraries need goes there, not here.
 - ruff caps function complexity at 13.

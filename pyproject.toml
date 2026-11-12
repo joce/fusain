@@ -33,7 +33,7 @@ classifiers = [
     "Topic :: Multimedia :: Graphics",
     "Typing :: Typed",
 ]
-dependencies = ["numpy>=1.24"]
+dependencies = ["numpy>=1.24", "murex>=0.1.1"]
 
 [project.urls]
 Homepage = "https://github.com/joce/fusain"
