@@ -1,0 +1,167 @@
+[project]
+name = "fusain"
+dynamic = ["version"]
+description = "A drawing simulator for dry media: graphite and coloured pencils, charcoal, pastel and crayon on a paper with tooth."
+readme = "README.md"
+authors = [{ name = "Jocelyn Legault", email = "jocelynlegault@gmail.com" }]
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11, <4.0"
+keywords = [
+    "drawing",
+    "pencil",
+    "charcoal",
+    "pastel",
+    "crayon",
+    "simulation",
+    "paper-texture",
+    "generative-art",
+]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: Artistic Software",
+    "Topic :: Multimedia :: Graphics",
+    "Typing :: Typed",
+]
+dependencies = ["numpy>=1.24"]
+
+[project.urls]
+Homepage = "https://github.com/joce/fusain"
+Repository = "https://github.com/joce/fusain"
+Issues = "https://github.com/joce/fusain/issues"
+Changelog = "https://github.com/joce/fusain/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+tox = [
+    "tox>=4.53,<5.0",
+    "tox-uv>=1.35,<2.0",
+]
+dev = [
+    { include-group = "tox" },
+    "black>=25.9,<27.0",
+    "coverage>=7.15.0,<8.0",
+    "pyright>=1.1.409,<2.0",
+    "pytest>=9.0,<10.0",
+    "pytest-cov>=7.0,<8.0",
+    "ruff>=0.15,<1.0",
+]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "fusain/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["fusain"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "fusain",
+    "tests",
+    "tools",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
+    "RELEASING.md",
+    "pyproject.toml",
+    "tox.ini",
+    "uv.lock",
+]
+
+[tool.black]
+target-version = ["py311"]
+line-length = 88
+
+[tool.pyright]
+include = ["fusain", "tests", "tools"]
+typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["fusain"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+precision = 2
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[tool.ruff]
+exclude = [
+    "__pycache__",
+    ".git",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".tox",
+    ".uv-cache",
+    ".venv",
+    ".vscode",
+    "node_modules",
+]
+line-length = 88
+indent-width = 4
+target-version = "py311"
+
+[tool.ruff.format]
+exclude = ["*.md"]
+indent-style = "space"
+line-ending = "lf"
+quote-style = "double"
+skip-magic-trailing-comma = false
+
+[tool.ruff.lint]
+select = [
+    "F",
+    "E",
+    "W",
+    "I",
+    "UP",
+    "B",
+    "A",
+    "C90",
+    "C4",
+    "SIM",
+    "PIE",
+    "PERF",
+    "FURB",
+    "RET",
+    "ISC",
+    "Q",
+    "NPY",
+    "PGH",
+    "T10",
+    "YTT",
+    "ICN",
+    "FLY",
+    "RUF",
+]
+fixable = ["ALL"]
+unfixable = []
+ignore = [
+    # `[x] + rest` -> `[x, *rest]` changes the meaning when `rest` is a numpy array
+    "collection-literal-concatenation",
+]
+preview = true
+
+[tool.ruff.lint.mccabe]
+max-complexity = 13
+
+[build-system]
+requires = ["hatchling>=1.29,<2.0", "hatch-vcs>=0.4,<1.0"]
+build-backend = "hatchling.build"

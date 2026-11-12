@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "fusain",
+  "project_id": "3932ecbe-2f83-4fec-b96f-c36fcdb43d75"
+}

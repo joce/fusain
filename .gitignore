@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Version file written at build time by hatch-vcs
+fusain/_version.py
+
+# Test and coverage output
+.coverage
+coverage.xml
+junit*.xml
+htmlcov/
+
+# Tools
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.uv-cache/
+node_modules/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+*.gate.lock*

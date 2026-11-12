@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json",
+  "version": "0.2",
+  "language": "en,en-GB",
+  "useGitignore": true,
+  "ignorePaths": [
+    ".git",
+    ".gitignore",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".tox",
+    ".uv-cache",
+    ".venv",
+    "cspell.json",
+    "Makefile",
+    "node_modules",
+    "package-lock.json",
+    "pyproject.toml",
+    "tox.ini",
+    "uv.lock"
+  ],
+  "files": [
+    "**/*.{md,py,toml,json,yml,yaml}"
+  ],
+  "dictionaries": [
+    "python"
+  ],
+  "words": [
+    "embeddeddolt",
+    "fusain",
+    "htmlcov",
+    "joce",
+    "Legault",
+    "oilpaint"
+  ]
+}

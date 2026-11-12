@@ -1,0 +1,12 @@
+{
+  "name": "fusain",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A drawing simulator for dry media: graphite and coloured pencils, charcoal, pastel and crayon.",
+  "scripts": {
+    "spell": "cspell ."
+  },
+  "devDependencies": {
+    "cspell": "^9.2.2"
+  }
+}
