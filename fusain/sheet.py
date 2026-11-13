@@ -75,6 +75,9 @@ class Sheet:
         self.held = np.zeros((H, W, HELD), np.float32)
         self.under = np.zeros((H, W, LOOSE), np.float32)
         self.loose = np.zeros((H, W, LOOSE), np.float32)
+        # the dust of the pass being drawn, until it settles (empty between
+        # strokes)
+        self._fresh = np.zeros((H, W), np.float32)
 
     def copy(self) -> Sheet:
         """An independent copy: drawing on one leaves the other alone."""
@@ -82,7 +85,7 @@ class Sheet:
         new.__dict__.update(self.__dict__)
         new._rng = np.random.default_rng()
         new._rng.bit_generator.state = self._rng.bit_generator.state
-        for name in ("tooth", "press", "cover", "held", "under", "loose"):
+        for name in ("tooth", "press", "cover", "held", "under", "loose", "_fresh"):
             setattr(new, name, getattr(self, name).copy())
         return new
 
@@ -165,6 +168,7 @@ class Sheet:
                 self.held,
                 self.under,
                 self.loose,
+                self._fresh,
                 xs,
                 ys,
                 bearing,
@@ -218,9 +222,11 @@ class Sheet:
         return out
 
     def surface_height(self, relief: float = 1.0) -> np.ndarray:
-        """Height of the paper's surface in pixels, (H, W), as it is lit."""
+        """Height of the paper's surface in pixels, (H, W), as it is lit: its
+        tooth, level with its peaks where it has been pressed flat."""
         scale = TOOTH_HEIGHT * self.paper.grain * self.paper.depth * relief
-        return self.tooth * np.float32(scale)
+        ground = self.tooth + (1.0 - self.tooth) * self.press
+        return ground * np.float32(scale)
 
     def _shade(self, lamp: np.ndarray, relief: float) -> np.ndarray:
         """Brightness of each pixel under the lamp, 1 where the paper is level."""

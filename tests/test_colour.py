@@ -256,6 +256,23 @@ def test_burnishing_closes_the_white_specks():
     np.testing.assert_allclose(_total(sheet), before + lost, rtol=1e-5)
 
 
+def test_a_polished_tooth_is_level_under_the_lamp_too():
+    sheet = _sheet(papers.TONED_GREY)
+    rough = sheet.surface_height()[INSIDE].std()
+    _layers(sheet, pencils.BLENDER, 3, pressure=1.0)
+    assert sheet.press[INSIDE].mean() > 0.9
+    # nearly all of the patch is level with the peaks (a few pits the
+    # blender never reached are left)
+    height = sheet.surface_height()[INSIDE]
+    assert (height > 0.9 * sheet.surface_height().max()).mean() > 0.85
+    assert height.std() < 0.7 * rough
+    # outside the patch the paper keeps its relief
+    assert sheet.surface_height()[:15].std() > 0.9 * rough
+    np.testing.assert_allclose(
+        sheet.surface_height(2.0), 2 * sheet.surface_height(), rtol=1e-6
+    )
+
+
 def test_a_blender_lays_wax_and_next_to_no_colour():
     sheet = _sheet()
     _layers(sheet, pencils.BLENDER, 2, pressure=0.8)
