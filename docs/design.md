@@ -266,6 +266,7 @@ sheet.stroke([(100, 560), (500, 550)], pencils.B4, tilt=1)   # the side of the l
 sheet.stroke(path, pastels.soft("#c0392b"), pressure=(0.2, 0.8), side=True)
 sheet.smudge(path, tools.STUMP)
 sheet.erase(path, tools.KNEADED)
+sheet.rub(area, tools.FINGER)        # a whole area, to and fro
 sheet.fix()
 sheet.save("drawing.png")
 ```
