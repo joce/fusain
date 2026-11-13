@@ -205,6 +205,18 @@ def test_what_is_left_is_still_that_pigment():
 # tools
 
 
+def test_the_dust_of_a_pass_has_settled_when_the_pass_is_done():
+    sheet = _drawn(charcoal.VINE)
+    sheet.stroke(
+        [(-30, -30), (300, 200)], charcoal.COMPRESSED, 0.8, 9.0
+    )  # off both ends
+    sheet.stroke([(60, 75)], charcoal.VINE, 1.0, 12.0)  # a dot
+    assert not sheet._fresh.any()
+    copy = sheet.copy()
+    copy.stroke([(30, 40), (200, 90)], charcoal.VINE, 0.6, 9.0)
+    assert not copy._fresh.any() and copy._fresh is not sheet._fresh
+
+
 def test_rubbing_bare_paper_does_nothing():
     sheet = Sheet(120, 80, seed=1)
     assert sheet.smudge([(10, 40), (110, 40)]) == 0.0

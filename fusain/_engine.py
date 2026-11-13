@@ -158,6 +158,8 @@ def tip_bearing(dx, dy, tx, ty, wide, long, rounded):
 @njit(cache=True, error_model="numpy")
 def press_dust(held, under, loose, iy, ix, share):
     """Press the ``share`` of the dust at a pixel into the paper."""
+    if loose[iy, ix, IV] <= 0.0 and under[iy, ix, IV] <= 0.0:
+        return  # (no dust here: most pixels of a first pass)
     for part in range(LOOSE):
         moved = loose[iy, ix, part] * share
         loose[iy, ix, part] -= moved
@@ -185,25 +187,32 @@ def burnish(held, press, drag, iy, ix, polish, lay):
 
 
 @njit(cache=True, error_model="numpy")
-def settle_dust(fresh, cover, under, loose, k, s, left, top):
-    """At the end of a pass, put its dust (``fresh``, a volume per pixel of
-    the box at ``left``, ``top``) on top of the dust that was there, which
-    goes under it."""
-    for row in range(fresh.shape[0]):
-        for column in range(fresh.shape[1]):
-            dust = fresh[row, column]
-            if dust <= 0.0:
-                continue
-            iy, ix = top + row, left + column
-            buried = BURY * min(dust / cover[iy, ix] / COVERS, 1.0)
-            for part in range(LOOSE):
-                moved = loose[iy, ix, part] * buried
-                loose[iy, ix, part] -= moved
-                under[iy, ix, part] += moved
-            for band in range(N):
-                loose[iy, ix, band] += dust * k[band]
-            loose[iy, ix, IS] += dust * s
-            loose[iy, ix, IV] += dust
+def settle_dust(fresh, cover, under, loose, k, s, xs, ys, bound):
+    """At the end of a pass, put its dust (``fresh``, a volume per pixel) on
+    top of the dust that was there, which goes under it, and leave ``fresh``
+    empty again. Only where the tip went: within ``bound`` of the points
+    (``xs``, ``ys``)."""
+    height, width = fresh.shape
+    for i in range(xs.shape[0]):
+        x0 = max(int(math.floor(xs[i] - bound)), 0)
+        x1 = min(int(math.ceil(xs[i] + bound)), width)
+        y0 = max(int(math.floor(ys[i] - bound)), 0)
+        y1 = min(int(math.ceil(ys[i] + bound)), height)
+        for iy in range(y0, y1):
+            for ix in range(x0, x1):
+                dust = fresh[iy, ix]
+                if dust <= 0.0:
+                    continue
+                fresh[iy, ix] = 0.0  # settled: the next point skips it
+                buried = BURY * min(dust / cover[iy, ix] / COVERS, 1.0)
+                for part in range(LOOSE):
+                    moved = loose[iy, ix, part] * buried
+                    loose[iy, ix, part] -= moved
+                    under[iy, ix, part] += moved
+                for band in range(N):
+                    loose[iy, ix, band] += dust * k[band]
+                loose[iy, ix, IS] += dust * s
+                loose[iy, ix, IV] += dust
 
 
 @njit(cache=True, error_model="numpy")
@@ -214,6 +223,7 @@ def lay_stroke(
     held,
     under,
     loose,
+    fresh,
     xs,
     ys,
     pressures,
@@ -239,8 +249,9 @@ def lay_stroke(
     band and scattering ``s`` per unit volume; ``softness``, ``binding`` and
     the share of ``wax`` in it, 0..1) on the paper (``depth``, ``bite``,
     ``give``) where the tip touches its tooth. What the paper does not hold
-    of it is dust, laid at the end of the pass on top of the dust that was
-    there (``loose``), which goes ``under`` it. Wax films over the tooth,
+    of it is dust, gathered in ``fresh`` (empty before and after) and laid at
+    the end of the pass on top of the dust that was there (``loose``), which
+    goes ``under`` it. Wax films over the tooth,
     which then takes less; pressed hard, the tip polishes it flat (``press``)
     and smears it along.
 
@@ -266,15 +277,6 @@ def lay_stroke(
     rounded = RIM + (1.0 - RIM) * TILT_RIM * tilt
     # a pixel on the path of the tip's centre gets one pass's worth in all
     per_pass = 1.0 / (2.0 * long - (rounded * long + 0.5))
-    # the dust of this pass, kept apart until its end: over the box the pass
-    # stays in
-    left = max(int(math.floor(xs.min() - bound)), 0)
-    right = min(int(math.ceil(xs.max() + bound)), width)
-    top = max(int(math.floor(ys.min() - bound)), 0)
-    bottom = min(int(math.ceil(ys.max() + bound)), height)
-    if right <= left or bottom <= top:
-        return 0.0
-    fresh = np.zeros((bottom - top, right - left), np.float32)
     # what a tip that polishes drags along, and the share of it that it lays
     # on a pixel it bears on, per pixel moved
     drag = np.zeros(HELD)
@@ -309,7 +311,7 @@ def lay_stroke(
                 covered = max(cover[iy, ix], touch)
                 cover[iy, ix] = covered
                 there = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
-                thick = (there + fresh[iy - top, ix - left]) / covered
+                thick = (there + fresh[iy, ix]) / covered
                 bearing = min(local, 1.0)
                 passing = per_pass * step * touch
                 waxy = min(held[iy, ix, IW] / covered / WAX_FULL, 1.0)
@@ -335,9 +337,10 @@ def lay_stroke(
                 held[iy, ix, IS] += fixed * s
                 held[iy, ix, IV] += fixed
                 held[iy, ix, IW] += dv * wax
-                fresh[iy - top, ix - left] += dv - fixed
+                fresh[iy, ix] += dv - fixed
                 total += dv
-    settle_dust(fresh, cover, under, loose, k, s, left, top)
+    if binding < 1.0:  # (else there is no dust to settle)
+        settle_dust(fresh, cover, under, loose, k, s, xs, ys, bound)
     # (what the tip still drags at the end has left the paper with it)
     return total - drag[IV]
 

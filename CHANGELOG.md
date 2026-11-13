@@ -17,6 +17,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - Dust lies in two layers, `Sheet.loose` over `Sheet.under`: a pass lays its
   dust on top of the dust that was there. Rubbing stirs the two together.
 - Sanded card has an even grit and takes pastel all over.
+- A burnished patch is level under the lamp, as it is under a tip.
 - `tilt`, for `Sheet.stroke` and `Sheet.shade`: a stick held on its side marks
   a band up to five times wider than its point, lighter, grainier and soft at
   the edges. The tip is now an ellipse, as long along the stroke as the point
