@@ -14,7 +14,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   narrower when light; the ink is clear, so crossings and layers of hatching
   darken. It is a stain in the paper (`Sheet.ink`, `Sheet.inked`), under
   everything else: no eraser takes it off, and a pencil draws over it. The
-  ball skids on heavy graphite and on wax.
+  ball skids on heavy graphite and on wax; where it lays nothing, it leaves
+  the ink under it as it was.
 - Fixative, `Sheet.fix(amount=1.0)`: sets the dust where it lies. A stump or
   a finger hardly moves it afterwards and a kneaded eraser lifts little; a
   hard eraser still takes it off. It shows as it lay, a little darker, and

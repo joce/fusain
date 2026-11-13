@@ -253,6 +253,26 @@ def test_the_ball_skids_on_heavy_graphite_and_on_wax_not_on_a_light_sketch():
     assert _share_taken(crayons.wax("#c0392b"), 3, 0.8, 9) < 0.25
 
 
+def test_a_pass_that_skids_leaves_the_ink_under_it_as_it_was():
+    sheet = Sheet(200, 150, seed=1)
+    sheet.stroke([(30, 75), (170, 75)], pens.BLUE, 0.1)  # a light, narrow line
+    assert sheet.ink is not None and sheet.inked is not None
+    ink, inked = sheet.ink.copy(), sheet.inked.copy()
+    for layer in range(4):
+        sheet.shade(BOX, pencils.B8, 1.0, angle=30 + 50 * layer)
+    # a firm, wider pass along the same line, on graphite too thick to write on
+    wide = pens.ballpoint("#22357e", width=6)
+    laid = sheet.stroke([(60, 75), (140, 75)], wide, 1.0)
+    core = (slice(70, 81), slice(70, 130))
+    assert laid < 0.02 * Sheet(200, 150, seed=1).stroke(
+        [(60, 75), (140, 75)], wide, 1.0
+    )
+    skidded = sheet.ink[core][..., IV] == ink[core][..., IV]
+    assert skidded.mean() > 0.9
+    # where it laid nothing, no more of the pixel is inked than before
+    assert np.array_equal(sheet.inked[core][skidded], inked[core][skidded])
+
+
 def test_the_ink_is_under_what_is_drawn_over_it():
     sheet, plain = Sheet(200, 150, seed=1), Sheet(200, 150, seed=1)
     for layer in range(3):
