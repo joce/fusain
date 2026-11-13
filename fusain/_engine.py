@@ -141,6 +141,13 @@ BALL_SURGE = 12.0
 #: writes as badly as a dry medium does (RESIST_DRY).
 SKID_FROM = 0.25
 SKID_FULL = 1.0
+#: A tool that rubs also spreads the dust under it from grain to grain: what
+#: it takes onto its face that way (as strongly as it smears) it lays back
+#: this many times over each of its own widths, so within a few pixels. That
+#: is what evens a rubbed tone before the dust is worked into the paper.
+SPREAD = 4.0
+#: It spreads the dust this many times as readily as it stirs it.
+SPREADS = 3.0
 #: A tool that rubs reaches the dust underneath less than the dust on top:
 #: the share of its lift it has there.
 UNDER_LIFT = 0.7
@@ -486,6 +493,23 @@ def lay_stroke(
 
 
 @njit(cache=True, error_model="numpy")
+def spread_dust(loose, near, iy, ix, take, back):
+    """Take the share ``take`` of the dust on top at a pixel onto the face of
+    the tool (``near``, packed as dust is), and lay the share ``back`` of
+    what is on its face down on the pixel. Returns the volumes laid and
+    taken."""
+    given, taken = 0.0, 0.0
+    for part in range(LOOSE):
+        up = loose[iy, ix, part] * take
+        down = (near[part] + up) * back
+        near[part] += up - down
+        loose[iy, ix, part] += down - up
+        if part == IV:
+            given, taken = down, up
+    return given, taken
+
+
+@njit(cache=True, error_model="numpy")
 def rub_stroke(
     cover,
     held,
@@ -512,7 +536,9 @@ def rub_stroke(
     ``press`` of the dust into the paper, and stirs the share ``smear`` of
     the dust underneath up into the dust on top and spreads it over the
     pixel; and over each of its own widths the tool lays the share ``lay`` of
-    what it carries back down, as dust on top. Dust that fixative has set
+    what it carries back down, as dust on top. As strongly as it smears, it
+    also spreads the dust on top over the pixels around. Dust that fixative
+    has set
     (``fixed``, its volume in each of the two layers) is lifted only as held
     pigment is, and is neither pressed in nor stirred.
 
@@ -525,7 +551,9 @@ def rub_stroke(
     # of what it carries, the share the tool lays on a pixel it bears fully
     # on, per pixel moved
     per_pixel = lay / (2.0 * bound * math.pi * bound * bound)
+    per_near = SPREAD / (2.0 * bound * math.pi * bound * bound)
     load = np.zeros(LOOSE)
+    near = np.zeros(LOOSE)  # the dust on the face of the tool, soon laid back
     for i in range(xs.shape[0]):
         pressure = pressures[i]
         step = steps[i]
@@ -576,12 +604,18 @@ def rub_stroke(
                     given = load[part] * down
                     load[part] -= given
                     loose[iy, ix, part] += given
-                after = before + laid
+                # spread, from grain to grain
+                take = min(SPREADS * smear * share, 1.0)
+                take *= free_share(fixed, loose, iy, ix, 1)
+                back = min(per_near * local * step, 1.0)
+                given, taken = spread_dust(loose, near, iy, ix, take, back)
+                laid += given
+                after = before + laid - taken
                 if after <= 1e-9:
                     cover[iy, ix] = 0.0  # rubbed clean
                     continue
                 bare = 1.0 - cover[iy, ix]
-                cover[iy, ix] += bare * (laid / after)
+                cover[iy, ix] += bare * min(laid / after, 1.0)
                 # press in; stir up what is underneath; and push what is
                 # loose into the low ground
                 spent = min(press * share, 1.0)
@@ -596,6 +630,8 @@ def rub_stroke(
                 free -= fixed[iy, ix, 0] + fixed[iy, ix, 1]
                 dusty = max(free, 0.0) / after
                 cover[iy, ix] += (1.0 - cover[iy, ix]) * stirred * dusty
+    for part in range(LOOSE):  # (what is still on its face it carries off)
+        load[part] += near[part]
     return load
 
 

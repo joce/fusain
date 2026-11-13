@@ -5,6 +5,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from murex import filters
 from murex import spectral as sp
 
 from fusain import Sheet, Tool, charcoal, papers, pencils, tools
@@ -85,7 +86,7 @@ def test_a_stump_drags_dust_along_and_out_onto_bare_paper():
     # fading as the stump runs out of dust
     assert (
         sheet.pigment()[60:80, 200:225].sum()
-        > 2 * sheet.pigment()[60:80, 235:260].sum()
+        > 1.7 * sheet.pigment()[60:80, 235:260].sum()
     )
     # only where the stump went, and only forwards
     assert (
@@ -135,7 +136,7 @@ def test_what_the_paper_holds_hardly_moves():
     sheet = _drawn(pencils.B4, 7.0)
     grain = _luminance(sheet).std()
     sheet.smudge(ALONG, tools.STUMP, 0.7, 20.0)
-    assert _luminance(sheet).std() > 0.85 * grain
+    assert _luminance(sheet).std() > 0.8 * grain
 
 
 # --------------------------------------------------------------------------
@@ -300,3 +301,62 @@ def test_rubbing_checks_its_arguments_before_it_touches_the_sheet(kw, error, mes
         with pytest.raises(error, match=message):
             rub(ALONG, **arguments)
     np.testing.assert_array_equal(sheet.loose, other.loose)
+
+
+# --------------------------------------------------------------------------
+# rubbing evens the dust out
+
+
+def _unevenness(sheet, where=(slice(60, 140), slice(70, 230))) -> tuple[float, float]:
+    """How uneven a tone is: from pixel to pixel, and in streaks (seen
+    through a blur nine pixels wide)."""
+    spectrum = sheet.reflectance()[where].astype(np.float64)
+    tone = sp.reflectance_to_linear_rgb(spectrum) @ sp.LUMINANCE
+    return float(tone.std()), float(filters.box_blur(tone, 4).std())
+
+
+def _rub_all_over(sheet, tool, passes=2) -> None:
+    for _ in range(passes):
+        for k in range(0, 150, 9):
+            ends = [(40, 28 + k), (260, 30 + k)]
+            sheet.smudge(ends if (k // 9) % 2 else ends[::-1], tool, 0.6)
+
+
+@pytest.mark.parametrize(
+    "how",
+    [
+        {"pressure": 0.8, "width": 9, "tilt": 1},
+        {"pressure": 0.4, "width": 7, "spacing": 4.2},
+    ],
+    ids=["the side of the stick", "light strokes apart"],
+)
+def test_a_finger_evens_out_charcoal_however_it_was_laid(how):
+    sheet = Sheet(300, 200, paper=papers.INGRES, seed=1)
+    for angle in (30, -40):
+        sheet.shade((30, 30, 270, 170), charcoal.VINE, angle=angle, **how)
+    grainy, streaky = _unevenness(sheet)
+    assert (sheet.pigment()[60:140, 70:230] == 0).mean() > 0.05  # bare paper between
+    _rub_all_over(sheet, tools.FINGER)
+    smooth, even = _unevenness(sheet)
+    assert smooth < 0.5 * grainy
+    assert even < 0.6 * streaky
+    assert (sheet.pigment()[60:140, 70:230] == 0).mean() == 0.0
+
+
+def test_a_stump_smooths_compressed_charcoal_too():
+    sheet = Sheet(300, 200, paper=papers.CARTRIDGE, seed=1)
+    for angle in (30, -40):
+        sheet.shade((30, 30, 270, 170), charcoal.COMPRESSED, 0.6, 9, angle=angle)
+    grainy, _ = _unevenness(sheet)
+    _rub_all_over(sheet, tools.STUMP)
+    assert _unevenness(sheet)[0] < 0.2 * grainy
+
+
+def test_spreading_the_dust_loses_none():
+    sheet = Sheet(300, 200, paper=papers.CARTRIDGE, seed=1)
+    laid = sheet.shade((30, 30, 270, 170), charcoal.VINE, 0.7, 9)
+    carried = 0.0
+    for k in range(0, 150, 9):
+        carried += sheet.smudge([(20, 28 + k), (295, 30 + k)], tools.FINGER, 0.7)
+    total = float(sheet.pigment().sum(dtype=np.float64))
+    assert total + carried == pytest.approx(laid, rel=1e-5)
