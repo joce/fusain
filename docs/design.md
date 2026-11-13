@@ -158,9 +158,11 @@ tip:
 A stump, a finger or an eraser runs the same way but lays nothing of its own.
 Where it bears, it lifts a share of the `loose` pigment (and, for an eraser,
 of the `held`), carries it, and lays a share of what it carries back down a
-little further on, as dust spread over the whole pixel. It presses some dust
-into the paper and pushes the dust on the high ground into the low, so
-`cover` rises and the white specks grey over. An eraser lays nothing back.
+little further on, as dust spread over the whole pixel. As strongly as it
+smears, it also spreads the dust under it from grain to grain, within a few
+pixels: that is what evens a rubbed tone, and it goes faster than the
+pressing in. It presses some dust into the paper and pushes the dust on the
+high ground into the low, so `cover` rises and the white specks grey over. An eraser lays nothing back.
 What a tool still carries at the end of a pass is returned, so nothing is
 lost.
 
@@ -264,6 +266,7 @@ sheet.stroke([(100, 560), (500, 550)], pencils.B4, tilt=1)   # the side of the l
 sheet.stroke(path, pastels.soft("#c0392b"), pressure=(0.2, 0.8), side=True)
 sheet.smudge(path, tools.STUMP)
 sheet.erase(path, tools.KNEADED)
+sheet.rub(area, tools.FINGER)        # a whole area, to and fro
 sheet.fix()
 sheet.save("drawing.png")
 ```

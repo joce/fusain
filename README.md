@@ -51,6 +51,7 @@ from fusain import charcoal, tools
 sheet.shade((100, 60, 500, 200), charcoal.VINE, pressure=0.6, width=14)
 sheet.smudge([(120, 130), (560, 130)], tools.STUMP)    # drags the dust along
 sheet.erase([(100, 170), (500, 170)], tools.KNEADED)   # lifts it
+sheet.rub((100, 60, 600, 200), tools.FINGER)           # blends a whole area
 ```
 
 ![Charcoal, a stump and erasers](examples/output/charcoal.png)
@@ -66,6 +67,8 @@ from fusain import pastels
 sheet.shade((100, 60, 300, 200), pencils.coloured("#2456a6"), pressure=0.7)
 sheet.shade((200, 60, 400, 200), pencils.coloured("#f2c40f"), pressure=0.7)  # green where they overlap
 sheet.shade((100, 60, 400, 200), pencils.BLENDER, pressure=1.0)              # burnish: the white specks close
+# build colour in light layers (pressure about 0.3): ten or so go on before the wax resists.
+# Press a layer hard and it fills and polishes the tooth, and little will take over it.
 sheet.stroke([(100, 300), (400, 320)], pastels.soft("#f4f1ea"), pressure=0.8, width=14)
 ```
 
@@ -81,6 +84,8 @@ white pastel over black, and lines drawn with a hard pastel.
 
 ```python
 sheet.fix()   # fixative: the dust stays where it is, and takes more layers
+# the tooth is full of pastel after five or six layers; fix between stages, as a pastellist does,
+# and a light pastel covers a heavily worked dark one again.
 ```
 
 ![Fixative](examples/output/fixative.png)

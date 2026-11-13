@@ -84,6 +84,8 @@ def test_sanded_card_is_an_even_field_of_sharp_grit():
         ({"depth": float("inf")}, "depth must be"),
         ({"bite": 1.5}, "bite must be"),
         ({"give": -0.5}, "give must be"),
+        ({"hold": 0.0}, "hold must be"),
+        ({"hold": float("nan")}, "hold must be"),
         ({"color": "paper white"}, "#rrggbb"),
     ],
 )
