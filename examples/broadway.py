@@ -14,7 +14,9 @@ a wooden water tank shows over a roof, and where a building stands higher
 than its neighbour its blank party wall shows. Trees grow from pits at the
 kerb: a trunk, limbs that divide, a mass of leaves at the end of each, and
 leaves fallen under them. Cabs come down the street; people walk on the
-pavements and cross between the cars.
+pavements, stand and talk, wait at the kerb and cross between the cars,
+each a body in proportion (seven and a half heads, the legs from half the
+height) in a pose, drawn in a handful of strokes that follow it.
 
 The sun is low, behind the left shoulder. From every point a ray is followed
 toward it, past the buildings and through the foliage, and that tells what
@@ -41,6 +43,7 @@ from dataclasses import dataclass
 from functools import cache
 from itertools import pairwise
 from pathlib import Path
+from typing import TypedDict
 
 import numpy as np
 from murex import Polyline, filters, noise, write_png
@@ -138,6 +141,11 @@ MIRRORED = {
     1: (tones("#bed0e2", "#8e9cba"), tones("#77829e", "#566080")),
 }
 BLIND = tones("#eadcc0", "#8a90aa")
+CURTAINS = (
+    tones("#b0644a", "#5a3a4a"),
+    tones("#8c9472", "#4a5254"),
+    tones("#dccaa0", "#7c7e96"),
+)
 SHOP_LIGHT = tones("#e8c078", "#eab868")
 STREET_MIRRORED = tones("#b49c80", "#4e5a7c")
 #: The boards over the shop windows, and the cloth of the awnings.
@@ -643,19 +651,24 @@ class Car:
     long: float = 4.7
 
 
+#: A standing adult is this many heads tall.
+HEADS = 7.5
+
+
 @dataclass(frozen=True)
 class Figure:
     """Someone in the street: where they stand (``x`` across the street,
     ``z`` along it), what they wear (the ``coat``, its ``hem`` as a share of
-    their height, the ``legs``, a ``scarf``), which way they face
-    (``toward`` the eye, ``away`` from it, or crossing to its ``left`` or
-    ``right``), where they are in a stride (``step``, -1 to 1: its sign
-    says which leg is ahead, 0 is standing on both), how tall and how broad
-    (``build``), their ``hair`` and its ``cut``, their ``skin``, how far
-    head and shoulders lean (``lean``, metres, toward the eye's right if
-    more than 0), and what they are doing with their hands: ``swing``,
-    ``pockets``, a ``bag`` across the body, a ``tote`` in a hand, a
-    ``phone`` at the ear, or holding a ``child`` by the hand."""
+    their height, the ``legs``, a ``scarf`` in one of the coats' colours),
+    which way they face (``toward`` the eye, ``away`` from it, or crossing
+    to its ``left`` or ``right``), where they are in a stride (``step``,
+    -1 to 1: its sign says which leg is ahead, 0 is standing on both), how
+    tall and how broad (``build``), their ``hair`` and its ``cut``, their
+    ``skin``, how far head and shoulders lean (``lean``, metres, toward the
+    eye's right if more than 0), and what they are doing with their hands:
+    ``swing``, ``pockets``, a ``bag`` across the body, a ``tote`` in a
+    hand, a ``phone`` at the ear, holding a ``child`` by the hand or, a
+    child, ``led`` by one."""
 
     x: float
     z: float
@@ -674,14 +687,17 @@ class Figure:
     scarf: str = ""
 
     @property
+    def head(self) -> float:
+        """How tall the head is: an adult is seven and a half heads tall, a
+        child fewer."""
+        return self.tall / float(np.clip(1.7 + 3.4 * self.tall, 5.5, HEADS))
+
+    @property
     def across(self) -> float:
         """1 if they walk to the eye's right, -1 to its left, 0 if they come
         toward it or go away from it."""
         return {"left": -1.0, "right": 1.0}.get(self.facing, 0.0)
 
-
-#: A standing adult is this many heads tall.
-HEADS = 7.5
 
 Point = tuple[float, float]
 Limb = tuple[Point, Point, Point]
@@ -728,7 +744,7 @@ def side_legs(fig: Figure) -> tuple[Limb, ...]:
     reaching forward to the heel, the one behind pushing off the toe; or,
     standing, one foot a little before the other."""
     t, way = fig.tall, fig.across
-    reach = 0.2 * t * abs(fig.step) + 0.05
+    reach = 0.19 * t * abs(fig.step) + 0.09
     hip = (0.0, 0.53 * t)
     ahead = (hip, (way * 0.5 * reach, 0.28 * t), (way * reach, 0.03))
     lift = abs(fig.step)
@@ -744,7 +760,7 @@ def front_arms(fig: Figure, chest: float) -> tuple[Limb, ...]:
     t = fig.tall
     arms = []
     for side in (-1.0, 1.0):
-        root = (side * (chest - 0.06), fig.tall - 1.55 * t / HEADS)
+        root = (side * (chest - 0.06), t - 1.55 * fig.head)
         swing = abs(fig.step) * (side * fig.step < 0.0)
         elbow = (side * (chest + 0.015), 0.63 * t + 0.03 * swing)
         hand = (side * (chest - 0.01 - 0.05 * swing), 0.45 * t + 0.08 * swing)
@@ -755,9 +771,14 @@ def front_arms(fig: Figure, chest: float) -> tuple[Limb, ...]:
             elbow, hand = (side * (chest + 0.03), 0.66 * t), (side * 0.12, 0.7 * t)
         elif held == "phone":
             elbow = (side * (chest + 0.05), 0.7 * t)
-            hand = (side * 0.1, t - 0.65 * t / HEADS)
+            hand = (side * 0.1, t - 0.65 * fig.head)
         elif held == "child":
-            elbow, hand = (side * (chest + 0.04), 0.6 * t), (side * (chest + 0.1), 0.42 * t)
+            elbow, hand = (side * (chest + 0.04), 0.6 * t), (
+                side * (chest + 0.1),
+                0.42 * t,
+            )
+        elif held == "led":
+            elbow, hand = (side * (chest + 0.03), 0.6 * t), (side * chest, 0.65 * t)
         arms.append((root, elbow, hand))
     return tuple(arms)
 
@@ -765,19 +786,20 @@ def front_arms(fig: Figure, chest: float) -> tuple[Limb, ...]:
 def holding(hands: str, side: float) -> str:
     """What the hand on one side (-1 the eye's left) does: both go in the
     pockets; the right holds a child's; the left holds the strap of a bag
-    or a telephone; otherwise it swings (a canvas bag swings with it)."""
+    or a telephone, or a child's left reaches up to a hand; otherwise it
+    swings (a canvas bag swings with it)."""
     if hands == "pockets":
         return hands
     if hands == "child":
         return hands if side > 0 else "swing"
-    return hands if side < 0 and hands in ("bag", "phone") else "swing"
+    return hands if side < 0 and hands in ("bag", "phone", "led") else "swing"
 
 
 def side_arms(fig: Figure, chest: float) -> tuple[Limb, ...]:
     """The arms of someone seen from the side: one swinging forward, the
     other back; a hand in a pocket stays by the hip."""
     t, way = fig.tall, fig.across
-    root = (0.0, t - 1.6 * t / HEADS)
+    root = (0.0, t - 1.6 * fig.head)
     swing = 0.12 * t * abs(fig.step)
     arms = []
     for k in (-1.0, 1.0):
@@ -795,7 +817,7 @@ def frame(fig: Figure) -> Frame:
     and a half heads tall, the shoulders two heads wide, the legs from half
     the height."""
     t, b = fig.tall, fig.build
-    head = t / HEADS
+    head = fig.head
     if fig.across:
         chest, skirt = 0.15 * b, 0.17 * b
         legs, arms = side_legs(fig), side_arms(fig, chest)
@@ -852,30 +874,52 @@ CARS = (
     Car(5.4, 62.0, "black"),
     Car(5.4, 75.0, "red"),
 )
+
+
 #: The people: in the roadway, a woman in red crossing with a man a step
 #: behind; on the sunny pavement a couple coming down the street, someone
 #: waiting at the kerb, two talking, someone with a child; in the shade of
 #: the other pavement, people coming and going, someone on the telephone;
 #: and a few far off, crossing at the next corner.
+class Build(TypedDict, total=False):
+    """What a :class:`Figure` takes from how someone is built."""
+
+    tall: float
+    build: float
+    hem: float
+    cut: str
+
+
+#: How a man, a woman and a child are built, as near as a figure in the
+#: street needs.
+HE: Build = {"tall": 1.8, "build": 1.05, "hem": 0.47}
+SHE: Build = {"tall": 1.68, "build": 0.92, "hem": 0.36, "cut": "long"}
+CHILD: Build = {"tall": 1.12, "build": 0.8, "hem": 0.45}
 CROWD = (
-    Figure(0.75, 21.3, "red", "black", "right", 0.8, 1.7, 0.95, 0.4, "black", "long", hands="bag"),
-    Figure(-0.3, 22.3, "navy", "grey", "right", -0.7, 1.82, 1.05, 0.47, "dark"),
-    Figure(9.5, 17.0, "navy", "jeans", "toward", 0.7, 1.8, 1.05, 0.48, "dark", hands="pockets"),
-    Figure(10.15, 17.4, "camel", "dark", "toward", -0.6, 1.66, 0.92, 0.34, "brown", "long", hands="bag", scarf="#b8402c"),
-    Figure(8.6, 20.0, "teal", "dark", "toward", 0.5, 1.74, hem=0.4, hands="child"),
-    Figure(9.1, 20.1, "mustard", "jeans", "toward", -0.5, 1.12, 0.8, 0.45, "fair"),
-    Figure(6.95, 24.0, "olive", "dark", "left", 0.0, 1.76, hands="pockets", hem=0.5),
-    Figure(10.15, 27.0, "black", "grey", "right", 0.0, 1.68, 0.92, 0.34, "fair", "long", lean=0.03, hands="tote"),
-    Figure(10.75, 27.2, "brown", "jeans", "left", 0.0, 1.82, 1.05, 0.48, "grey", lean=-0.03),
-    Figure(11.3, 36.0, "plum", "black", "away", 0.7, 1.68, 0.92, 0.38, "dark", "long", hands="tote"),
-    Figure(9.6, 53.0, "cream", "dark", "away", 0.6, 1.7, 0.95, 0.36, "brown", "long"),
-    Figure(10.2, 53.6, "charcoal", "jeans", "away", -0.6, 1.8, 1.05, 0.48, "black"),
-    Figure(8.9, 66.0, "red", "dark", "toward", 0.6, 1.7, hem=0.38),
-    Figure(-9.4, 22.5, "charcoal", "dark", "toward", 0.6, 1.8, 1.05, 0.45, "black", hands="pockets"),
-    Figure(-10.6, 29.5, "camel", "black", "away", 0.6, 1.68, 0.92, 0.36, "fair", "long", hands="bag"),
-    Figure(-11.2, 30.0, "navy", "dark", "away", -0.6, 1.8, 1.05, 0.46, "dark"),
-    Figure(-7.4, 46.0, "cream", "grey", "right", 0.0, 1.72, hem=0.34, hair="brown", cut="long", hands="phone"),
-    Figure(-9.8, 54.0, "olive", "jeans", "toward", 0.6, 1.78, hem=0.48),
+    Figure(0.75, 21.3, "red", "black", "right", 0.8, hair="black", hands="bag", **SHE),
+    Figure(-0.3, 22.3, "navy", "grey", "right", -0.7, **HE),
+    Figure(9.5, 17.0, "navy", "dark", "toward", 0.7, hands="pockets", **HE),
+    Figure(
+        10.15, 17.4, "camel", "dark", "toward", -0.6, hands="bag", scarf="red", **SHE
+    ),
+    Figure(8.6, 20.0, "teal", "dark", "toward", 0.5, hem=0.4, hands="child"),
+    Figure(
+        9.1, 20.1, "mustard", "jeans", "toward", -0.5, hair="fair", hands="led", **CHILD
+    ),
+    Figure(6.95, 24.0, "olive", "dark", "left", 0.0, hands="pockets", hem=0.5),
+    Figure(10.2, 27.0, "black", "grey", "right", 0.0, lean=0.05, hands="tote", **SHE),
+    Figure(10.65, 27.1, "brown", "jeans", "left", 0.0, hair="grey", lean=-0.06, **HE),
+    Figure(11.3, 36.0, "plum", "black", "away", 0.7, hands="tote", **SHE),
+    Figure(9.6, 53.0, "cream", "dark", "away", 0.6, hair="brown", **SHE),
+    Figure(10.2, 53.6, "charcoal", "jeans", "away", -0.6, hair="black", **HE),
+    Figure(8.9, 66.0, "red", "dark", "toward", 0.6, hem=0.38),
+    Figure(-9.4, 22.5, "charcoal", "dark", "toward", 0.6, hands="pockets", **HE),
+    Figure(-10.6, 29.5, "camel", "black", "away", 0.6, hair="fair", hands="bag", **SHE),
+    Figure(-11.2, 30.0, "navy", "dark", "away", -0.6, **HE),
+    Figure(
+        -7.4, 46.0, "cream", "grey", "right", 0.0, hair="brown", hands="phone", **SHE
+    ),
+    Figure(-9.8, 54.0, "olive", "jeans", "toward", 0.6, hem=0.48),
     Figure(-10.2, 72.0, "navy", "khaki", "toward", 0.6),
     Figure(-9.6, 100.0, "black", "dark", "away", 0.6),
     Figure(-3.0, 121.0, "black", "dark", "right", 0.6),
@@ -935,6 +979,7 @@ class Easel:
         #: trees as they were)
         self.crowd = np.random.default_rng(SEED + 1)
         self.upward = False  # (which way the strokes of a figure run)
+        self.tenants = np.random.default_rng(SEED + 2)
         self.sheet = Sheet(WIDTH, HEIGHT, paper=PAPER, seed=SEED)
         self.buildings = street(self.rng)
         self.trees = avenue(self.rng)
@@ -1186,11 +1231,15 @@ class Blocking(Easel):
     def distance(self) -> None:
         """The far end of the street, rubbed with a finger: haze. And where
         the street bends, a mile on, the spire of the church that closes it,
-        pale over the last roofs."""
-        for k in range(9):
-            y = VANISH[1] - 96.0 + 12.0 * k
-            ends = [(VANISH[0] - 62.0, y), (VANISH[0] + 52.0, y + 2.0)]
-            self.sheet.smudge(ends[:: 1 if k % 2 else -1], tools.FINGER, 0.4, 16.0)
+        pale over the last roofs. (The finger keeps to the sky and to what
+        is far off, and bears lightly: a finger spreads pastel from grain to
+        grain, and pressed harder, across the fronts, it lays the sky over
+        them in bands.)"""
+        seen = self.scene
+        far_off = (seen.depth > 250.0) | (seen.seen == SKY)
+        haze = filters.box_blur(far_off * 1.0, 3)
+        area = (VANISH[0] - 62.0, VANISH[1] - 100.0, VANISH[0] + 52.0, VANISH[1] + 4.0)
+        self.sheet.rub(area, tools.FINGER, sampler(haze, 0.25), 16.0, 80.0)
         z = 1320.0
         stone = mix(HAZE, rgb("#8a90a8"), 0.55)
         for foot, top, wide in ((0.0, 38.0, 8.0), (38.0, 54.0, 5.0), (54.0, 70.0, 3.0)):
@@ -1202,11 +1251,17 @@ class Fronts(Blocking):
     """The second stage: the buildings, each as it is built."""
 
     def architecture(self) -> None:
-        """Each building, the farthest first, then fixative."""
+        """Each building, the farthest first, then fixative; then, over it,
+        what people have put in their windows (a light pastel takes better
+        on a fixed layer), and fixative again."""
+        self.windows_lived_in: list[tuple] = []
         for k, b in self.far_first():
             self.gable_wall(b, k)
             if b.span[1] > b.span[0]:
                 self.facade(b, k)
+        self.sheet.fix()
+        for window in self.windows_lived_in:
+            self.lived_in(*window)
         self.sheet.fix()
 
     def band(self, b, heights, colours, firm, face=None, span=None, **how) -> None:
@@ -1300,6 +1355,54 @@ class Fronts(Blocking):
                 middle = 0.5 * sum(heights)
                 reach = (z - 0.45 * wide, z + 0.45 * wide)
                 self.band(b, (middle - 0.04, middle + 0.04), bar, 0.45, face, reach)
+            if across > 12.0 and "e" not in b.marks:
+                top = heights[1] - arch * (across > STICK)
+                self.windows_lived_in.append((b, face, z, (heights[0], top), pair))
+
+    def lived_in(self, b, face, z, heights, pair) -> None:
+        """What makes a window near the eye not quite like the next: a blind
+        drawn part way down, a curtain, an air conditioner in the sash, a
+        sash pushed up on the dark of the room. (They have their own throw
+        of the dice, so that the rest of the street is drawn as before.)"""
+        rng, (low, high) = self.tenants, heights
+        wide, pick = WINDOW * b.bay, rng.random()
+        if pick < 0.26:
+            drop = rng.uniform(0.12, 0.6) * (high - low)
+            cloth = BLIND if rng.random() < 0.6 else CURTAINS[rng.integers(3)]
+            # (seen through the glass, a little of its dark)
+            shade = distant(both(cloth, GLASS[b.side][0], 0.25), z)
+            self.pane(b, z, (high - drop, high), shade, 0.75, 0.92 * wide, face)
+        elif pick < 0.4:
+            self.air_conditioner(b, face, z, low, pair)
+        elif pick < 0.5:
+            room = distant(both(GLASS[b.side], INK, 0.55), z)
+            sash = (low + 0.05, low + 0.45 * (high - low))
+            self.pane(b, z, sash, room, 0.8, 0.88 * wide, face)
+
+    def air_conditioner(self, b, face, z, sill, pair) -> None:
+        """An air conditioner in the foot of a window: a pale box standing
+        out of the wall, its top in the light, its shadow on the wall
+        under it."""
+        if b.side > 0:  # (on the lit side, its shadow falls up the street)
+            fallen = (sill - 0.75, sill - 0.05)
+            self.pane(b, z + 0.35, fallen, (shadowed(pair)[0], None), 0.6, 0.6, face)
+        box = distant(tones("#dcd6c4", "#7c8098"), z)
+        self.pane(b, z, (sill - 0.1, sill + 0.4), box, 0.85, 0.66, face, 0.35)
+        lid = raised(box, 0.4)
+        self.pane(b, z, (sill + 0.32, sill + 0.42), lid, 0.85, 0.66, face, 0.4)
+
+    def pane(self, b, z, heights, colours, firm, wide, face, out=0.0) -> None:
+        """A small flat piece of a front, ``wide`` metres along it about
+        ``z``, between two heights, standing ``out`` metres proud of the
+        wall: strokes along the front, one over the other, stopped square,
+        in just the colours given."""
+        low, high = heights
+        tall = (high - low) * rise(z)
+        rows = max(math.ceil(tall / STICK), 1)
+        near, away = z - 0.5 * wide, z + 0.5 * wide
+        for r in range(rows):
+            ends = b.edge(near, away, low + (r + 0.5) / rows * (high - low), out)
+            self.rail(ends, colours, firm, 1.15 * tall / rows, face, square=True)
 
     def mirrored(self, b, z, high) -> Tones | None:
         """What a window mirrors, if it mirrors anything: seen along the
@@ -1759,7 +1862,8 @@ class Life(Ground):
         start = car.z + 0.6 * reach[2]
         outer = lengthwise(right + reach[0], 0.0, start, back + reach[2])
         self.panel(inner, outer, (dark, None), 0.7, GROUND)
-        self.slab((left + 0.1, right - 0.1), (0.0, 0.28), car.z, far(INK, car.z), 0.85)
+        under = mix(far(ROADWAY[1], car.z), INK, 0.45)
+        self.slab((left + 0.25, right - 0.25), (0.0, 0.22), car.z, under, 0.85)
 
     def flank(self, car: Car, x: float, pair: Tones) -> None:
         """The side of a car: doors, the windows over them, the wheels."""
@@ -1771,9 +1875,22 @@ class Life(Ground):
         sill = lengthwise(x, belt + 0.06, z + 1.5, back - 0.5)
         head = lengthwise(x, car.tall - 0.1, z + 1.9, back - 0.7)
         self.panel(sill, head, glass, 0.8)
-        for at in (z + 0.5, back - 1.25):
-            tyre = lengthwise(x, 0.0, at, at + 0.7)
-            self.panel(tyre, lengthwise(x, 0.62, at, at + 0.7), far(INK, z), 0.85)
+        for at in (z + 0.85, back - 0.9):
+            self.wheel(car, x, at)
+
+    def wheel(self, car: Car, x: float, at: float) -> None:
+        """A wheel seen along the side of a car: the arch over it in shadow,
+        the tyre (a dark oval narrowed by the angle it is seen at), the
+        pale disc of the hub."""
+        run = FOCAL * abs(x - EYE[0]) / at**2
+        dark = far(INK, car.z)
+        arch = (mix(dark, HAZE, 0.15), dark)
+        self.rail(((x, 0.66, at - 0.2), (x, 0.66, at + 0.2)), arch, 0.8, 0.2 * rise(at))
+        # (its side, narrowed, and the face of its tread, toward the eye)
+        wide = 0.66 * run + 0.18 * rise(at)
+        self.rail(((x, 0.5, at), (x, 0.14, at)), dark, 0.9, max(wide, THIN))
+        hub = distant(tones("#b4b2ac", "#5c6074"), car.z)
+        self.rail(((x, 0.38, at), (x, 0.26, at)), hub, 0.75, max(0.35 * run, THIN))
 
     def nose(self, car: Car, pair: Tones, sides) -> None:
         """The front of a car, from the road up: tyres, bumper, grille and
@@ -1781,11 +1898,14 @@ class Life(Ground):
         left, right = sides
         z, belt = car.z, 0.62 * car.tall
         dark = far(INK, z)
-        for x in ((left, left + 0.26), (right - 0.26, right)):
-            self.slab(x, (0.0, 0.5), z, dark, 0.85)
-        bumper = (mix(pair[0], INK, 0.5), mix(pair[1], INK, 0.45))
-        self.slab(sides, (0.2, 0.42), z, bumper, 0.8)
-        self.slab(sides, (0.42, belt), z, pair, 0.85)
+        for x in ((left + 0.04, left + 0.28), (right - 0.28, right - 0.04)):
+            self.slab(x, (0.0, 0.45), z, dark, 0.9)
+        bumper = (mix(pair[0], pair[1], 0.3), mix(pair[1], INK, 0.25))
+        self.slab(sides, (0.22, 0.44), z, bumper, 0.8)
+        self.slab(sides, (0.44, belt), z, pair, 0.85)
+        self.slab((car.x - 0.45, car.x + 0.45), (0.25, 0.31), z, dark, 0.8)
+        plate = distant(tones("#eee8d6", "#9ea2ba"), z)
+        self.slab((car.x - 0.16, car.x + 0.16), (0.27, 0.4), z, plate, 0.85)
         self.slab((car.x - 0.5, car.x + 0.5), (0.46, 0.66), z, dark, 0.8)
         lamp = distant((WHITE, HAZE), z)
         for x in ((left + 0.08, left + 0.4), (right - 0.4, right - 0.08)):
@@ -1804,13 +1924,13 @@ class Life(Ground):
         def across(inset: float, y: float, behind: float) -> tuple:
             return level(left + inset, right - inset, y, z + behind)
 
-        hood, brow = across(0.0, belt + 0.08, 1.1), across(0.12, tall, 1.9)
+        hood, brow = across(0.0, belt + 0.08, 1.1), across(0.22, tall, 1.9)
         self.panel(across(0.0, belt, 0.0), hood, top, 0.85)
         self.panel(across(0.04, belt + 0.08, 1.1), brow, pair, 0.8)
-        middle = across(0.19, 0.5 * (belt + tall) + 0.06, 1.5)
-        self.panel(across(0.16, belt + 0.14, 1.15), middle, glass, 0.85)
-        self.panel(middle, across(0.22, tall - 0.06, 1.85), sky, 0.85)
-        self.panel(brow, across(0.12, tall + 0.02, 3.4), top, 0.85)
+        middle = across(0.24, 0.5 * (belt + tall) + 0.06, 1.5)
+        self.panel(across(0.17, belt + 0.14, 1.15), middle, glass, 0.85)
+        self.panel(middle, across(0.3, tall - 0.06, 1.85), sky, 0.85)
+        self.panel(brow, across(0.22, tall + 0.02, 3.4), top, 0.85)
         for x in ((left - 0.16, left - 0.02), (right + 0.02, right + 0.16)):
             self.slab(x, (belt + 0.06, belt + 0.2), z + 1.2, far(INK, z), 0.8)
         if car.cab:
@@ -1861,8 +1981,7 @@ class Life(Ground):
             ends = ((face, body.top - 0.8 * body.head), (face, body.neck))
             self.part(fig, ends, neck, 0.8, 0.07)
         if fig.scarf:
-            wool = rgb(fig.scarf)
-            scarf = distant((wool, mix(wool, INK, 0.45)), fig.z)
+            scarf = distant(COATS[fig.scarf], fig.z)
             ends = ((face - 0.08, body.neck), (face + 0.08, body.neck))
             self.part(fig, ends, scarf, 0.85, 0.07, square=False)
             ends = ((face + 0.05, body.neck), (face + 0.06, body.neck - 0.2))
@@ -1874,10 +1993,7 @@ class Life(Ground):
         z = fig.z
 
         def worn(pair: Tones) -> Tones:
-            sun, shade = distant(pair, z)
-            return sun + self.crowd.normal(0.0, 0.015, 3), shade + self.crowd.normal(
-                0.0, 0.01, 3
-            )
+            return self.vary_by(distant(pair, z), 0.06)
 
         coat = worn(COATS[fig.coat])
         return {
@@ -1946,14 +2062,17 @@ class Life(Ground):
             share = 2.0 * (k + 0.5) / count - 1.0
             top = (lean + 0.85 * share * body.chest, body.neck - 0.07 * share**2)
             foot = (share * body.skirt, body.hem)
-            tint = self.vary_by(dress["coat"], 0.01)
+            tint = self.vary_by(dress["coat"], 0.03)
             self.part(fig, (top, foot), tint, 0.85, 1.3 * wide / count / size)
 
     def vary_by(self, pair: Tones, by: float) -> Tones:
-        """A pair of colours a little off, by the people's own hand."""
-        return pair[0] + self.crowd.normal(0.0, by, 3), pair[1] + self.crowd.normal(
-            0.0, 0.7 * by, 3
-        )
+        """A pair of colours a little lighter or darker, and a very little
+        off in hue (in the dark ones a stick away is already another
+        colour): the people's own hand, not the street's."""
+        lighter, hue = 1.0 + self.crowd.normal(0.0, by), 0.1 * by
+        sun, shade = pair
+        sun = sun * lighter + self.crowd.normal(0.0, hue, 3)
+        return sun, shade * lighter + self.crowd.normal(0.0, hue, 3)
 
     def arm(self, fig: Figure, arm: Limb, dress, near: bool) -> None:
         """An arm: the sleeve to the elbow and on to the wrist, and the hand,
@@ -2000,7 +2119,7 @@ class Life(Ground):
         top = (lean - 0.75 * body.chest, body.neck - 0.06)
         self.part(fig, (top, (-0.8 * body.skirt, body.hem + 0.06)), light, 0.55, 0.05)
         if near:
-            hip, knee, foot = min(body.legs, key=lambda leg: leg[2][0])
+            hip, _, foot = min(body.legs, key=lambda leg: leg[2][0])
             light = (mix(legs[0], WHITE, 0.25), None)
             ends = ((hip[0] - 0.04, body.hem), (foot[0] - 0.03, foot[1] + 0.1))
             self.part(fig, ends, light, 0.45, 0.04)
@@ -2017,7 +2136,7 @@ class Life(Ground):
         if near or rise(fig.z) > 18.0:
             self.hair(fig, body, hair)
         if near and fig.facing != "away":
-            light = (mix(skin[0], WHITE, 0.25), None)
+            light = (mix(skin[0], WHITE, 0.25), mix(skin[1], HAZE, 0.35))
             ends = ((face - 0.03, top - 0.3 * head), (face - 0.03, top - 0.75 * head))
             self.part(fig, ends, light, 0.5, 0.035)
 
@@ -2030,10 +2149,16 @@ class Life(Ground):
                 ends = ((face, top - 0.4 * head), (face, body.neck - 0.08))
                 self.part(fig, ends, hair, 0.85, 0.16)
             return
-        cap = ((face - 0.04 - 0.03 * way, top - 0.03), (face + 0.04 - 0.03 * way, top - 0.03))
+        cap = (
+            (face - 0.04 - 0.03 * way, top - 0.03),
+            (face + 0.04 - 0.03 * way, top - 0.03),
+        )
         self.part(fig, cap, hair, 0.85, 0.3 * head, square=False)
         if way:
-            back = ((face - 0.04 * way, top - 0.05), (face - 0.05 * way, top - 0.6 * head))
+            back = (
+                (face - 0.04 * way, top - 0.05),
+                (face - 0.05 * way, top - 0.6 * head),
+            )
             self.part(fig, back, hair, 0.85, 0.1, square=False)
         if fig.cut != "long":
             return

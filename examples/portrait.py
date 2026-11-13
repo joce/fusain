@@ -6,13 +6,17 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
-from murex import filters
+from murex import CatmullRom, filters, write_png
+
+from fusain import Sheet, papers, pens
 
 WIDTH, HEIGHT = 1100, 1400
 #: The model is computed on a grid this many times coarser than the sheet.
 COARSE = 2
+#: Smooth white paper, as a pen wants.
+PAPER = papers.BRISTOL.with_(color="#fbfaf7")
 #: Pixels of the sheet per unit of the model (about a head's height).
-SCALE = 800.0
+SCALE = 780.0
 #: Where on the sheet the middle of the head (between the eyes) lands.
 CENTRE = (520.0, 560.0)
 
@@ -31,7 +35,7 @@ def rotation(yaw: float, pitch: float, roll: float) -> np.ndarray:
 HEAD = rotation(28.0, -5.0, -6.0)
 HEAD_AT = np.array([0.0, 0.0, 0.0])
 BODY = rotation(12.0, 0.0, 2.0)
-BODY_AT = np.array([-0.02, 0.0, -0.05])
+BODY_AT = np.array([-0.06, 0.0, -0.05])
 
 
 def smin(a, b, k):
@@ -61,52 +65,152 @@ def capsule(p, a, b, r):
     return np.linalg.norm(pa - h[:, None] * ba, axis=-1) - r
 
 
+def softplus(x, k):
+    return k * np.logaddexp(0.0, x / k)
+
+
 def mirrored(p):
     q = p.copy()
     q[:, 0] = np.abs(q[:, 0])
     return q
 
 
+def plane(p, normal, through):
+    n = np.asarray(normal, float)
+    n = n / np.linalg.norm(n)
+    return (p - np.asarray(through)) @ n
+
+
+def profile(knots):
+    """A smooth function of y through ``knots`` ((y, value) pairs, y rising)."""
+    ys, vs = CatmullRom(knots).sample(0.002)[0].T
+    return lambda y: np.interp(y, ys, vs)
+
+
+#: The face, as the cross-sections of a loft from the brow to the chin: at
+#: each height, its half-width, the depth of its widest point and how far it
+#: reaches out in front of that.
+FACE_WIDE = profile(
+    [(-0.46, 0.0), (-0.435, 0.07), (-0.40, 0.115), (-0.33, 0.185), (-0.25, 0.24),
+     (-0.16, 0.278), (-0.05, 0.295), (0.08, 0.29), (0.2, 0.26)]
+)
+FACE_AT = profile(
+    [(-0.46, 0.17), (-0.41, 0.15), (-0.33, 0.10), (-0.25, 0.04), (-0.16, 0.02),
+     (-0.05, 0.02), (0.08, 0.02), (0.2, 0.0)]
+)
+FACE_FRONT = profile(
+    [(-0.46, 0.03), (-0.435, 0.10), (-0.40, 0.14), (-0.35, 0.17), (-0.29, 0.22),
+     (-0.24, 0.26), (-0.16, 0.28), (-0.05, 0.285), (0.08, 0.30), (0.2, 0.30)]
+)
+
+
+def face_sdf(p):
+    """The loft of the face (see :data:`FACE_WIDE`)."""
+    y = p[:, 1]
+    a = np.maximum(FACE_WIDE(y), 0.004)
+    b = np.maximum(FACE_FRONT(y), 0.004)
+    c = FACE_AT(y)
+    n = 2.3
+    g = (np.abs(p[:, 0] / a) ** n + np.abs((p[:, 2] - c) / b) ** n) ** (1.0 / n)
+    d = (g - 1.0) * np.minimum(a, b)
+    d = smax(d, -0.455 - y, 0.02)
+    return smax(d, y - 0.2, 0.08)
+
+
 def head_sdf(p):
     """Distance to the head's skin, in head space."""
     q = mirrored(p)
-    d = ellipsoid(p, (0.0, 0.11, -0.07), (0.315, 0.39, 0.41))
-    # the jaw, from below the ear to the angle and on to the chin
-    jaw = capsule(q, (0.27, -0.06, -0.06), (0.225, -0.27, 0.02), 0.045)
-    jaw = smin(jaw, capsule(q, (0.225, -0.27, 0.02), (0.045, -0.425, 0.19), 0.04), 0.06)
-    jaw = smin(jaw, ellipsoid(p, (0.0, -0.25, 0.02), (0.24, 0.17, 0.22)), 0.08)
-    d = smin(d, jaw, 0.09)
-    d = smin(d, ellipsoid(q, (0.145, -0.13, 0.15), (0.125, 0.13, 0.13)), 0.06)
-    d = smin(d, ellipsoid(q, (0.19, -0.035, 0.16), (0.09, 0.06, 0.10)), 0.05)
-    d = smin(d, ellipsoid(p, (0.0, -0.27, 0.165), (0.14, 0.12, 0.14)), 0.05)
-    d = smin(d, ellipsoid(p, (0.0, -0.40, 0.21), (0.08, 0.06, 0.075)), 0.05)
-    # brow ridge, sockets and eyeballs
-    d = smin(d, ellipsoid(q, (0.12, 0.08, 0.275), (0.085, 0.03, 0.05)), 0.03)
-    d = smax(d, -ellipsoid(q, (0.125, 0.0, 0.31), (0.072, 0.052, 0.058)), 0.03)
+    d = ellipsoid(p, (0.0, 0.11, -0.07), (0.30, 0.39, 0.41))
+    d = smin(d, face_sdf(p), 0.06)
+    # cheekbones and the chin
+    d = smin(d, ellipsoid(q, (0.165, -0.05, 0.15), (0.09, 0.06, 0.10)), 0.08)
+    d = smin(d, ellipsoid(p, (0.0, -0.385, 0.185), (0.065, 0.05, 0.07)), 0.06)
+    # brow ridge, sockets, eyeballs and lids
+    d = smin(d, ellipsoid(q, (0.11, 0.07, 0.25), (0.08, 0.03, 0.05)), 0.05)
+    d = smax(d, -ellipsoid(q, (EYE[0], 0.0, 0.29), (0.068, 0.046, 0.05)), 0.03)
     d = smin(d, sphere(q, EYE, EYE_R), 0.01)
+    d = smin(d, lids_sdf(q), 0.008)
     # nose
-    nose = capsule(p, (0.0, 0.035, 0.30), (0.0, -0.15, 0.385), 0.015)
-    nose = smin(nose, sphere(p, (0.0, -0.162, 0.37), 0.026), 0.02)
-    nose = smin(nose, ellipsoid(q, (0.033, -0.172, 0.33), (0.022, 0.021, 0.027)), 0.018)
+    nose = capsule(p, (0.0, 0.03, 0.285), (0.0, -0.145, 0.36), 0.013)
+    nose = smin(nose, sphere(p, (0.0, -0.152, 0.345), 0.022), 0.02)
+    nose = smin(nose, ellipsoid(q, (0.03, -0.165, 0.31), (0.02, 0.019, 0.024)), 0.016)
     d = smin(d, nose, 0.03)
     # the lips
-    d = smin(d, ellipsoid(p, (0.0, -0.258, 0.30), (0.07, 0.022, 0.03)), 0.02)
-    d = smin(d, ellipsoid(p, (0.0, -0.302, 0.292), (0.06, 0.025, 0.03)), 0.02)
+    d = smin(d, ellipsoid(p, (0.0, -0.248, 0.285), (0.07, 0.021, 0.028)), 0.025)
+    d = smin(d, ellipsoid(p, (0.0, -0.287, 0.28), (0.06, 0.026, 0.03)), 0.025)
     return d
 
 
 #: The centre of the right eyeball (mirrored for the left) and its radius.
-EYE = (0.125, 0.0, 0.245)
-EYE_R = 0.056
+EYE = (0.118, 0.0, 0.222)
+EYE_R = 0.06
+
+
+#: The opening of the lids, as angles on the eyeball (radians) seen from the
+#: front of the head: the inner and outer corners, and (as knots over the
+#: angle across) the heights of the upper and lower lids.
+CORNERS = (-1.0, 1.18)
+UPPER = ((-1.0, 0.0), (-0.6, 0.3), (-0.1, 0.42), (0.45, 0.36), (0.9, 0.18), (1.18, 0.02))
+LOWER = ((-1.0, 0.0), (-0.6, -0.28), (0.0, -0.42), (0.55, -0.36), (0.95, -0.16), (1.18, 0.02))
+LID = 0.006
+
+
+def eye_angles(q):
+    """Angles across and up of points round the right eye (mirrored)."""
+    v = q - np.asarray(EYE)
+    across = np.arctan2(v[:, 0], v[:, 2])
+    up = np.arctan2(v[:, 1], np.hypot(v[:, 0], v[:, 2]))
+    return across, up
+
+
+def lid_heights(across):
+    up = np.interp(across, *np.array(UPPER).T)
+    low = np.interp(across, *np.array(LOWER).T)
+    return up, low
+
+
+def lids_sdf(q):
+    """The lids, a skin over the eyeball open between their edges."""
+    across, up = eye_angles(q)
+    top, bottom = lid_heights(across)
+    inside = np.minimum(np.minimum(up - bottom, top - up), np.minimum(across - CORNERS[0], CORNERS[1] - across))
+    shell = sphere(q, EYE, EYE_R + LID)
+    return smax(shell, inside * EYE_R, 0.004)
+
+
+#: The hair: where the fringe ends (its edge rises toward the temples), how
+#: far the face shows between the locks either side of it and where the ends
+#: of the hair hang.
+FRINGE = (0.10, 0.025)
+OPENING = profile([(-0.7, 0.26), (-0.4, 0.245), (-0.1, 0.235), (0.1, 0.235), (0.3, 0.2)])
+HAIR_WIDE = profile([(-0.7, 0.29), (-0.6, 0.335), (-0.45, 0.35), (-0.2, 0.35), (0.1, 0.345), (0.3, 0.34)])
+
+
+def hair_sdf(p):
+    """Distance to the hair's outer surface, in head space."""
+    x, y, z = p[:, 0], p[:, 1], p[:, 2]
+    top = ellipsoid(p, (0.0, 0.11, -0.09), (0.345, 0.43, 0.44))
+    a = HAIR_WIDE(y)
+    g = np.sqrt((x / a) ** 2 + ((z + 0.08) / 0.46) ** 2)
+    curtain = (g - 1.0) * np.minimum(a, 0.46)
+    ends = -0.62 - 0.04 * z / 0.4 + 0.03 * (x / 0.4) ** 2
+    curtain = smax(curtain, ends - y, 0.03)
+    curtain = smax(curtain, y - 0.15, 0.05)
+    d = smin(top, curtain, 0.06)
+    edge = FRINGE[0] + FRINGE[1] * (x / 0.24) ** 2 + 0.02 * x / 0.24
+    face = smax(np.abs(x) - OPENING(y), -0.02 - z, 0.03)
+    face = smin(face, 0.07 - z, 0.03)
+    face = smax(face, y - edge, 0.012)
+    return smax(d, -face, 0.015)
 
 
 def body_sdf(p):
     """Distance to the neck, shoulders and chest, in body space."""
     q = mirrored(p)
-    neck = capsule(p, (0.0, -0.10, -0.07), (0.0, -0.75, -0.05), 0.115)
-    slope = capsule(q, (0.06, -0.60, -0.08), (0.40, -0.76, -0.09), 0.10)
-    chest = ellipsoid(p, (0.0, -1.12, -0.03), (0.47, 0.38, 0.22))
-    arms = capsule(q, (0.42, -0.84, -0.09), (0.50, -1.6, -0.09), 0.14)
+    neck = capsule(p, (0.0, -0.10, -0.07), (0.0, -0.65, -0.05), 0.122)
+    slope = capsule(q, (0.06, -0.52, -0.09), (0.52, -0.68, -0.09), 0.10)
+    chest = ellipsoid(p, (0.0, -1.02, -0.03), (0.55, 0.40, 0.24))
+    arms = capsule(q, (0.56, -0.78, -0.09), (0.64, -1.6, -0.09), 0.14)
     d = smin(slope, chest, 0.12)
     d = smin(d, arms, 0.08)
     return smin(d, neck, 0.10)
@@ -120,11 +224,28 @@ def to_body(c):
     return (c - BODY_AT) @ BODY
 
 
+def bounded(sdf, c, local, bound):
+    """``sdf`` of the points ``c`` (camera space; ``local`` takes them into
+    the part's space), computed only for those within ``bound`` of it:
+    farther, the distance to the bound."""
+    d = bound.copy()
+    near = np.nonzero(bound < 0.1)[0]
+    if near.size:
+        d[near] = sdf(local(c[near]))
+    return d
+
+
 def scene_sdf(c):
-    """Distance in camera space, and which part is nearest (0 head, 1 body)."""
-    h = head_sdf(to_head(c))
-    b = body_sdf(to_body(c))
-    return np.minimum(h, b), (b < h).astype(np.int8)
+    """Distance in camera space, and which part is nearest (0 head, 1 body,
+    2 hair)."""
+    head_bound = np.linalg.norm(c - HEAD_AT - np.array([0.0, 0.0, 0.0]), axis=-1) - 0.56
+    body_bound = np.maximum(c[:, 1] - (BODY_AT[1] - 0.05), np.abs(c[:, 0]) - 0.9)
+    h = bounded(head_sdf, c, to_head, head_bound)
+    f = bounded(hair_sdf, c, to_head, head_bound - 0.25)
+    b = bounded(body_sdf, c, to_body, body_bound)
+    d = np.minimum(np.minimum(h, b), f)
+    part = np.where(f <= d, 2, np.where(b <= d, 1, 0)).astype(np.int8)
+    return d, part
 
 
 @dataclass
@@ -153,16 +274,16 @@ def grid_coords():
 
 
 def march(x, y):
-    z = np.full(x.shape, 1.2)
+    z = np.full(x.shape, 0.7)
     active = np.ones(x.shape, bool)
     hit = np.zeros(x.shape, bool)
-    for _ in range(160):
+    for _ in range(200):
         idx = np.nonzero(active)[0]
         if idx.size == 0:
             break
         c = np.stack([x[idx], y[idx], z[idx]], axis=-1)
         d, _ = scene_sdf(c)
-        z[idx] -= 0.7 * d
+        z[idx] -= 0.6 * d
         done = d < 4e-4
         hit[idx[done]] = True
         gone = z[idx] < -1.0
@@ -188,19 +309,21 @@ def occlusion(c, n):
     return np.clip(1.0 - 4.0 * ao, 0.0, 1.0)
 
 
-LIGHT = np.array([-0.55, 0.62, 0.56])
+LIGHT = np.array([-0.35, 0.55, 0.75])
 LIGHT = LIGHT / np.linalg.norm(LIGHT)
 
 
 def soft_shadow(c, n):
+    """How much of the light reaches each point: 0 in the shadow another
+    part casts, with a penumbra that widens away from what casts it."""
     res = np.ones(len(c))
-    t = np.full(len(c), 0.01)
-    start = c + n * 0.004
-    for _ in range(48):
+    t = np.full(len(c), 0.015)
+    start = c + n * 0.015
+    for _ in range(50):
         d = scene_sdf(start + LIGHT * t[:, None])[0]
-        res = np.minimum(res, 10.0 * d / t)
-        t += np.clip(d, 0.006, 0.06)
-    return np.clip(res, 0.0, 1.0)
+        res = np.where(t < 0.6, np.minimum(res, d / (0.004 + 0.12 * t)), res)
+        t += np.maximum(0.8 * d, 0.005)
+    return filters.smoothstep(0.0, 1.0, np.clip(res, 0.0, 1.0))
 
 
 def build_model() -> Model:
@@ -231,3 +354,638 @@ def build_model() -> Model:
         ao.reshape(shape),
         sh.reshape(shape),
     )
+
+
+# ----------------------------------------------------------------------
+# features, as curves on the head
+
+
+def to_sheet(points):
+    """Head-space points to sheet (x, y), and their depth toward the eye."""
+    cam = np.asarray(points) @ HEAD.T + HEAD_AT
+    xy = np.stack([CENTRE[0] + SCALE * cam[:, 0], CENTRE[1] - SCALE * cam[:, 1]], -1)
+    return xy, cam[:, 2]
+
+
+def on_head(xy, lift: float = 0.0):
+    """The points of the skin in front of head-space (x, y), raised ``lift``
+    off it."""
+    xy = np.asarray(xy, float)
+    p = np.stack([xy[:, 0], xy[:, 1], np.full(len(xy), 0.6)], -1)
+    for _ in range(80):
+        p[:, 2] -= 0.7 * head_sdf(p)
+    p[:, 2] += lift
+    return p
+
+
+def eye_point(side: int, across, up, lift: float = LID):
+    """Points on the eyeball of the right (``side`` 1) or left (-1) eye, at
+    angles ``across`` (out toward the temple) and ``up``."""
+    across, up = np.asarray(across, float), np.asarray(up, float)
+    r = EYE_R + lift
+    v = np.stack([np.sin(across) * np.cos(up), np.sin(up), np.cos(across) * np.cos(up)], -1)
+    centre = np.array([side * EYE[0], EYE[1], EYE[2]])
+    v[..., 0] *= side
+    return centre + r * v
+
+
+def lid_curve(side: int, upper: bool, n: int = 24):
+    """The edge of a lid, in head space."""
+    across = np.linspace(CORNERS[0], CORNERS[1], n)
+    top, bottom = lid_heights(across)
+    return eye_point(side, across, top if upper else bottom)
+
+
+def gaze() -> np.ndarray:
+    """Where the eyes look, in head space: at the viewer, a little aside."""
+    g = np.array([0.0, 0.0, 1.0]) @ HEAD + np.array([0.04, 0.02, 0.0])
+    return g / np.linalg.norm(g)
+
+
+# ----------------------------------------------------------------------
+# hatching: the lines along which a field crosses its levels
+
+#: The corners of a cell, in the order of the bits of its case, and the
+#: pairs of its edges each case joins (edges: 0 top, 1 right, 2 bottom,
+#: 3 left).
+SEGMENTS = {
+    1: ((3, 0),), 2: ((0, 1),), 3: ((3, 1),), 4: ((1, 2),), 5: ((3, 0), (1, 2)),
+    6: ((0, 2),), 7: ((3, 2),), 8: ((2, 3),), 9: ((2, 0),), 10: ((0, 1), (2, 3)),
+    11: ((2, 1),), 12: ((1, 3),), 13: ((1, 0),), 14: ((0, 3),),
+}
+
+
+def crossings(field: np.ndarray, jump: float = 1.5):
+    """Every segment of every integer level line of ``field`` (NaN where it is
+    not defined) through the cells of its grid, as (level, edge a, edge b,
+    point a, point b); cells across which it jumps by ``jump`` or more are
+    skipped (an edge that hides one surface behind another)."""
+    h, w = field.shape
+    f00, f01 = field[:-1, :-1], field[:-1, 1:]
+    f10, f11 = field[1:, :-1], field[1:, 1:]
+    corners = np.stack([f00, f01, f11, f10], -1)
+    low, high = np.nanmin(corners, -1), np.nanmax(corners, -1)
+    ok = np.isfinite(corners).all(-1) & (high - low < jump)
+    first = np.floor(low) + 1
+    count = np.where(ok, np.floor(high) - first + 1, 0).astype(int)
+    count = np.maximum(count, 0)
+    cells = np.repeat(np.arange(count.size), count.ravel())
+    start = np.repeat(np.cumsum(count.ravel()) - count.ravel(), count.ravel())
+    level = first.ravel()[cells] + (np.arange(cells.size) - start)
+    ci, cj = np.divmod(cells, w - 1)
+    c = corners.reshape(-1, 4)[cells]
+    above = c > level[:, None]
+    case = above[:, 0] * 1 + above[:, 1] * 2 + above[:, 2] * 4 + above[:, 3] * 8
+    return ci, cj, c, level, case
+
+
+def edge_point(ci, cj, c, level, edge):
+    """Where the level crosses an edge of a cell, and that edge's id."""
+    a = np.array([0, 1, 3, 0])[edge]
+    b = np.array([1, 2, 2, 3])[edge]
+    fa = np.take_along_axis(c, a[:, None], 1)[:, 0]
+    fb = np.take_along_axis(c, b[:, None], 1)[:, 0]
+    t = np.clip((level - fa) / np.where(fb == fa, 1e-9, fb - fa), 0.0, 1.0)
+    ya = np.array([0, 0, 1, 0])[edge]
+    xa = np.array([0, 1, 0, 0])[edge]
+    horizontal = (edge == 0) | (edge == 2)
+    x = cj + xa + np.where(horizontal, t, 0.0)
+    y = ci + ya + np.where(horizontal, 0.0, t)
+    eid = np.where(horizontal, (ci + ya) * 100003 + cj, 50000000 + ci * 100003 + cj + xa)
+    return np.stack([x, y], -1), eid
+
+
+def level_lines(field: np.ndarray, jump: float = 1.5):
+    """The integer level lines of ``field``, each a polyline (N, 2) in grid
+    (x, y), with its level."""
+    ci, cj, c, level, case = crossings(field, jump)
+    pairs = []
+    for k, segs in SEGMENTS.items():
+        sel = np.nonzero(case == k)[0]
+        for ea, eb in segs:
+            pairs.append((sel, np.full(sel.size, ea), np.full(sel.size, eb)))
+    sel = np.concatenate([p[0] for p in pairs])
+    ea = np.concatenate([p[1] for p in pairs])
+    eb = np.concatenate([p[2] for p in pairs])
+    pa, ia = edge_point(ci[sel], cj[sel], c[sel], level[sel], ea)
+    pb, ib = edge_point(ci[sel], cj[sel], c[sel], level[sel], eb)
+    lv = level[sel]
+    return chain(lv, ia, ib, pa, pb)
+
+
+def chain(lv, ia, ib, pa, pb):
+    """Join segments that share an edge crossing into polylines."""
+    ka = list(zip(lv.tolist(), ia.tolist()))
+    kb = list(zip(lv.tolist(), ib.tolist()))
+    touching: dict = {}
+    for i in range(len(ka)):
+        touching.setdefault(ka[i], []).append(i)
+        touching.setdefault(kb[i], []).append(i)
+    used = np.zeros(len(ka), bool)
+    lines = []
+    for i in range(len(ka)):
+        if used[i]:
+            continue
+        used[i] = True
+        ahead = walk(kb[i], touching, used, ka, kb, pa, pb)
+        behind = walk(ka[i], touching, used, ka, kb, pa, pb)
+        points = [*reversed(behind), pa[i], pb[i], *ahead]
+        lines.append((float(lv[i]), np.array(points)))
+    return lines
+
+
+def walk(key, touching, used, ka, kb, pa, pb):
+    """The points met going on from ``key`` through unused segments."""
+    points = []
+    while True:
+        nxt = [j for j in touching[key] if not used[j]]
+        if not nxt:
+            return points
+        j = nxt[0]
+        used[j] = True
+        if ka[j] == key:
+            key, point = kb[j], pb[j]
+        else:
+            key, point = ka[j], pa[j]
+        points.append(point)
+
+
+def smooth_within(a: np.ndarray, mask: np.ndarray, r: int) -> np.ndarray:
+    """``a`` (H, W, C) blurred over ``r`` cells, from within ``mask`` only."""
+    m = mask.astype(float)
+    num = filters.box_blur(a * m[..., None], r)
+    den = filters.box_blur(m, r)
+    return num / np.maximum(den, 1e-6)[..., None]
+
+
+def sample(grid: np.ndarray, xy: np.ndarray) -> np.ndarray:
+    """``grid`` (a map of the coarse grid) at sheet points ``xy``."""
+    h, w = grid.shape[:2]
+    gx = np.clip(xy[:, 0] / COARSE - 0.5, 0, w - 1)
+    gy = np.clip(xy[:, 1] / COARSE - 0.5, 0, h - 1)
+    return filters.bilinear(grid, gy, gx)
+
+
+def resample(points: np.ndarray, step: float) -> np.ndarray:
+    """A polyline resampled every ``step`` along its length."""
+    seg = np.hypot(*np.diff(points, axis=0).T)
+    at = np.concatenate([[0.0], np.cumsum(seg)])
+    if at[-1] < step:
+        return points[[0, -1]]
+    s = np.arange(0.0, at[-1], step)
+    return np.stack([np.interp(s, at, points[:, 0]), np.interp(s, at, points[:, 1])], -1)
+
+
+def taper(n: int, ends: int) -> np.ndarray:
+    """1 along a stroke of ``n`` points, easing to 0 over ``ends`` at each end."""
+    i = np.arange(n, dtype=float)
+    k = np.minimum(i + 0.5, n - 0.5 - i) / max(ends, 1)
+    return np.sin(0.5 * np.pi * np.clip(k, 0.0, 1.0)) ** 1.2
+
+
+#: The inks, with a fine ball for the hatching and the usual one for lines.
+RED = pens.ballpoint("#b3262b", 2.0, name="red")
+BLUE = pens.ballpoint("#22357e", 2.0, name="blue")
+BLACK = pens.ballpoint("#26262a", 2.0, name="black")
+RED_LINE = pens.ballpoint("#b3262b", 2.6, name="red")
+BLUE_LINE = pens.ballpoint("#22357e", 2.6, name="blue")
+BLACK_LINE = pens.ballpoint("#26262a", 2.6, name="black")
+
+
+@dataclass(frozen=True)
+class Layer:
+    """One set of hatching in one ink: lines along the level lines of a
+    family of planes ``gap`` pixels apart (one in ``every`` of them), laid
+    where ``density`` exceeds ``threshold``, fully ``ramp`` above it."""
+
+    pen: pens.Pen
+    family: int
+    every: int
+    offset: int
+    threshold: float
+    ramp: float = 0.25
+    firm: float = 0.26
+
+
+class Drawing:
+    """The sheet and what is known of the figure on it."""
+
+    def __init__(self, model: Model, seed: int):
+        self.sheet = Sheet(WIDTH, HEIGHT, paper=PAPER, seed=seed)
+        self.rng = np.random.default_rng(seed)
+        self.model = model
+        self.lines: dict = {}
+
+    def stroke(self, points, pen, pressure) -> None:
+        self.sheet.stroke([tuple(p) for p in points], pen, list(pressure))
+
+    def hatch(self, lines, layer: Layer, density: np.ndarray, reach: float = 110.0):
+        """Lay ``layer`` along ``lines`` (level, polyline) in pieces about
+        ``reach`` long."""
+        for level, grid_pts in lines:
+            if int(level) % layer.every != layer.offset or len(grid_pts) < 3:
+                continue
+            pts = resample((grid_pts + 0.5) * COARSE, 3.0)
+            if len(pts) < 4:
+                continue
+            w = filters.smoothstep(layer.threshold, layer.threshold + layer.ramp, sample(density, pts))
+            self.pieces(pts, w, layer, reach)
+
+    def pieces(self, pts, w, layer: Layer, reach: float) -> None:
+        rng = self.rng
+        n = len(pts)
+        i = -int(rng.uniform(0, reach / 3.0))
+        while i < n:
+            length = int(rng.uniform(0.6, 1.4) * reach / 3.0)
+            a, b = max(i, 0), min(i + length, n)
+            if b - a >= 4:
+                self.piece(pts[a:b], w[a:b], layer)
+            i += length - int(rng.integers(-2, 3))
+
+    def piece(self, pts, w, layer: Layer) -> None:
+        """One stroke, lifted where the tone is too light for it."""
+        cut = self.rng.uniform(0.08, 0.45)
+        on = w > cut
+        if not on.any():
+            return
+        edges = np.flatnonzero(np.diff(np.concatenate([[0], on.astype(int), [0]])))
+        for a, b in zip(edges[::2], edges[1::2]):
+            if b - a < 3:
+                continue
+            seg, ws = pts[a:b], w[a:b]
+            normal = np.stack([-np.gradient(seg[:, 1]), np.gradient(seg[:, 0])], -1)
+            normal /= np.maximum(np.hypot(*normal.T), 1e-9)[:, None]
+            wobble = np.cumsum(self.rng.normal(0.0, 0.12, len(seg)))
+            wobble -= np.linspace(wobble[0], wobble[-1], len(seg))
+            seg = seg + normal * (wobble + self.rng.normal(0.0, 0.35))[:, None]
+            firm = layer.firm * self.rng.uniform(0.85, 1.15)
+            pressure = firm * (0.45 + 0.55 * ws) * taper(len(seg), 4)
+            keep = slice(None, None, 2)
+            self.stroke(seg[keep], layer.pen, pressure[keep])
+
+
+#: The families of planes whose sections give the hatching on the head
+#: (normals in head space), each crossing the others obliquely.
+HEAD_FAMILIES = ((-0.35, 0.75, 0.55), (0.75, 0.5, 0.45), (0.8, -0.45, 0.4))
+
+
+def family_lines(coords, mask, normal, gap: float, split: int):
+    """The level lines of planes ``gap`` pixels apart, split ``split`` times
+    finer, through ``coords`` where ``mask`` holds."""
+    n = np.asarray(normal, float)
+    n = n / np.linalg.norm(n)
+    field = np.where(mask, coords @ n * SCALE / gap * split, np.nan)
+    return level_lines(field, jump=1.2 * split)
+
+
+def skin_dark(model: Model) -> np.ndarray:
+    """How dark the skin is wanted, 0 in the brightest light to 1."""
+    lam = np.clip(model.normal @ LIGHT, -1.0, 1.0)
+    lit = np.clip((lam + 0.35) / 1.35, 0.0, 1.0) * (0.3 + 0.7 * model.shadow)
+    dark = 1.0 - lit * (0.55 + 0.45 * model.occlusion)
+    return np.clip(dark, 0.0, 1.0)
+
+
+#: The lips, in head space (x, y), from the sitter's right corner to her
+#: left: the top of the upper lip, the parting and the bottom of the lower.
+LIP_TOP = ((-0.092, -0.266), (-0.06, -0.25), (-0.02, -0.234), (0.0, -0.238),
+           (0.02, -0.234), (0.06, -0.25), (0.092, -0.266))
+LIP_PARTING = ((-0.092, -0.266), (-0.05, -0.268), (0.0, -0.264), (0.05, -0.268),
+               (0.092, -0.266))
+LIP_BOTTOM = ((-0.092, -0.266), (-0.06, -0.288), (-0.03, -0.30), (0.0, -0.304),
+              (0.03, -0.30), (0.06, -0.288), (0.092, -0.266))
+
+
+def curve(knots, n: int = 40) -> np.ndarray:
+    """A smooth curve through 2D ``knots``, ``n`` points along it."""
+    path = CatmullRom(np.asarray(knots, float))
+    pts = path.sample(path.length / (n - 1))[0]
+    return pts
+
+
+def inside(xy: np.ndarray, polygon: np.ndarray) -> np.ndarray:
+    """Which of the points ``xy`` (..., 2) lie inside ``polygon``."""
+    x, y = xy[..., 0], xy[..., 1]
+    res = np.zeros(x.shape, bool)
+    px, py = polygon[:, 0], polygon[:, 1]
+    for i in range(len(polygon)):
+        x0, y0, x1, y1 = px[i - 1], py[i - 1], px[i], py[i]
+        cross = (y0 > y) != (y1 > y)
+        at = x0 + (y - y0) * (x1 - x0) / np.where(y1 == y0, 1e-12, y1 - y0)
+        res ^= cross & (x < at)
+    return res
+
+
+def blob(p: np.ndarray, centre, radii) -> np.ndarray:
+    """A soft round patch of the head, 1 at ``centre``."""
+    q = (p - np.asarray(centre)) / np.asarray(radii)
+    return np.exp(-np.sum(q * q, axis=-1))
+
+
+@dataclass
+class Maps:
+    """Where each part of the figure shows, and how much of each ink it
+    wants, on the coarse grid."""
+
+    face: np.ndarray
+    eyes: np.ndarray
+    lips: np.ndarray
+    neck: np.ndarray
+    hair: np.ndarray
+    cloth: np.ndarray
+    dark: np.ndarray
+    red: np.ndarray
+    blue: np.ndarray
+    black: np.ndarray
+
+
+def eye_mask(model: Model) -> np.ndarray:
+    """The opening of the lids, where the eyeball shows."""
+    q = mirrored(model.head.reshape(-1, 3))
+    across, up = eye_angles(q)
+    top, bottom = lid_heights(across)
+    near = np.linalg.norm(q - np.asarray(EYE), axis=-1) < EYE_R + 0.5 * LID
+    opening = (up > bottom) & (up < top) & (across > CORNERS[0]) & (across < CORNERS[1])
+    return (near & opening).reshape(model.hit.shape) & (model.part == 0) & model.hit
+
+
+def lip_mask(model: Model) -> np.ndarray:
+    outline = np.concatenate([curve(LIP_TOP), curve(LIP_BOTTOM)[::-1]])
+    h = model.head
+    return inside(h[..., :2], outline) & (h[..., 2] > 0.2) & (model.part == 0) & model.hit
+
+
+def cloth_mask(model: Model) -> np.ndarray:
+    """The top she wears: below a wide, low neckline."""
+    b = model.body
+    neckline = -0.80 + 0.32 * (b[..., 0] / 0.34) ** 2
+    return model.hit & (model.part == 1) & (b[..., 1] < neckline)
+
+
+def head_extras(h: np.ndarray):
+    """What the head's own colouring adds to the lighting: the flush of the
+    cheeks, nose, chin and lids (red), the cool of the sockets and temples
+    (blue), and where the face is kept warm and open (round the mouth)."""
+    q = mirrored(h)
+    flush = 0.45 * blob(q, (0.15, -0.14, 0.22), (0.075, 0.06, 0.2))
+    flush += 0.3 * blob(h, (0.0, -0.16, 0.36), (0.035, 0.03, 0.1))
+    flush += 0.25 * blob(h, (0.0, -0.40, 0.25), (0.05, 0.035, 0.1))
+    sockets = blob(q, (EYE[0] - 0.01, 0.025, 0.28), (0.075, 0.045, 0.2))
+    sockets += 0.6 * blob(q, (0.045, 0.0, 0.28), (0.025, 0.04, 0.2))
+    temple = blob(q, (0.27, 0.1, 0.1), (0.06, 0.12, 0.2))
+    mouth = blob(h, (0.0, -0.33, 0.28), (0.12, 0.09, 0.3))
+    hollow = blob(h, (0.0, -0.322, 0.27), (0.04, 0.014, 0.1))
+    return flush, 0.55 * sockets + 0.3 * temple + 0.35 * hollow, mouth
+
+
+def design(model: Model) -> Maps:
+    """Where everything is, and the ink each place wants."""
+    hit, part = model.hit, model.part
+    eyes, lips, cloth = eye_mask(model), lip_mask(model), cloth_mask(model)
+    face = hit & (part == 0) & ~eyes & ~lips
+    neck = hit & (part == 1) & ~cloth
+    hair = hit & (part == 2)
+    dark = skin_dark(model)
+    flush, cool, mouth = head_extras(model.head)
+    on_head = (part == 0).astype(float)
+    red = 0.1 + 0.8 * dark + flush * on_head
+    blue = filters.smoothstep(0.42, 1.0, dark) + cool * on_head
+    blue *= 1.0 - 0.75 * mouth * on_head
+    black = filters.smoothstep(0.8, 1.05, dark) * (1.0 - 0.9 * mouth * on_head)
+    return Maps(face, eyes, lips, neck, hair, cloth, dark, red, blue, black)
+
+
+# ----------------------------------------------------------------------
+# the features
+
+
+def seen(drawing: Drawing, points3d: np.ndarray, slack: float = 0.012) -> np.ndarray:
+    """Which head-space points are not hidden behind another part."""
+    xy, depth = to_sheet(points3d)
+    front = sample(drawing.model.cam[..., 2], xy)
+    hit = sample(drawing.model.hit.astype(float), xy) > 0.5
+    return ~hit | (depth > front - slack)
+
+
+def runs_of(on: np.ndarray):
+    """(start, end) of each run of True in ``on``."""
+    edges = np.flatnonzero(np.diff(np.concatenate([[0], on.astype(int), [0]])))
+    return list(zip(edges[::2], edges[1::2]))
+
+
+def line(drawing: Drawing, points3d, pen, pressure, slack: float = 0.012):
+    """A stroke through head-space points, lifted where they are hidden;
+    ``pressure`` is one value per point or a function of u along it."""
+    pts3 = np.asarray(points3d, float)
+    n = len(pts3)
+    if callable(pressure):
+        press = np.asarray(pressure(np.linspace(0.0, 1.0, n)), float)
+    else:
+        press = np.broadcast_to(np.asarray(pressure, float), (n,)).copy()
+    xy, _ = to_sheet(pts3)
+    for a, b in runs_of(seen(drawing, pts3, slack)):
+        if b - a >= 2:
+            drawing.stroke(xy[a:b], pen, press[a:b])
+
+
+def swell(peak: float, at: float = 0.5, ends: float = 0.0):
+    """A pressure that rises from ``ends`` to ``peak`` at ``at`` and falls."""
+
+    def f(u):
+        k = np.where(u < at, u / max(at, 1e-6), (1.0 - u) / max(1.0 - at, 1e-6))
+        return ends + (peak - ends) * np.sin(0.5 * np.pi * np.clip(k, 0.0, 1.0)) ** 0.8
+
+    return f
+
+
+#: The iris and the pupil, as angles round the line of sight.
+IRIS, PUPIL = 0.46, 0.16
+
+
+def view_dir() -> np.ndarray:
+    """Toward the viewer, in head space."""
+    return np.array([0.0, 0.0, 1.0]) @ HEAD
+
+
+def eye_frame(side: int):
+    """The centre of an eyeball and the axes of its iris (sight, across, up)."""
+    centre = np.array([side * EYE[0], EYE[1], EYE[2]])
+    g = gaze()
+    u = np.cross([0.0, 1.0, 0.0], g)
+    u /= np.linalg.norm(u)
+    return centre, g, u, np.cross(g, u)
+
+
+def on_iris(side: int, r, a, lift: float = 0.0) -> np.ndarray:
+    """Points of the eyeball ``r`` from the line of sight, round at ``a``."""
+    centre, g, u, v = eye_frame(side)
+    r, a = np.asarray(r, float)[..., None], np.asarray(a, float)[..., None]
+    d = np.cos(r) * g + np.sin(r) * (np.cos(a) * u + np.sin(a) * v)
+    return centre + (EYE_R + lift) * d
+
+
+def in_opening(points: np.ndarray, margin: float = 0.0) -> np.ndarray:
+    across, up = eye_angles(mirrored(points))
+    top, bottom = lid_heights(across)
+    return (up > bottom + margin) & (up < top - margin) & (across > CORNERS[0]) & (
+        across < CORNERS[1]
+    )
+
+
+def glint(side: int) -> np.ndarray:
+    """Where the light glints on the eye: the direction of the eyeball's
+    surface that is halfway between the light and the viewer."""
+    h = LIGHT @ HEAD + view_dir()
+    centre, *_ = eye_frame(side)
+    return h / np.linalg.norm(h)
+
+
+def iris_strokes(d: Drawing, side: int) -> None:
+    """The iris, red then black from the pupil out, darker under the lid,
+    with the glint left white and a warm fleck across from it."""
+    centre, g, u, v = eye_frame(side)
+    shine = glint(side)
+    rng = d.rng
+    for pen, count, firm in ((RED, 70, 0.5), (BLACK, 56, 0.42), (BLACK, 30, 0.5)):
+        for a in rng.uniform(0, 2 * np.pi, count):
+            top = np.sin(a)  # 1 at the top of the iris
+            if pen is BLACK and count == 30 and top < 0.1:
+                continue
+            r = np.linspace(PUPIL - 0.02, IRIS * rng.uniform(0.94, 1.0), 9)
+            pts = on_iris(side, r, np.full(9, a + rng.normal(0, 0.05)), 0.001)
+            dirs = (pts - centre) / np.linalg.norm(pts - centre, axis=-1, keepdims=True)
+            ok = in_opening(pts) & (np.arccos(np.clip(dirs @ shine, -1, 1)) > 0.12)
+            press = firm * (0.8 + 0.4 * max(top, 0.0)) * np.ones(9)
+            press[-1] *= 1.25
+            for a0, b0 in runs_of(ok):
+                if b0 - a0 >= 2:
+                    line(d, pts[a0:b0], pen, press[a0:b0], 0.03)
+    # the pupil: short strokes across it every way
+    for t in np.linspace(0, np.pi, 9, endpoint=False):
+        for s in np.linspace(-0.8, 0.8, 5):
+            k = np.linspace(-1, 1, 6) * np.sqrt(1 - s * s)
+            r = PUPIL * np.hypot(k, s)
+            a = t + np.arctan2(s, k)
+            pts = on_iris(side, r, a, 0.001)
+            dirs = (pts - centre) / np.linalg.norm(pts - centre, axis=-1, keepdims=True)
+            ok = in_opening(pts) & (np.arccos(np.clip(dirs @ shine, -1, 1)) > 0.12)
+            for a0, b0 in runs_of(ok):
+                if b0 - a0 >= 2:
+                    line(d, pts[a0:b0], BLACK, 0.85, 0.03)
+    # a warm fleck across from the glint
+    ga = np.arctan2((shine - centre * 0) @ v, (shine) @ u)
+    for k in range(3):
+        a = ga + np.pi + rng.normal(0, 0.15)
+        pts = on_iris(side, np.linspace(0.24, 0.36, 4), np.full(4, a), 0.001)
+        if in_opening(pts).all():
+            line(d, pts, RED, 0.6, 0.03)
+
+
+def lid_points(side: int, upper: bool, lo: float, hi: float, n: int = 20, rise=0.0, lift=LID):
+    """Points along a lid's edge between angles ``lo`` and ``hi`` across,
+    raised ``rise`` (radians) above (or below, for the lower lid) it."""
+    across = np.linspace(lo, hi, n)
+    top, bottom = lid_heights(across)
+    up = top + rise if upper else bottom - rise
+    return eye_point(side, across, up, lift)
+
+
+def lids(d: Drawing, side: int) -> None:
+    """The upper lid a thick dark line of several strokes, the crease above
+    it, the lower lid light, lashes at the outer corner, and the shadow the
+    upper lid casts on the eye."""
+    rng = d.rng
+    c0, c1 = CORNERS
+    # the shadow of the lid on the eyeball, and pink at the corners
+    for k in range(5):
+        pts = lid_points(side, True, c0 + 0.25, c1 - 0.15, 16, -0.05 - 0.035 * k, 0.0)
+        line(d, pts, BLUE, swell(0.32 - 0.04 * k, 0.5), 0.03)
+    for k in range(4):
+        pts = lid_points(side, True, c0 + 0.05, c0 + 0.35, 6, -0.08 - 0.07 * k, 0.0)
+        line(d, pts, RED, swell(0.35, 0.3), 0.03)
+        pts = lid_points(side, True, c1 - 0.3, c1 - 0.02, 6, -0.06 - 0.06 * k, 0.0)
+        line(d, pts, RED, swell(0.3, 0.6), 0.03)
+    # the upper lid, restated
+    for k, (pen, firm) in enumerate(((BLACK_LINE, 0.95), (BLACK_LINE, 0.8), (BLUE_LINE, 0.7))):
+        lo = c0 + 0.12 + 0.05 * k
+        pts = lid_points(side, True, lo, c1 + 0.04, 22, 0.012 * k + rng.normal(0, 0.006))
+        line(d, pts, pen, swell(firm, 0.62, 0.15), 0.03)
+    # the crease
+    for pen, firm in ((RED, 0.45), (BLUE, 0.32)):
+        pts = lid_points(side, True, c0 + 0.35, c1 - 0.1, 18, 0.24, LID + 0.004)
+        line(d, pts, pen, swell(firm, 0.55), 0.03)
+    # the lower lid, light, and its rim
+    pts = lid_points(side, False, c0 + 0.3, c1 - 0.02, 18, 0.03, LID)
+    line(d, pts, RED, swell(0.42, 0.65), 0.03)
+    pts = lid_points(side, False, c0 + 0.6, c1 - 0.05, 14, 0.11, LID + 0.003)
+    line(d, pts, BLUE, swell(0.22, 0.6), 0.03)
+    lashes(d, side)
+
+
+def lashes(d: Drawing, side: int) -> None:
+    """A few curved lashes flicking out at the outer corner."""
+    corner, _ = to_sheet(eye_point(side, CORNERS[1], 0.0)[None])
+    middle, _ = to_sheet(eye_point(side, 0.0, 0.0)[None])
+    out = (corner - middle)[0]
+    out /= np.linalg.norm(out)
+    for k, a in enumerate(np.linspace(0.5, 1.15, 6)):
+        top = lid_heights(np.array([a]))[0][0]
+        root, _ = to_sheet(eye_point(side, a, top, LID)[None])
+        lean = 0.25 + 0.22 * k
+        way = np.array([0.0, -1.0]) * (1.0 - lean) + out * lean
+        way /= np.linalg.norm(way)
+        length = 8.0 + 8.0 * k / 5.0
+        t = np.linspace(0, 1, 5)[:, None]
+        path = root[0] + way * length * t + out * 4.0 * t**2
+        d.stroke(path, BLACK, 0.7 * taper(5, 2) + 0.05)
+
+
+#: The brow's spine (head-space x, y) from its head by the nose to its tail,
+#: for the right (far) brow; the left one is its mirror.
+BROW = ((0.035, 0.07), (0.07, 0.087), (0.12, 0.097), (0.165, 0.09), (0.205, 0.068))
+
+
+def brow(d: Drawing, side: int) -> None:
+    """A brow: hairs laid as they grow, thick by the nose and tapering out,
+    over a violet under-tone."""
+    rng = d.rng
+    spine = curve(BROW, 60) * np.array([side, 1.0])
+    tangent = np.gradient(spine, axis=0)
+    tangent /= np.linalg.norm(tangent, axis=-1, keepdims=True)
+    normal = np.stack([-tangent[:, 1], tangent[:, 0]], -1) * side
+    for k in range(3):
+        pts = spine[5:52] + normal[5:52] * (0.003 * (k - 1))
+        line(d, on_head(pts, 0.002), BLUE, swell(0.28, 0.3), 0.02)
+    for _ in range(70):
+        s = rng.beta(1.3, 2.2)
+        i = int(s * 59)
+        thick = 0.014 * (1.0 - s) ** 0.8 + 0.002
+        start = spine[i] + normal[i] * thick * rng.uniform(-0.6, 0.5)
+        rise = np.radians(55.0 * (1.0 - s / 0.45) if s < 0.45 else -14.0 * (s - 0.45) / 0.55)
+        c, sn = np.cos(rise), np.sin(rise)
+        way = tangent[i] * c + normal[i] * sn
+        length = rng.uniform(0.018, 0.032) * (1.0 - 0.3 * s)
+        t = np.linspace(0, 1, 5)[:, None]
+        pts = start + way * length * t - normal[i] * 0.004 * t**2
+        pen = BLACK if rng.random() < 0.7 else RED
+        firm = rng.uniform(0.4, 0.62) * (1.0 - 0.35 * s)
+        line(d, on_head(pts, 0.003), pen, firm * (0.15 + 0.85 * taper(5, 2)), 0.02)
+
+
+def nose(d: Drawing) -> None:
+    """The nose: a light line down the far side of the bridge and round the
+    tip, the near wing, and the nostrils as small dark accents."""
+    bridge = on_head(curve(((0.02, 0.02), (0.021, -0.06), (0.026, -0.12), (0.03, -0.15)), 16))
+    line(d, bridge, BLUE, swell(0.3, 0.7), 0.01)
+    line(d, bridge, RED, swell(0.3, 0.6), 0.01)
+    wing = ((-0.05, -0.142), (-0.058, -0.163), (-0.048, -0.18), (-0.03, -0.184))
+    for pen, firm in ((RED, 0.5), (BLUE, 0.35), (RED, 0.4)):
+        line(d, on_head(curve(wing, 12), 0.002), pen, swell(firm, 0.4), 0.02)
+    tip = ((0.032, -0.155), (0.02, -0.176), (0.0, -0.181), (-0.014, -0.179))
+    line(d, on_head(curve(tip, 12), 0.002), RED, swell(0.4, 0.4), 0.02)
+    near = ((-0.03, -0.182), (-0.018, -0.188), (-0.006, -0.184))
+    far = ((0.008, -0.185), (0.02, -0.186), (0.03, -0.18))
+    for knots, firm in ((near, 0.9), (far, 0.75)):
+        pts = on_head(curve(knots, 8), 0.002)
+        line(d, pts, BLACK_LINE, swell(firm, 0.45, 0.2), 0.03)
+        line(d, pts, RED_LINE, swell(0.6, 0.5, 0.2), 0.03)
