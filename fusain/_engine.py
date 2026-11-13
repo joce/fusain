@@ -655,8 +655,10 @@ def roll_stroke(
                 touch = min(max(above / (2.0 * MICRO), 0.0), 1.0) * edge
                 if touch <= 0.0:
                     continue
-                inked[iy, ix] = max(inked[iy, ix], touch)
                 dv = rate * touch * ball_grip(cover, held, under, loose, iy, ix)
+                if dv <= 0.0:
+                    continue  # (it skids: no ink, and no more paper inked)
+                inked[iy, ix] = max(inked[iy, ix], touch)
                 for band in range(N):
                     ink[iy, ix, band] += dv * k[band]
                 ink[iy, ix, IS] += dv * s
