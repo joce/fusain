@@ -17,8 +17,8 @@ pastels, stumps and erasers. Tone depends on how hard a stick is pressed and
 how many layers are laid, as on real paper. Charcoal and pastel leave dust
 that a stump drags about and an eraser lifts; coloured pencils are waxy and
 translucent, so their layers mix to the eye; a light pastel covers a dark one.
-Crayon and worn tips are still to come; the plan is in
-[docs/design.md](docs/design.md).
+A point wears as it draws, until it is sharpened. Crayon is still to come; the
+plan is in [docs/design.md](docs/design.md).
 
 ```python
 from fusain import Sheet, papers, pencils
@@ -75,6 +75,21 @@ burnished with a colourless blender. Bottom, soft pastels on grey laid paper.
 Left: light colours over a dark blue ground, which they cover. Middle: orange
 and blue side by side, and the same with the join rubbed with a finger. Right:
 white pastel over black, and lines drawn with a hard pastel.
+
+```python
+from fusain import Stick
+
+pencil = Stick(pencils.B6, width=2)      # a sharp point, which wears as it draws
+sheet.stroke([(100, 400), (700, 420)], pencil)
+print(pencil.width)                       # wider than 2 now
+pencil.sharpen()
+```
+
+![A point that wears](examples/output/tips.png)
+
+One line drawn back and forth down the sheet without sharpening, with a 2H, a
+2B and a 6B, each sharp at the top: the softer the lead, the sooner its point
+is a flat and its line a band.
 
 ![The papers under a raking light](examples/output/papers.png)
 

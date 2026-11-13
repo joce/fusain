@@ -8,6 +8,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `Stick`: a medium in the hand, with a tip that wears. A point wears to a
+  flat as it draws, so its line widens, the sooner the softer the lead;
+  `sharpen()` gives the point back. `Sheet.stroke` and `Sheet.shade` take a
+  stick in place of a medium.
 - Coloured pencils, `pencils.coloured(colour)`, and `pencils.BLENDER`:
   translucent and waxy. Layers of two colours mix to the eye; the tooth turns
   slick as it fills; a firm pass polishes the wax and closes the white specks

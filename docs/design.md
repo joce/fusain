@@ -1,6 +1,6 @@
 # Core model: design proposal
 
-Status: accepted (issue `fusain-ilv`). Steps 1 to 4 of the build order are built, and tilt from step 5; the rest is not.
+Status: accepted (issue `fusain-ilv`). Steps 1 to 4 of the build order are built, and tilt and wear from step 5; the rest is not.
 
 ## What fusain has to get right
 
@@ -88,10 +88,14 @@ A tool is a tip plus, usually, a medium.
   an ellipse across the stroke, up to five times wider than the point, whose
   weight is spread over more paper, so the mark is lighter, grainier and soft
   at the edges.
-- **Tip.** A shape (point, flat, the side of a stick) and a size. In the first
-  version the tip is a formula: a point whose flat grows with the volume worn
-  off, and `sharpen()` to reset it. A worn tip stored as its own small height
-  map (so a crayon keeps the facets it wore) can come later.
+- **Wear** (built). A `Stick` is a medium in the hand, with the state of its
+  tip. A point is a cone, which loses volume as the cube of where it is cut:
+  the cube of the flat's width grows with the volume the tip has laid, up to
+  the full width of the lead, so a line widens as it is drawn and a soft lead
+  blunts soonest. `sharpen()` gives the point back. A bare medium draws with a
+  tip that keeps its width.
+- **Still to come.** A worn tip stored as its own small height map, so that a
+  crayon keeps the facets it wore.
 - **Tools that lay nothing** use the same stroke runner: stump and finger
   (carry `loose` along and press part of it in), kneaded eraser (lifts
   `loose`), hard eraser (also abrades `held`), burnisher.

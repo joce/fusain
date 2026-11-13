@@ -13,12 +13,14 @@ from ._about import __version__
 from .medium import Medium
 from .paper import Paper
 from .sheet import Sheet
+from .stick import Stick
 from .tools import Tool
 
 __all__ = [
     "Medium",
     "Paper",
     "Sheet",
+    "Stick",
     "Tool",
     "__version__",
     "charcoal",
