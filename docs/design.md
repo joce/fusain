@@ -1,6 +1,6 @@
 # Core model: design proposal
 
-Status: accepted (issue `fusain-ilv`). Steps 1 to 4 of the build order are built, and tilt and wear from step 5; the rest is not.
+Status: accepted (issue `fusain-ilv`). Steps 1 to 4 of the build order are built, and tilt, wear and crayon from step 5; the rest is not.
 
 ## What fusain has to get right
 
@@ -21,7 +21,8 @@ is judged on. Each one is measurable, so each becomes a test.
 4. **Layering.** Coloured pencil is translucent: yellow over blue reads green.
    Pastel is opaque: a light stick covers a dark one.
 5. **Wax.** A waxy layer fills the tooth and turns slick: later layers take
-   badly (resist), and heavy pressure polishes it flat (burnishing).
+   badly (resist), dry media hardly at all, and heavy pressure polishes it
+   flat (burnishing).
 6. **The tip.** A point wears to a flat, so a line widens as it is drawn.
    The side of a stick lays a broad band. Tilting the pencil widens the mark.
 7. **Conservation.** What leaves the stick is on the paper, on the tool that
@@ -76,8 +77,12 @@ code runs all of them; only the numbers change.
 | `sheen` (to come) | Metallic lustre of the laid pigment | everything else | graphite |
 
 Presets group by family: `pencils.HB`, `pencils.B6`, `charcoal.VINE`,
-`charcoal.COMPRESSED`, `pastels.soft("#c0392b")`, `crayons.wax(...)`, and so
-on. Pigment colour works as in oilpaint: a colour is turned into K and S
+`charcoal.COMPRESSED`, `pastels.soft("#c0392b")`, `pastels.oil(...)`,
+`crayons.wax(...)`, and so on. A wax crayon is all held, translucent and
+waxier than a coloured pencil, so it mixes with what is under it and does not
+cover it. An oil pastel is a greasy paste: less than half of it is held at
+once, and the rest lies in the dust layers, where a finger smears it and a
+later layer half covers it. Pigment colour works as in oilpaint: a colour is turned into K and S
 spectra.
 
 ## A tool
@@ -133,7 +138,9 @@ tip:
    that was there, which goes `under`: all but a little of it once the new
    dust is thick enough to cover it.
 6. **Wax.** A waxy medium films over the tooth, which then takes less
-   (resist). Pressed hard, the tip polishes the film: it raises `press`,
+   (resist). How much less depends on what is laid over it: a dry medium,
+   which the tooth has to scrape off, hardly takes at all; a waxy one takes a
+   little; a greasy paste such as oil pastel sticks to it. Pressed hard, the tip polishes the film: it raises `press`,
    which levels the tooth so that every part of the pixel is touched, and it
    drags some of the waxy layer along and lays it back down, valleys
    included. That closes the white specks (burnishing).

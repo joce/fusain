@@ -13,12 +13,13 @@ sister project [oilpaint](https://github.com/joce/oilpaint). The two share their
 colour science and stroke paths through [murex](https://github.com/joce/murex).
 
 Early days. So far there are papers, graphite and coloured pencils, charcoal,
-pastels, stumps and erasers. Tone depends on how hard a stick is pressed and
+soft, hard and oil pastels, wax crayons, stumps and erasers. Tone depends on how hard a stick is pressed and
 how many layers are laid, as on real paper. Charcoal and pastel leave dust
 that a stump drags about and an eraser lifts; coloured pencils are waxy and
 translucent, so their layers mix to the eye; a light pastel covers a dark one.
-A point wears as it draws, until it is sharpened. Crayon is still to come; the
-plan is in [docs/design.md](docs/design.md).
+Crayons and oil pastels leave a film of wax that dry media hardly take over.
+A point wears as it draws, until it is sharpened. The plan for the rest is in
+[docs/design.md](docs/design.md).
 
 ```python
 from fusain import Sheet, papers, pencils
@@ -75,6 +76,23 @@ burnished with a colourless blender. Bottom, soft pastels on grey laid paper.
 Left: light colours over a dark blue ground, which they cover. Middle: orange
 and blue side by side, and the same with the join rubbed with a finger. Right:
 white pastel over black, and lines drawn with a hard pastel.
+
+```python
+from fusain import crayons
+
+sheet.shade((100, 60, 300, 200), crayons.wax("#c0392b"), pressure=0.6, width=9)
+sheet.shade((100, 260, 300, 400), pastels.oil("#e67e22"), pressure=0.7, width=14)
+```
+
+![Wax crayons and oil pastels](examples/output/crayons.png)
+
+Top, wax crayons on cartridge paper. Left: red, yellow and blue, lighter to
+firmer. Middle: the same three laid over one another. Right: a white crayon
+over a black one, which it does not cover, and lines drawn lighter to firmer.
+Bottom, oil pastels on tan paper. Left: light colours over a dark blue ground,
+which they half cover. Middle: orange and blue side by side, and the same with
+the join rubbed with a finger. Right: white oil pastel over black, and lines
+drawn lighter to firmer.
 
 ```python
 from fusain import Stick
