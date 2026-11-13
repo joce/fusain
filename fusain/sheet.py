@@ -423,6 +423,56 @@ class Sheet:
         """
         return self._rub(path, tool, pressure, width)
 
+    def rub(
+        self,
+        area,
+        tool: Tool = STUMP,
+        pressure: hatching.Pressure = 0.5,
+        width: float | None = None,
+        angle: float = 0.0,
+        spacing: float | None = None,
+        hand: float = 1.0,
+    ) -> float:
+        """Rub all of ``area`` with a stump, a finger or an eraser: passes
+        side by side, to and fro, as a hand blends a sky or lifts a light
+        out of a tone. It is to :meth:`smudge` and :meth:`erase` what
+        :meth:`shade` is to :meth:`stroke`.
+
+        ``area`` is a rectangle (x0, y0, x1, y1) or the corners of a
+        polygon; ``pressure`` a number or a function of (x, y), as for
+        :meth:`shade`; ``width`` the width of the tool (by default its own);
+        ``angle`` the direction of the passes in degrees; ``spacing`` how far
+        apart they are (by default half a width); ``hand`` how unsteady the
+        hand is. Where the pressure is nothing for a stretch, the tool is
+        lifted: it rubs on from clean, and what it carried is counted with
+        what it took.
+
+        Returns the volume of pigment the tool took off the sheet in all.
+
+        Raises ValueError or TypeError, before anything is rubbed, as
+        :meth:`shade` does.
+        """
+        if not isinstance(tool, Tool):
+            raise TypeError(f"tool must be a Tool, such as tools.STUMP, got {tool!r}")
+        width = tool.width if width is None else width
+        outline = hatching.as_outline(area)
+        gap = 0.5 * width if spacing is None else spacing
+        _check_hatching(width, gap, angle, hand)
+        taken = 0.0
+        passes = hatching.strokes(outline, angle, width, gap, hand, self._rng)
+        for k, (path, firm, _) in enumerate(passes):
+            path = path[::-1] if k % 2 else path  # to and fro
+            along = hatching.bearing(pressure, path, firm, hand)
+            points, _, u, _ = spline.as_path(path).sample(max(1.0, width / 8.0))
+            touch = np.broadcast_to(np.asarray(along(u), dtype=np.float64), u.shape)
+            marks = np.nonzero(touch > 0.0)[0]
+            if marks.size < 2:
+                continue
+            for run in np.split(marks, np.nonzero(np.diff(marks) > 1)[0] + 1):
+                if run.size >= 2:
+                    taken += self._rub(points[run], tool, touch[run].tolist(), width)
+        return taken
+
     def fix(self, amount: float = 1.0) -> float:
         """Spray fixative over the whole sheet: it sets the share ``amount``
         (0 to 1) of the dust that was still loose. Dust that is set stays
@@ -547,15 +597,7 @@ class Sheet:
         broad = width * _spread(tilt)  # how wide a stroke's mark is
         apart = PEN_SPACING if isinstance(medium, Pen) else hatching.SPACING
         gap = apart * broad if spacing is None else spacing
-        for name, value in (("width", width), ("spacing", gap)):
-            if not (math.isfinite(value) and value > 0):
-                raise ValueError(
-                    f"{name} must be a number of pixels above 0: {value!r}"
-                )
-        if not math.isfinite(angle):
-            raise ValueError(f"angle must be a finite number of degrees: {angle!r}")
-        if not (math.isfinite(hand) and hand >= 0):
-            raise ValueError(f"hand must be 0 (ruler-straight) or more, got {hand!r}")
+        _check_hatching(width, gap, angle, hand)
         laid = 0.0
         for path, firm, tip in hatching.strokes(
             outline, angle, width, gap, hand, self._rng, broad
@@ -569,6 +611,17 @@ class Sheet:
         """Render and save as PNG."""
         img = self.render(**render_options)
         write_png(path, np.round(img * 255).astype(np.uint8))
+
+
+def _check_hatching(width: float, gap: float, angle: float, hand: float) -> None:
+    """ValueError unless strokes can be laid side by side with these."""
+    for name, value in (("width", width), ("spacing", gap)):
+        if not (math.isfinite(value) and value > 0):
+            raise ValueError(f"{name} must be a number of pixels above 0: {value!r}")
+    if not math.isfinite(angle):
+        raise ValueError(f"angle must be a finite number of degrees: {angle!r}")
+    if not (math.isfinite(hand) and hand >= 0):
+        raise ValueError(f"hand must be 0 (ruler-straight) or more, got {hand!r}")
 
 
 def _spread(tilt: float) -> float:

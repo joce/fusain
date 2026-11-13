@@ -51,6 +51,7 @@ from fusain import charcoal, tools
 sheet.shade((100, 60, 500, 200), charcoal.VINE, pressure=0.6, width=14)
 sheet.smudge([(120, 130), (560, 130)], tools.STUMP)    # drags the dust along
 sheet.erase([(100, 170), (500, 170)], tools.KNEADED)   # lifts it
+sheet.rub((100, 60, 600, 200), tools.FINGER)           # blends a whole area
 ```
 
 ![Charcoal, a stump and erasers](examples/output/charcoal.png)

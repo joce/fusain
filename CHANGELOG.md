@@ -21,6 +21,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `Sheet.rub(area, tool, ...)`: rubs or erases a whole area, in passes side
+  by side, to and fro. It is to `smudge` and `erase` what `shade` is to
+  `stroke`: the pressure may be a function of (x, y), and where it is nothing
+  the tool is lifted.
 - Ballpoint pens, `fusain.pens` (`pens.BLUE`, `pens.BLACK`, `pens.RED`,
   `pens.ballpoint(colour, width)`, `Pen`), for `Sheet.stroke` and
   `Sheet.shade`. A line is even and continuous at any pressure, paler and
