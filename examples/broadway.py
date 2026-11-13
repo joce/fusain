@@ -183,11 +183,39 @@ PAINTS = {
 COATS = {
     "red": tones("#cc382c", "#702c40"),
     "navy": tones("#3e4c70", "#242a46"),
-    "camel": tones("#dab27a", "#7c6c6a"),
+    "camel": tones("#d4a670", "#7a6668"),
     "black": tones("#3e3a3c", "#201e30"),
-    "teal": tones("#3c8288", "#28485e"),
-    "cream": tones("#f0e6ce", "#888ca8"),
+    "charcoal": tones("#5c5a5c", "#2e2e3e"),
+    "olive": tones("#76703e", "#3c4034"),
+    "brown": tones("#8a5a3a", "#463242"),
+    "plum": tones("#7a3c58", "#3e2444"),
+    "teal": tones("#3c7c84", "#28485e"),
+    "cream": tones("#ece0c4", "#868aa6"),
+    "mustard": tones("#d29a34", "#76603e"),
 }
+#: Trousers, skirts and stockings; hair; skin; what people carry.
+LEGS = {
+    "dark": tones("#3e3e48", "#20202e"),
+    "black": tones("#2e2c30", "#18182a"),
+    "jeans": tones("#5a74a0", "#303c60"),
+    "khaki": tones("#c4ac84", "#666274"),
+    "grey": tones("#9c9894", "#545870"),
+}
+HAIR = {
+    "black": tones("#2c2628", "#16141e"),
+    "dark": tones("#4a3428", "#221c24"),
+    "brown": tones("#86562e", "#3e2c2e"),
+    "fair": tones("#dcb470", "#7c6c5a"),
+    "grey": tones("#c4beb4", "#6c6c7c"),
+}
+SKINS = {
+    "fair": tones("#ecbc94", "#8c6e76"),
+    "olive": tones("#cc9468", "#6e5058"),
+    "brown": tones("#8e5c40", "#4a343e"),
+}
+LEATHER = tones("#7a4a2c", "#3a2a32")
+CANVAS = tones("#eadcbc", "#878aa4")
+SHOE = rgb("#2a2228")
 
 
 def far(colour: Colour, z: float) -> Colour:
@@ -617,16 +645,155 @@ class Car:
 
 
 @dataclass(frozen=True)
-class Walker:
-    """Someone walking: where, the coat, how far the feet are apart as the
-    eye sees them (someone crossing the street strides sideways to the eye)
-    and height."""
+class Figure:
+    """Someone in the street: where they stand (``x`` across the street,
+    ``z`` along it), what they wear (the ``coat``, its ``hem`` as a share of
+    their height, the ``legs``, a ``scarf``), which way they face
+    (``toward`` the eye, ``away`` from it, or crossing to its ``left`` or
+    ``right``), where they are in a stride (``step``, -1 to 1: its sign
+    says which leg is ahead, 0 is standing on both), how tall and how broad
+    (``build``), their ``hair`` and its ``cut``, their ``skin``, how far
+    head and shoulders lean (``lean``, metres, toward the eye's right if
+    more than 0), and what they are doing with their hands: ``swing``,
+    ``pockets``, a ``bag`` across the body, a ``tote`` in a hand, a
+    ``phone`` at the ear, or holding a ``child`` by the hand."""
 
     x: float
     z: float
     coat: str
-    stride: float = 0.03
-    tall: float = 1.72
+    legs: str = "dark"
+    facing: str = "toward"
+    step: float = 0.6
+    tall: float = 1.74
+    build: float = 1.0
+    hem: float = 0.42
+    hair: str = "dark"
+    cut: str = "short"
+    skin: str = "fair"
+    hands: str = "swing"
+    lean: float = 0.0
+    scarf: str = ""
+
+    @property
+    def across(self) -> float:
+        """1 if they walk to the eye's right, -1 to its left, 0 if they come
+        toward it or go away from it."""
+        return {"left": -1.0, "right": 1.0}.get(self.facing, 0.0)
+
+
+#: A standing adult is this many heads tall.
+HEADS = 7.5
+
+Point = tuple[float, float]
+Limb = tuple[Point, Point, Point]
+
+
+@dataclass(frozen=True)
+class Frame:
+    """Where the parts of a figure are, in metres, in the upright plane it
+    stands in: ``u`` across the sheet from its feet, ``y`` up. The head is
+    an oval whose top is at ``top``, ``head`` high, its middle at ``face``;
+    the collar is at ``neck``; the coat is ``chest`` wide at the shoulders
+    and ``skirt`` wide at its ``hem``; each limb runs from where it joins
+    the body through its joint to its end (hip, knee, ankle; shoulder,
+    elbow, wrist), the one behind first."""
+
+    top: float
+    head: float
+    face: float
+    neck: float
+    chest: float
+    hem: float
+    skirt: float
+    legs: tuple[Limb, ...]
+    arms: tuple[Limb, ...]
+
+
+def front_legs(fig: Figure) -> tuple[Limb, ...]:
+    """The legs of someone seen from in front or behind: the one ahead
+    planted straight, the other behind with its heel up, so that its foot
+    shows a little higher and nearer the middle."""
+    t, b = fig.tall, fig.build
+    legs = []
+    for side in (-1.0, 1.0):
+        lift = 0.0 if side * fig.step >= 0.0 else abs(fig.step)
+        hip = (side * 0.075 * b, 0.53 * t)
+        knee = (side * (0.085 * b - 0.02 * lift), 0.28 * t + 0.05 * lift)
+        foot = (side * (0.1 * b - 0.04 * lift), 0.03 + 0.08 * lift)
+        legs.append((hip, knee, foot))
+    return tuple(sorted(legs, key=lambda leg: -leg[2][1]))
+
+
+def side_legs(fig: Figure) -> tuple[Limb, ...]:
+    """The legs of someone seen from the side: a scissor, the leg ahead
+    reaching forward to the heel, the one behind pushing off the toe; or,
+    standing, one foot a little before the other."""
+    t, way = fig.tall, fig.across
+    reach = 0.2 * t * abs(fig.step) + 0.05
+    hip = (0.0, 0.53 * t)
+    ahead = (hip, (way * 0.5 * reach, 0.28 * t), (way * reach, 0.03))
+    lift = abs(fig.step)
+    knee = (-way * 0.2 * reach, 0.28 * t + 0.02 * lift)
+    behind = (hip, knee, (-way * reach, 0.03 + 0.09 * lift))
+    return (behind, ahead)
+
+
+def front_arms(fig: Figure, chest: float) -> tuple[Limb, ...]:
+    """The arms of someone seen from in front or behind: hanging at the
+    sides and swinging against the legs, hands in the pockets, one hand on
+    the strap of a bag, at the ear, or reaching down to a child's."""
+    t = fig.tall
+    arms = []
+    for side in (-1.0, 1.0):
+        root = (side * (chest - 0.06), fig.tall - 1.55 * t / HEADS)
+        swing = abs(fig.step) * (side * fig.step < 0.0)
+        elbow = (side * (chest + 0.015), 0.63 * t + 0.03 * swing)
+        hand = (side * (chest - 0.01 - 0.05 * swing), 0.45 * t + 0.08 * swing)
+        held = fig.hands if side < 0 or fig.hands == "pockets" else "swing"
+        if held == "pockets":
+            elbow, hand = (side * (chest + 0.04), 0.64 * t), (side * 0.15, 0.5 * t)
+        elif held == "bag":
+            elbow, hand = (side * (chest + 0.03), 0.66 * t), (side * 0.12, 0.7 * t)
+        elif held == "phone":
+            elbow = (side * (chest + 0.05), 0.7 * t)
+            hand = (side * 0.1, t - 0.65 * t / HEADS)
+        elif held == "child":
+            elbow, hand = (side * (chest + 0.04), 0.62 * t), (side * (chest + 0.1), 0.44 * t)
+        arms.append((root, elbow, hand))
+    return tuple(arms)
+
+
+def side_arms(fig: Figure, chest: float) -> tuple[Limb, ...]:
+    """The arms of someone seen from the side: one swinging forward, the
+    other back; a hand in a pocket stays by the hip."""
+    t, way = fig.tall, fig.across
+    root = (0.0, t - 1.6 * t / HEADS)
+    swing = 0.12 * t * abs(fig.step)
+    arms = []
+    for k in (-1.0, 1.0):
+        if fig.hands == "pockets":
+            elbow, hand = (-way * (chest + 0.02), 0.64 * t), (0.0, 0.5 * t)
+        else:
+            elbow = (k * way * 0.4 * swing, 0.63 * t)
+            hand = (k * way * (swing + 0.02 * k), 0.45 * t + 0.25 * swing)
+        arms.append((root, elbow, hand))
+    return tuple(arms)
+
+
+def frame(fig: Figure) -> Frame:
+    """The body of a figure, from its height, its build and its pose: seven
+    and a half heads tall, the shoulders two heads wide, the legs from half
+    the height."""
+    t, b = fig.tall, fig.build
+    head = t / HEADS
+    if fig.across:
+        chest, skirt = 0.13 * b, 0.15 * b
+        legs, arms = side_legs(fig), side_arms(fig, chest)
+    else:
+        chest, skirt = 0.22 * b, 0.18 * b
+        legs, arms = front_legs(fig), front_arms(fig, chest)
+    face = fig.lean + 0.025 * fig.across
+    return Frame(t, head, face, t - 1.2 * head, chest, fig.hem * t, skirt, legs, arms)
 
 
 @dataclass(frozen=True)
@@ -675,22 +842,42 @@ CARS = (
     Car(5.4, 62.0, "black"),
     Car(5.4, 75.0, "red"),
 )
-WALKERS = (
-    Walker(0.6, 21.3, "red", 0.2),
-    Walker(-0.4, 22.4, "navy", 0.17),
-    Walker(9.6, 27.0, "camel"),
-    Walker(10.3, 27.6, "black"),
-    Walker(8.6, 40.0, "teal"),
-    Walker(10.0, 52.0, "cream"),
-    Walker(9.0, 66.0, "red"),
-    Walker(8.4, 21.0, "navy"),
-    Walker(-9.0, 21.0, "black"),
-    Walker(-9.8, 33.0, "camel"),
-    Walker(-10.4, 34.0, "navy"),
-    Walker(-8.8, 47.0, "cream"),
-    Walker(-3.0, 121.0, "black", 0.2),
-    Walker(1.5, 122.0, "red", 0.2),
-    Walker(4.0, 121.5, "navy", 0.2),
+#: The people: in the roadway, a woman in red crossing with a man a step
+#: behind; on the sunny pavement a couple coming down the street, someone
+#: waiting at the kerb, two talking, someone with a child; in the shade of
+#: the other pavement, people coming and going, someone on the telephone;
+#: and a few far off, crossing at the next corner.
+CROWD = (
+    Figure(0.75, 21.3, "red", "black", "right", 0.8, 1.7, 0.95, 0.4, "black", "long", hands="bag"),
+    Figure(-0.3, 22.3, "navy", "grey", "right", -0.7, 1.82, 1.05, 0.47, "dark"),
+    Figure(7.9, 17.6, "navy", "jeans", "toward", 0.7, 1.8, 1.05, 0.52, "dark", hands="pockets"),
+    Figure(8.55, 18.2, "camel", "dark", "toward", -0.6, 1.66, 0.92, 0.34, "brown", "long", hands="bag", scarf="#b8402c"),
+    Figure(6.95, 24.0, "olive", "khaki", "left", 0.0, 1.76, hands="pockets", hem=0.5),
+    Figure(10.15, 27.0, "black", "grey", "right", 0.0, 1.68, 0.92, 0.34, "fair", "long", lean=0.03, hands="tote"),
+    Figure(10.75, 27.2, "brown", "jeans", "left", 0.0, 1.82, 1.05, 0.48, "grey", lean=-0.03),
+    Figure(9.4, 35.5, "plum", "black", "away", 0.7, 1.68, 0.92, 0.38, "dark", "long", hands="tote"),
+    Figure(8.45, 44.0, "teal", "dark", "toward", 0.5, 1.74, hem=0.4, hands="child"),
+    Figure(7.95, 44.1, "mustard", "jeans", "toward", -0.5, 1.12, 0.8, 0.45, "fair"),
+    Figure(9.6, 53.0, "cream", "dark", "away", 0.6, 1.7, 0.95, 0.36, "brown", "long"),
+    Figure(10.2, 53.6, "charcoal", "jeans", "away", -0.6, 1.8, 1.05, 0.48, "black"),
+    Figure(8.9, 66.0, "red", "dark", "toward", 0.6, 1.7, hem=0.38),
+    Figure(9.4, 80.0, "navy", "khaki", "away", 0.6),
+    Figure(10.4, 84.0, "camel", "dark", "toward", -0.6),
+    Figure(8.8, 96.0, "black", "jeans", "toward", 0.6),
+    Figure(9.8, 104.0, "cream", "dark", "away", 0.6),
+    Figure(-8.7, 23.0, "charcoal", "dark", "toward", 0.6, 1.8, 1.05, 0.45, "black", hands="pockets"),
+    Figure(-9.3, 31.0, "camel", "black", "away", 0.6, 1.68, 0.92, 0.36, "fair", "long", hands="bag"),
+    Figure(-9.9, 31.6, "navy", "dark", "away", -0.6, 1.8, 1.05, 0.46, "dark"),
+    Figure(-7.6, 39.5, "cream", "grey", "right", 0.0, 1.72, hem=0.34, hair="brown", cut="long", hands="phone"),
+    Figure(-9.6, 46.5, "olive", "jeans", "toward", 0.6, 1.78, hem=0.48),
+    Figure(-8.8, 58.5, "black", "dark", "away", 0.6, 1.76),
+    Figure(-9.4, 59.2, "teal", "black", "away", -0.6, 1.66, 0.92, 0.36, cut="long"),
+    Figure(-10.2, 72.0, "navy", "khaki", "toward", 0.6),
+    Figure(-8.4, 88.0, "camel", "dark", "toward", -0.6),
+    Figure(-9.6, 100.0, "black", "dark", "away", 0.6),
+    Figure(-3.0, 121.0, "black", "dark", "right", 0.6),
+    Figure(1.5, 122.0, "camel", "dark", "left", 0.6),
+    Figure(4.0, 121.5, "navy", "dark", "left", -0.6),
 )
 #: (The first lamp stands behind the eye: only its shadow is in the picture.)
 LAMPS = (Lamp(-1, 1.5), Lamp(1, 20.5), Lamp(-1, 58.0), Lamp(1, 78.0))
@@ -741,6 +928,9 @@ class Easel:
 
     def __init__(self) -> None:
         self.rng = np.random.default_rng(SEED)
+        #: (the people have their own, so that redrawing them leaves the
+        #: trees as they were)
+        self.crowd = np.random.default_rng(SEED + 1)
         self.sheet = Sheet(WIDTH, HEIGHT, paper=PAPER, seed=SEED)
         self.buildings = street(self.rng)
         self.trees = avenue(self.rng)
@@ -848,7 +1038,7 @@ class Easel:
         low, high = level(x[0], x[1], y[0], z), level(x[0], x[1], y[1], z)
         self.panel(low, high, colours, firm)
 
-    def cast(self, foot, tall: float, thick: float) -> None:
+    def cast(self, foot, tall: float, thick: float, rng=None) -> None:
         """The shadow a post, a trunk or a person ``thick`` metres wide lays
         on sunlit ground, from its foot to where the shadow of its top
         falls."""
@@ -857,7 +1047,7 @@ class Easel:
         lo = max(float(foot[2]), 3.3)
         if tip[2] <= lo:
             return
-        for near, away in reaches(lo, float(tip[2]), self.rng):
+        for near, away in reaches(lo, float(tip[2]), self.rng if rng is None else rng):
             share = (np.array([near, away]) - foot[2]) / (tip[2] - foot[2])
             ends = foot + share[:, None] * (tip - foot)
             middle = math.sqrt(near * away)
