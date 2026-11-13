@@ -8,6 +8,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Ballpoint pens, `fusain.pens` (`pens.BLUE`, `pens.BLACK`, `pens.RED`,
+  `pens.ballpoint(colour, width)`, `Pen`), for `Sheet.stroke` and
+  `Sheet.shade`. A line is even and continuous at any pressure, paler and
+  narrower when light; the ink is clear, so crossings and layers of hatching
+  darken. It is a stain in the paper (`Sheet.ink`, `Sheet.inked`), under
+  everything else: no eraser takes it off, and a pencil draws over it. The
+  ball skids on heavy graphite and on wax.
 - Fixative, `Sheet.fix(amount=1.0)`: sets the dust where it lies. A stump or
   a finger hardly moves it afterwards and a kneaded eraser lifts little; a
   hard eraser still takes it off. It shows as it lay, a little darker, and

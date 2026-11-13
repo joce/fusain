@@ -1,6 +1,6 @@
 # Core model: design proposal
 
-Status: accepted (issue `fusain-ilv`). Steps 1 to 5 of the build order are built, and fixative from step 6; the ballpoint pen is not.
+Status: accepted (issue `fusain-ilv`). All six steps of the build order are built.
 
 ## What fusain has to get right
 
@@ -38,6 +38,7 @@ Per pixel, all `float32`:
 | `press` | How far the tooth has been crushed or polished here (0 to 1): burnishing, and lines indented with a stylus. |
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
 | `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. |
+| `ink`, `inked` | The ink of pens, a stain in the paper under everything else: K, S and volume, and the share of the pixel it is on. Allocated when a pen first draws. |
 | `fixed` | Volume of the dust here that fixative has set, in each of the two layers of dust. |
 | `under`, `loose` | Pigment lying on the surface as dust: K, S, volume and sheen, in two layers. `loose` is on top; what a new pass covers goes `under`. |
 
@@ -231,8 +232,25 @@ knives, which model a liquid.
 6. **Extras.** Fixative, hatching helpers, ballpoint pen.
 
 Ballpoint is last because it is a different mechanism: a paste the ball rolls
-on at a steady rate, not something the paper scrapes off. It fits the same
-sheet (fully held, transparent, indents the paper) with its own deposit rule.
+on at a steady rate, not something the paper scrapes off. It has its own
+kernel and its own layer:
+
+- **The ball** is hard and small, so even a light touch reaches the valleys of
+  the tooth: a light line is still a line, not specks on the peaks. It is
+  round, so a light line is narrower than the ball.
+- **The ink** is laid at a rate that does not depend on the tooth or on how
+  much is there already, only on the pressure (the lightest touch lays about a
+  seventh of the firmest) and on a slow unevenness along the line. It is a
+  clear dye: lines that cross and layers of hatching darken towards black.
+- **It is a stain** in the paper, rendered under whatever the paper carries,
+  and no tool touches it: an eraser takes the pencil sketch and leaves the
+  ink. A pencil draws over it as on bare paper.
+- **The ball skids** on a thick film of pigment and on wax, and lays little
+  there; over a light pencil sketch it writes as on bare paper.
+
+Not built: the groove a ballpoint presses into the paper (`fusain-dyh`), the
+blob of ink a ball leaves where a line starts or turns, and the sheen of
+heavy ink.
 
 ## Sketch of the API
 
