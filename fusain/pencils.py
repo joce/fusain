@@ -3,7 +3,8 @@
 ``pencils.coloured("#c0392b")``; and ``pencils.BLENDER``, a colourless one.
 
 A graphite lead is graphite fired with clay. More clay makes it harder: it
-wears less, stays on the peaks of the tooth and leaves a paler grey. A
+wears less, stays on the peaks of the tooth and leaves a paler grey. Graphite
+mirrors the light, so a heavy layer of a soft lead shines under a lamp. A
 coloured lead is pigment in wax: translucent, so that layers of two colours
 mix to the eye, and waxy, so that the tooth turns slick as it fills.
 """
@@ -46,7 +47,13 @@ def grade(name: str) -> Medium:
     graphite = GRAPHITE_HARD + (GRAPHITE_SOFT - GRAPHITE_HARD) * softness
     mixed = Pigment.mix((GRAPHITE, graphite), (CLAY, 1.0 - graphite))
     lead = Pigment(mixed, strength=STRENGTH, name=f"{key} lead")
-    return Medium(lead, softness=softness, binding=BINDING, name=f"{key} pencil")
+    return Medium(
+        lead,
+        softness=softness,
+        binding=BINDING,
+        sheen=graphite,  # (the graphite shines, the clay does not)
+        name=f"{key} pencil",
+    )
 
 
 H9, H8, H7, H6, H5, H4, H3, H2 = (grade(f"{n}H") for n in range(9, 1, -1))

@@ -18,8 +18,8 @@ how many layers are laid, as on real paper. Charcoal and pastel leave dust
 that a stump drags about and an eraser lifts; coloured pencils are waxy and
 translucent, so their layers mix to the eye; a light pastel covers a dark one.
 Crayons and oil pastels leave a film of wax that dry media hardly take over.
-A point wears as it draws, until it is sharpened. The plan for the rest is in
-[docs/design.md](docs/design.md).
+A point wears as it draws, until it is sharpened. Heavy graphite shines under
+the lamp. The plan for the rest is in [docs/design.md](docs/design.md).
 
 ```python
 from fusain import Sheet, papers, pencils
@@ -108,6 +108,19 @@ pencil.sharpen()
 One line drawn back and forth down the sheet without sharpening, with a 2H, a
 2B and a 6B, each sharp at the top: the softer the lead, the sooner its point
 is a flat and its line a band.
+
+```python
+image = sheet.render()                    # under the default lamp, graphite shines a little
+image = sheet.render(light=(0, 0, 1))     # lamp overhead: heavy graphite turns silvery
+image = sheet.render(gloss=0)             # matte, as a scanner sees it
+```
+
+![Graphite's shine under three lamps](examples/output/shine.png)
+
+One drawing under a raking lamp, the default lamp and a lamp straight
+overhead. Left: an HB, a 4B and an 8B, lighter to firmer. Right: three firm
+layers of 8B beside three of compressed charcoal. The higher the lamp, the
+more the heavy graphite mirrors it; the charcoal stays black.
 
 ![The papers under a raking light](examples/output/papers.png)
 
