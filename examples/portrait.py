@@ -12,9 +12,9 @@ WIDTH, HEIGHT = 1100, 1400
 #: The model is computed on a grid this many times coarser than the sheet.
 COARSE = 2
 #: Pixels of the sheet per unit of the model (about a head's height).
-SCALE = 760.0
+SCALE = 800.0
 #: Where on the sheet the middle of the head (between the eyes) lands.
-CENTRE = (560.0, 560.0)
+CENTRE = (520.0, 560.0)
 
 
 def rotation(yaw: float, pitch: float, roll: float) -> np.ndarray:
@@ -28,10 +28,10 @@ def rotation(yaw: float, pitch: float, roll: float) -> np.ndarray:
     return rz @ rx @ ry
 
 
-HEAD = rotation(-26.0, -6.0, 5.0)
+HEAD = rotation(28.0, -5.0, -6.0)
 HEAD_AT = np.array([0.0, 0.0, 0.0])
-BODY = rotation(-10.0, 0.0, 1.0)
-BODY_AT = np.array([0.03, 0.0, -0.05])
+BODY = rotation(12.0, 0.0, 2.0)
+BODY_AT = np.array([-0.02, 0.0, -0.05])
 
 
 def smin(a, b, k):
@@ -70,39 +70,45 @@ def mirrored(p):
 def head_sdf(p):
     """Distance to the head's skin, in head space."""
     q = mirrored(p)
-    # the face narrows toward the chin
-    y = p[:, 1]
-    narrow = 1.0 + 0.55 * np.clip(-(y + 0.05), 0.0, None)
-    f = p.copy()
-    f[:, 0] *= narrow
-    d = ellipsoid(p, (0.0, 0.10, -0.07), (0.295, 0.40, 0.40))
-    d = smin(d, ellipsoid(f, (0.0, -0.13, 0.04), (0.275, 0.36, 0.27)) * 0.8, 0.08)
-    d = smin(d, ellipsoid(q, (0.165, -0.07, 0.17), (0.10, 0.075, 0.10)), 0.05)
-    d = smin(d, sphere(p, (0.0, -0.385, 0.20), 0.07), 0.06)
-    # brow ridge and sockets
-    d = smin(d, ellipsoid(q, (0.10, 0.075, 0.245), (0.09, 0.035, 0.05)), 0.03)
-    d = smax(d, -ellipsoid(q, (0.10, 0.0, 0.29), (0.068, 0.048, 0.05)), 0.035)
-    d = smin(d, sphere(q, (0.10, 0.0, 0.212), 0.068), 0.008)
+    d = ellipsoid(p, (0.0, 0.11, -0.07), (0.315, 0.39, 0.41))
+    # the jaw, from below the ear to the angle and on to the chin
+    jaw = capsule(q, (0.27, -0.06, -0.06), (0.225, -0.27, 0.02), 0.045)
+    jaw = smin(jaw, capsule(q, (0.225, -0.27, 0.02), (0.045, -0.425, 0.19), 0.04), 0.06)
+    jaw = smin(jaw, ellipsoid(p, (0.0, -0.25, 0.02), (0.24, 0.17, 0.22)), 0.08)
+    d = smin(d, jaw, 0.09)
+    d = smin(d, ellipsoid(q, (0.145, -0.13, 0.15), (0.125, 0.13, 0.13)), 0.06)
+    d = smin(d, ellipsoid(q, (0.19, -0.035, 0.16), (0.09, 0.06, 0.10)), 0.05)
+    d = smin(d, ellipsoid(p, (0.0, -0.27, 0.165), (0.14, 0.12, 0.14)), 0.05)
+    d = smin(d, ellipsoid(p, (0.0, -0.40, 0.21), (0.08, 0.06, 0.075)), 0.05)
+    # brow ridge, sockets and eyeballs
+    d = smin(d, ellipsoid(q, (0.12, 0.08, 0.275), (0.085, 0.03, 0.05)), 0.03)
+    d = smax(d, -ellipsoid(q, (0.125, 0.0, 0.31), (0.072, 0.052, 0.058)), 0.03)
+    d = smin(d, sphere(q, EYE, EYE_R), 0.01)
     # nose
-    nose = capsule(p, (0.0, 0.05, 0.285), (0.0, -0.115, 0.375), 0.019)
-    nose = smin(nose, sphere(p, (0.0, -0.13, 0.368), 0.03), 0.02)
-    nose = smin(nose, sphere(q, (0.03, -0.148, 0.328), 0.025), 0.02)
-    d = smin(d, nose, 0.025)
-    # the barrel of the mouth and the lips
-    d = smin(d, ellipsoid(p, (0.0, -0.25, 0.19), (0.13, 0.10, 0.12)), 0.05)
-    d = smin(d, ellipsoid(p, (0.0, -0.232, 0.285), (0.062, 0.020, 0.03)), 0.02)
-    d = smin(d, ellipsoid(p, (0.0, -0.272, 0.28), (0.055, 0.022, 0.03)), 0.02)
+    nose = capsule(p, (0.0, 0.035, 0.30), (0.0, -0.15, 0.385), 0.015)
+    nose = smin(nose, sphere(p, (0.0, -0.162, 0.37), 0.026), 0.02)
+    nose = smin(nose, ellipsoid(q, (0.033, -0.172, 0.33), (0.022, 0.021, 0.027)), 0.018)
+    d = smin(d, nose, 0.03)
+    # the lips
+    d = smin(d, ellipsoid(p, (0.0, -0.258, 0.30), (0.07, 0.022, 0.03)), 0.02)
+    d = smin(d, ellipsoid(p, (0.0, -0.302, 0.292), (0.06, 0.025, 0.03)), 0.02)
     return d
+
+
+#: The centre of the right eyeball (mirrored for the left) and its radius.
+EYE = (0.125, 0.0, 0.245)
+EYE_R = 0.056
 
 
 def body_sdf(p):
     """Distance to the neck, shoulders and chest, in body space."""
-    neck = capsule(p, (0.0, -0.15, -0.06), (0.0, -0.80, -0.05), 0.112)
-    yoke = capsule(p, (-0.40, -0.83, -0.10), (0.40, -0.83, -0.10), 0.13)
-    chest = ellipsoid(p, (0.0, -1.18, -0.02), (0.50, 0.40, 0.24))
-    arms = capsule(mirrored(p), (0.43, -0.86, -0.08), (0.52, -1.6, -0.08), 0.15)
-    d = smin(yoke, chest, 0.12)
-    d = smin(d, arms, 0.06)
+    q = mirrored(p)
+    neck = capsule(p, (0.0, -0.10, -0.07), (0.0, -0.75, -0.05), 0.115)
+    slope = capsule(q, (0.06, -0.60, -0.08), (0.40, -0.76, -0.09), 0.10)
+    chest = ellipsoid(p, (0.0, -1.12, -0.03), (0.47, 0.38, 0.22))
+    arms = capsule(q, (0.42, -0.84, -0.09), (0.50, -1.6, -0.09), 0.14)
+    d = smin(slope, chest, 0.12)
+    d = smin(d, arms, 0.08)
     return smin(d, neck, 0.10)
 
 

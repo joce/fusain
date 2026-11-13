@@ -934,6 +934,7 @@ class Easel:
         #: (the people have their own, so that redrawing them leaves the
         #: trees as they were)
         self.crowd = np.random.default_rng(SEED + 1)
+        self.upward = False  # (which way the strokes of a figure run)
         self.sheet = Sheet(WIDTH, HEIGHT, paper=PAPER, seed=SEED)
         self.buildings = street(self.rng)
         self.trees = avenue(self.rng)
@@ -1833,9 +1834,12 @@ class Life(Ground):
             self.speck(fig, body, dress)
             return
         near = size >= 26.0
-        for _ in range(2):  # (a second layer, over the first, fixed, covers)
+        # (a second layer over the first, fixed, covers it; laid the other
+        # way, it is firm at the ends where the first lifted)
+        for self.upward in (False, True):
             self.masses(fig, body, dress, near)
             self.sheet.fix()
+        self.upward = False
         self.carried(fig, body, dress)
         self.modelled(fig, body, dress, near)
         self.head(fig, body, dress, near)
@@ -1890,6 +1894,8 @@ class Life(Ground):
         in (see :class:`Frame`), ``wide`` metres wide, its round ends kept
         inside them."""
         points = [(fig.x + u, y, fig.z) for u, y in ends]
+        if self.upward:
+            points.reverse()
         how.setdefault("square", True)
         self.rail(points, colours, firm, wide * rise(fig.z), **how)
 
@@ -2005,7 +2011,9 @@ class Life(Ground):
         top, face, head = body.top, body.face, body.head
         skin, hair = dress["skin"], dress["hair"]
         oval = ((face, top), (face, top - head))
-        self.part(fig, oval, hair if fig.facing == "away" else skin, 0.9, 0.66 * head)
+        tone = hair if fig.facing == "away" else skin
+        self.part(fig, oval, tone, 0.9, 0.66 * head)
+        self.part(fig, oval[::-1], tone, 0.8, 0.6 * head)
         if near or rise(fig.z) > 18.0:
             self.hair(fig, body, hair)
         if near and fig.facing != "away":
