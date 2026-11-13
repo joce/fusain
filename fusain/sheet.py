@@ -46,10 +46,12 @@ class Sheet:
 
     Per pixel the sheet holds the height of the tooth (``tooth``, 0 valley to
     1 peak), how far it has been crushed or polished (``press``, 0 to 1), the
-    pigment fixed to the paper (``held``) and the pigment lying on it as dust
-    (``loose``), which is what a stump, an eraser or a later stroke can still
-    move, and the share of the pixel that carries pigment (``cover``): the
-    rest shows bare paper. Memory: about 0.23 KB per pixel.
+    pigment fixed to the paper (``held``) and the pigment lying on it as dust,
+    which is what a stump, an eraser or a later stroke can still move: in two
+    layers, ``loose`` on top and ``under`` beneath it, so that what was laid
+    last is seen over what was laid before. ``cover`` is the share of the
+    pixel that carries pigment: the rest shows bare paper. Memory: about 0.34
+    KB per pixel.
 
     Raises ValueError or TypeError unless ``width`` and ``height`` are whole
     numbers above 0.
@@ -71,6 +73,7 @@ class Sheet:
         self.press = np.zeros((H, W), np.float32)
         self.cover = np.zeros((H, W), np.float32)
         self.held = np.zeros((H, W, HELD), np.float32)
+        self.under = np.zeros((H, W, LOOSE), np.float32)
         self.loose = np.zeros((H, W, LOOSE), np.float32)
 
     def copy(self) -> Sheet:
@@ -79,14 +82,14 @@ class Sheet:
         new.__dict__.update(self.__dict__)
         new._rng = np.random.default_rng()
         new._rng.bit_generator.state = self._rng.bit_generator.state
-        for name in ("tooth", "press", "cover", "held", "loose"):
+        for name in ("tooth", "press", "cover", "held", "under", "loose"):
             setattr(new, name, getattr(self, name).copy())
         return new
 
     # ------------------------------------------------------------------
     def pigment(self) -> np.ndarray:
         """Volume of pigment at each pixel, held and loose, (H, W)."""
-        return self.held[..., IV] + self.loose[..., IV]
+        return self.held[..., IV] + self.under[..., IV] + self.loose[..., IV]
 
     def reflectance(self) -> np.ndarray:
         """Reflectance spectrum of the drawing, (H, W, N_BANDS) float32: the
@@ -101,19 +104,21 @@ class Sheet:
             yield slice(y, min(y + ROWS, self.height))
 
     def _reflectance_rows(self, rows: slice) -> np.ndarray:
-        held, loose = self.held[rows], self.loose[rows]
-        out = np.empty((*held.shape[:2], N))
+        layers = (self.held[rows], self.under[rows], self.loose[rows])
+        out = np.empty((*layers[0].shape[:2], N))
         out[:] = self.ground
-        marked = (held[..., IV] > 0) | (loose[..., IV] > 0)
+        marked = layers[0][..., IV] > 0
+        for layer in layers[1:]:
+            marked |= layer[..., IV] > 0
         if marked.any():
             # the pigment lies on the covered share of the pixel, that much
             # thicker; the rest of the pixel is bare paper
             share = np.clip(self.cover[rows][marked].astype(np.float64), 1e-6, 1.0)
-            h = held[marked].astype(np.float64) / share[:, None]
-            lo = loose[marked].astype(np.float64) / share[:, None]
-            under = sp.km_layer(h[:, :N], h[:, IS], self.ground)
-            over = sp.km_layer(lo[:, :N], lo[:, IS], under)
-            out[marked] = share[:, None] * over + (1.0 - share[:, None]) * self.ground
+            seen = self.ground
+            for layer in layers:  # from the paper up
+                packed = layer[marked].astype(np.float64) / share[:, None]
+                seen = sp.km_layer(packed[:, :N], packed[:, IS], seen)
+            out[marked] = share[:, None] * seen + (1.0 - share[:, None]) * self.ground
         return out
 
     # ------------------------------------------------------------------
@@ -155,8 +160,10 @@ class Sheet:
         return float(
             eng.lay_stroke(
                 self.tooth,
+                self.press,
                 self.cover,
                 self.held,
+                self.under,
                 self.loose,
                 xs,
                 ys,
@@ -169,6 +176,7 @@ class Sheet:
                 float(pigment.S),
                 float(medium.softness),
                 float(medium.binding),
+                float(medium.wax),
                 float(paper.depth),
                 float(paper.bite),
                 float(paper.give),
@@ -269,6 +277,7 @@ class Sheet:
         load = eng.rub_stroke(
             self.cover,
             self.held,
+            self.under,
             self.loose,
             xs,
             ys,

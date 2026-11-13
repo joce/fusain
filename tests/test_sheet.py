@@ -31,8 +31,9 @@ def test_a_new_sheet_is_bare_paper():
     sheet = Sheet(48, 32, paper=papers.INGRES, seed=1)
     assert (sheet.width, sheet.height) == (48, 32)
     assert sheet.tooth.shape == sheet.press.shape == (32, 48)
-    assert sheet.held.shape == (32, 48, HELD) and sheet.loose.shape == (32, 48, LOOSE)
-    for state in (sheet.tooth, sheet.press, sheet.held, sheet.loose):
+    assert sheet.held.shape == (32, 48, HELD)
+    assert sheet.under.shape == sheet.loose.shape == (32, 48, LOOSE)
+    for state in (sheet.tooth, sheet.press, sheet.held, sheet.under, sheet.loose):
         assert state.dtype == np.float32
     assert not sheet.pigment().any() and not sheet.press.any()
     np.testing.assert_allclose(

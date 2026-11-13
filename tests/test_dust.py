@@ -29,7 +29,12 @@ def _luminance(sheet, where=BAND) -> np.ndarray:
 
 
 def _loose_share(sheet) -> float:
-    return float(sheet.loose[..., IV].sum() / sheet.pigment().sum())
+    dust = sheet.loose[..., IV].sum() + sheet.under[..., IV].sum()
+    return float(dust / sheet.pigment().sum())
+
+
+def _layers(sheet):
+    return sheet.held, sheet.under, sheet.loose
 
 
 def _total(sheet) -> float:
@@ -61,9 +66,7 @@ def test_going_over_dust_firmly_presses_it_into_the_paper():
     sheet = Sheet(260, 150, paper=papers.CARTRIDGE, seed=1)
     sheet.stroke([(30, 70), (230, 70)], charcoal.VINE, 0.5, 14.0)
     before = _loose_share(sheet)
-    # (a pass already presses in a little of what it has just laid)
-    dust = 1 - charcoal.VINE.binding
-    assert 0.9 * dust < before <= dust
+    assert before == pytest.approx(1 - charcoal.VINE.binding, rel=1e-4)
     sheet.stroke([(30, 70), (230, 70)], charcoal.VINE, 1.0, 14.0)
     assert _loose_share(sheet) < before - 0.02
 
@@ -94,7 +97,7 @@ def test_a_stump_drags_dust_along_and_out_onto_bare_paper():
     # nothing is lost: it is on the sheet or still on the stump
     assert carried > 0
     np.testing.assert_allclose(_total(sheet) + carried, before, rtol=1e-5)
-    assert min(float(sheet.held.min()), float(sheet.loose.min())) >= 0
+    assert min(float(layer.min()) for layer in _layers(sheet)) >= 0
 
 
 def test_a_stump_softens_the_grain_and_greys_the_paper():
@@ -178,7 +181,7 @@ def test_an_eraser_clears_only_where_it_goes_and_lays_nothing():
     np.testing.assert_array_equal(sheet.loose[82:], other.loose[82:])
     assert sheet.pigment()[:, 200:].max() == 0  # nothing dragged out
     assert (sheet.pigment() <= other.pigment()).all()
-    assert min(float(sheet.held.min()), float(sheet.loose.min())) >= 0
+    assert min(float(layer.min()) for layer in _layers(sheet)) >= 0
 
 
 def test_what_is_left_is_still_that_pigment():
@@ -186,7 +189,7 @@ def test_what_is_left_is_still_that_pigment():
     sheet.smudge(ALONG, tools.FINGER, 0.6)
     sheet.erase([(10, 100), (190, 100)], tools.KNEADED, 0.7)
     pigment = charcoal.VINE.pigment
-    for layer in (sheet.held, sheet.loose):
+    for layer in _layers(sheet):
         volume = layer[..., IV].sum(dtype=np.float64)
         np.testing.assert_allclose(
             layer[..., :N].sum(axis=(0, 1), dtype=np.float64),
@@ -217,7 +220,7 @@ def test_a_rubbed_drawing_repeats_with_its_seed():
         return sheet
 
     a, b = worked(), worked()
-    for name in ("held", "loose", "cover"):
+    for name in ("held", "under", "loose", "cover"):
         np.testing.assert_array_equal(getattr(a, name), getattr(b, name))
 
 

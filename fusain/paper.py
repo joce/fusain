@@ -138,7 +138,8 @@ def _rough(h, w, grain, rng) -> np.ndarray:
 
 
 def _sanded(h, w, grain, rng) -> np.ndarray:
-    grit = nz.value_noise_2d(h, w, max(grain * 0.5, 1.0), rng)
-    card = nz.fractal_noise_2d(h, w, grain * 4.0, rng, octaves=2)
-    # grit stands up sharply from the card: mostly low, with pointed peaks
-    return 0.85 * _unit(grit) ** 1.6 + 0.15 * card
+    """Grit glued to a card: sharp grains about ``grain`` apart, as many high
+    as low, and nothing broader, so that a stick bites all over it."""
+    grit = nz.value_noise_2d(h, w, max(0.5 * grain, 1.0), rng)
+    finer = nz.value_noise_2d(h, w, max(0.25 * grain, 1.0), rng)
+    return _no_broad(0.7 * grit + 0.3 * finer, grain)
