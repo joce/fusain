@@ -290,3 +290,49 @@ def test_coloured_pencils_and_media_by_name():
         red.with_(wax=1.5)
     with pytest.raises(ValueError, match="#rrggbb"):
         pencils.coloured("scarlet")
+
+
+# --------------------------------------------------------------------------
+# what a firm tip drags along
+
+
+def _short_firm_strokes(sheet, medium, count=300, seed=5) -> list[float]:
+    """Short strokes pressed hard, all over the patch, every way."""
+    rng = np.random.default_rng(seed)
+    laid = []
+    for _ in range(count):
+        x, y = rng.uniform(45, 155), rng.uniform(45, 105)
+        turn = rng.uniform(0.0, np.pi)
+        dx, dy = 8 * np.cos(turn), 8 * np.sin(turn)
+        laid.append(
+            sheet.stroke([(x - dx, y - dy), (x, y), (x + dx, y + dy)], medium, 0.95, 4)
+        )
+    return laid
+
+
+def test_a_firm_pencil_does_not_wear_a_waxed_layer_away():
+    sheet = _sheet()
+    red = pencils.coloured(RED)
+    _layers(sheet, red, 3, 0.6)
+    before, tone = _total(sheet), _luminance(sheet)
+    laid = _short_firm_strokes(sheet, pencils.BLENDER)
+    # the blender drags the layer about, but where it lifts off it leaves
+    # what it dragged: it never comes away with any of it
+    assert min(laid) >= 0.0
+    assert _total(sheet) == pytest.approx(before + sum(laid), rel=1e-6)
+    assert _total(sheet) >= before
+    assert _luminance(sheet) < 1.02 * tone
+
+
+def test_what_a_tip_drags_off_the_sheet_is_counted():
+    sheet = _sheet()
+    red = pencils.coloured(RED)
+    sheet.shade((0, 20, 200, 130), red, 0.6)
+    sheet.shade((0, 20, 200, 130), red, 0.6, angle=-25)
+    before = _total(sheet)
+    laid = [
+        sheet.stroke([(120, y), (240, y)], pencils.BLENDER, 1.0, 5)
+        for y in range(30, 120, 6)
+    ]
+    # (what it dragged past the edge is gone with it, and is in the count)
+    assert _total(sheet) == pytest.approx(before + sum(laid), rel=1e-6)

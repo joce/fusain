@@ -110,10 +110,11 @@ BURNISH_FROM = 0.6
 BURNISH = 1.5
 #: Polishing also smears the waxy layer: of what the paper holds there, the
 #: tip drags along this share at full pressure in one pass, and lays this
-#: share of what it drags back down over each of its own widths, valleys
-#: included.
+#: many times what it drags back down over each of its own widths, valleys
+#: included: within a pixel or two, so that it closes the white specks next
+#: to it without carrying colour far.
 BURNISH_LIFT = 0.6
-BURNISH_LAY = 0.8
+BURNISH_LAY = 4.0
 #: A ballpoint pen. Its ball is hard and small: at full pressure it reaches
 #: this far down the tooth (times what the paper gives, as a tip does), and
 #: a light touch reaches nearly as far (far more than in proportion): a
