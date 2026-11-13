@@ -287,3 +287,39 @@ def test_a_second_coat_darkens_only_what_it_newly_sets():
     ratio = float(sheet.loose[top][..., IS].sum()) / float(scatter[1][top].sum())
     assert 0.85 <= ratio < 0.86
     assert sheet.fix() == pytest.approx(0.0, abs=1e-3)
+
+
+# --------------------------------------------------------------------------
+# a full tooth, and why a pastellist fixes between stages
+
+
+def test_the_tooth_is_full_of_pastel_after_five_or_six_layers():
+    sheet = Sheet(200, 150, paper=papers.CARTRIDGE, seed=1)
+    red = pastels.soft(RED)
+    takes = [sheet.shade(BOX, red, 0.7, 12, angle=30 + 50 * k) for k in range(8)]
+    shares = [take / takes[0] for take in takes]
+    assert shares[1] > 0.6
+    assert shares[3] > 0.25
+    assert shares[6] < 0.2
+    # sanded card grips layer after layer: it is far from full after twelve
+    card = Sheet(200, 150, paper=papers.SANDED, seed=1)
+    on_card = [card.shade(BOX, red, 0.7, 12, angle=30 + 50 * k) for k in range(12)]
+    assert on_card[6] / on_card[0] > 0.4
+    assert on_card[11] / on_card[0] > 0.25
+
+
+def test_a_light_pastel_covers_a_loaded_tooth_poorly_unless_it_is_fixed_first():
+    tones = {}
+    for fix in (False, True):
+        sheet = _drawn(pastels.soft(BLACK), layers=4)
+        if fix:
+            sheet.fix()
+        sheet.shade(BOX, pastels.soft(WHITE), 0.8, 12, angle=-30)
+        tones[fix] = _tone(sheet)
+    one_layer = _drawn(pastels.soft(BLACK), layers=1)
+    one_layer.shade(BOX, pastels.soft(WHITE), 0.8, 12, angle=-30)
+    # over one layer of black the white covers well; over four, poorly
+    assert tones[False] < 0.6 * _tone(one_layer)
+    # fixed first, it covers nearly as well as over one layer
+    assert tones[True] > 1.6 * tones[False]
+    assert tones[True] > 0.8 * _tone(one_layer)

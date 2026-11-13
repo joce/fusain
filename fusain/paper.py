@@ -54,6 +54,9 @@ class Paper:
         Colour of the paper.
     name:
         Optional label.
+    hold:
+        How much the tooth holds for its depth: 1 for a paper; more for a
+        sanded card, whose grit grips layer after layer of pastel.
     """
 
     texture: str = "wove"
@@ -63,6 +66,7 @@ class Paper:
     give: float = 0.5
     color: ColorLike = "#f3f0e6"
     name: str = "paper"
+    hold: float = 1.0
 
     def __post_init__(self):
         if self.texture not in TEXTURES:
@@ -76,6 +80,8 @@ class Paper:
                 raise ValueError(
                     f"{field} must be between 0 and 1, got {getattr(self, field)!r}"
                 )
+        if not (math.isfinite(self.hold) and self.hold > 0):
+            raise ValueError(f"hold must be a number above 0, got {self.hold!r}")
         sp.parse_color(self.color)  # refused here rather than at the first sheet
 
     def with_(self, **changes) -> Paper:

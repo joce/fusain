@@ -52,6 +52,7 @@ SANDED = Paper(
     give=0.3,
     color="#d9cdb8",
     name="sanded card",
+    hold=2.5,
 )
 #: Toned papers, to draw the lights as well as the darks.
 TONED_GREY = CARTRIDGE.with_(color="#a9a8a4", name="toned grey")

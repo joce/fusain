@@ -8,6 +8,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Sanded card takes many more layers of pastel than paper, as it does in
+  life: a `Paper` has a `hold` (how much its tooth holds for its depth), and
+  `papers.SANDED` holds two and a half times what a paper of its depth does.
 - Rubbing evens the dust out. A stump or a finger now spreads the dust under
   it from grain to grain before it is worked into the paper, so a rubbed
   tone is smooth: charcoal laid with the side of a stick no longer stays
