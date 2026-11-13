@@ -14,7 +14,9 @@ from numba import njit
 
 #: Pigment is packed per pixel as [K (N bands), S, volume], all extensive
 #: (summed over the pigment present); the held layer has a fourth part, the
-#: volume of wax in it.
+#: volume of wax in it. There are three layers: what the paper holds, and
+#: over it the dust, in two layers (``under`` and, on top, ``loose``) so that
+#: what was laid last is seen over what was laid before.
 N = N_BANDS
 IS, IV, IW = N, N + 1, N + 2
 LOOSE, HELD = N + 2, N + 3
@@ -72,6 +74,14 @@ FILL_FLAT = 0.45
 #: Share of the dust under a tip that one pass at full pressure presses into
 #: the paper, where it is held.
 PRESS_IN = 0.15
+#: A pass lays its dust on top of the dust that was there, which goes under
+#: it: all but a little of it (the tip stirs some up) once the new dust is
+#: this thick, in proportion if it is thinner and does not cover it all.
+COVERS = 0.2
+BURY = 0.9
+#: A tool that rubs reaches the dust underneath less than the dust on top:
+#: the share of its lift it has there.
+UNDER_LIFT = 0.7
 
 
 @njit(cache=True, error_model="numpy")
@@ -115,6 +125,7 @@ def lay_stroke(
     tooth,
     cover,
     held,
+    under,
     loose,
     xs,
     ys,
@@ -139,7 +150,9 @@ def lay_stroke(
     over on its side the stick is held. Lay the medium (absorption ``k`` per
     band and scattering ``s`` per unit volume, ``softness`` and ``binding``
     0..1) on the paper (``depth``, ``bite``, ``give``) where the tip touches
-    its tooth.
+    its tooth. What the paper does not hold of it is dust, laid at the end of
+    the pass on top of the dust that was there (``loose``), which goes
+    ``under`` it.
 
     Returns the volume laid, which is the volume worn off the tip.
     """
@@ -161,6 +174,15 @@ def lay_stroke(
     rounded = RIM + (1.0 - RIM) * TILT_RIM * tilt
     # a pixel on the path of the tip's centre gets one pass's worth in all
     per_pass = 1.0 / (2.0 * long - (rounded * long + 0.5))
+    # the dust of this pass, kept apart until its end: over the box the pass
+    # stays in
+    left = max(int(math.floor(xs.min() - bound)), 0)
+    right = min(int(math.ceil(xs.max() + bound)), width)
+    top = max(int(math.floor(ys.min() - bound)), 0)
+    bottom = min(int(math.ceil(ys.max() + bound)), height)
+    if right <= left or bottom <= top:
+        return 0.0
+    fresh = np.zeros((bottom - top, right - left), np.float32)
     total = 0.0
     for i in range(xs.shape[0]):
         pressure = pressures[i]
@@ -196,13 +218,17 @@ def lay_stroke(
                     continue
                 covered = max(cover[iy, ix], touch)
                 cover[iy, ix] = covered
-                thick = (held[iy, ix, IV] + loose[iy, ix, IV]) / covered
+                there = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
+                thick = (there + fresh[iy - top, ix - left]) / covered
                 bearing = min(local, 1.0)
                 # the tip presses some of the dust under it into the paper
                 pressed = min(PRESS_IN * bearing * per_pass * step, 1.0) * touch
                 for part in range(LOOSE):
                     moved = loose[iy, ix, part] * pressed
                     loose[iy, ix, part] -= moved
+                    held[iy, ix, part] += moved
+                    moved = under[iy, ix, part] * pressed
+                    under[iy, ix, part] -= moved
                     held[iy, ix, part] += moved
                 room = full * (FILL_LIGHT + (1.0 - FILL_LIGHT) * bearing) - thick
                 if room <= 0.0:
@@ -211,15 +237,28 @@ def lay_stroke(
                 # still slides over all it touches)
                 dv = lay * math.sqrt(bearing * min(above / SPAN, 1.0)) * (room / full)
                 dv = min(dv * per_pass * step, room) * touch
-                fixed, dust = dv * binding, dv * (1.0 - binding)
+                fixed = dv * binding
                 for band_k in range(N):
                     held[iy, ix, band_k] += fixed * k[band_k]
-                    loose[iy, ix, band_k] += dust * k[band_k]
                 held[iy, ix, IS] += fixed * s
                 held[iy, ix, IV] += fixed
-                loose[iy, ix, IS] += dust * s
-                loose[iy, ix, IV] += dust
+                fresh[iy - top, ix - left] += dv - fixed
                 total += dv
+    # the dust of the pass goes on top of the dust that was there
+    for iy in range(top, bottom):
+        for ix in range(left, right):
+            dust = fresh[iy - top, ix - left]
+            if dust <= 0.0:
+                continue
+            buried = BURY * min(dust / cover[iy, ix] / COVERS, 1.0)
+            for part in range(LOOSE):
+                moved = loose[iy, ix, part] * buried
+                loose[iy, ix, part] -= moved
+                under[iy, ix, part] += moved
+            for band_k in range(N):
+                loose[iy, ix, band_k] += dust * k[band_k]
+            loose[iy, ix, IS] += dust * s
+            loose[iy, ix, IV] += dust
     return total
 
 
@@ -227,6 +266,7 @@ def lay_stroke(
 def rub_stroke(
     cover,
     held,
+    under,
     loose,
     xs,
     ys,
@@ -243,10 +283,12 @@ def rub_stroke(
     """Rub one pass of a round tool of ``radius`` pixels through the points
     (``xs``, ``ys``), bearing with ``pressures`` (0..1) and moving ``steps``
     pixels at each. Where it bears fully, one pass lifts the shares
-    ``lift_loose`` of the dust and ``lift_held`` of the held pigment onto the
-    tool, presses the share ``press`` of the dust into the paper and spreads
-    the share ``smear`` of it over the pixel; and over each of its own widths
-    the tool lays the share ``lay`` of what it carries back down, as dust.
+    ``lift_loose`` of the dust (less of the dust underneath) and
+    ``lift_held`` of the held pigment onto the tool, presses the share
+    ``press`` of the dust into the paper, and stirs the share ``smear`` of
+    the dust underneath up into the dust on top and spreads it over the
+    pixel; and over each of its own widths the tool lays the share ``lay`` of
+    what it carries back down, as dust on top.
 
     Returns what the tool carries at the end: [K (N bands), S, volume].
     """
@@ -281,17 +323,21 @@ def rub_stroke(
                 share = local * per_pass * step  # of one pass at full pressure
                 # lift
                 up_loose = min(lift_loose * share, 1.0)
+                up_under = min(UNDER_LIFT * lift_loose * share, 1.0)
                 up_held = min(lift_held * share, 1.0)
                 for part in range(LOOSE):
                     taken = loose[iy, ix, part] * up_loose
                     loose[iy, ix, part] -= taken
+                    load[part] += taken
+                    taken = under[iy, ix, part] * up_under
+                    under[iy, ix, part] -= taken
                     load[part] += taken
                     taken = held[iy, ix, part] * up_held
                     held[iy, ix, part] -= taken
                     load[part] += taken
                 held[iy, ix, IW] -= held[iy, ix, IW] * up_held
                 # lay, as dust all over the pixel
-                before = held[iy, ix, IV] + loose[iy, ix, IV]
+                before = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
                 down = min(per_pixel * local * step, 1.0)
                 laid = load[IV] * down
                 for part in range(LOOSE):
@@ -304,14 +350,22 @@ def rub_stroke(
                     continue
                 bare = 1.0 - cover[iy, ix]
                 cover[iy, ix] += bare * (laid / after)
-                # press in, and push what is loose into the low ground
+                # press in; stir up what is underneath; and push what is
+                # loose into the low ground
                 pressed = min(press * share, 1.0)
+                stirred = min(smear * share, 1.0)
                 for part in range(LOOSE):
                     moved = loose[iy, ix, part] * pressed
                     loose[iy, ix, part] -= moved
                     held[iy, ix, part] += moved
-                dusty = loose[iy, ix, IV] / after
-                cover[iy, ix] += (1.0 - cover[iy, ix]) * min(smear * share, 1.0) * dusty
+                    moved = under[iy, ix, part] * pressed
+                    under[iy, ix, part] -= moved
+                    held[iy, ix, part] += moved
+                    moved = under[iy, ix, part] * stirred
+                    under[iy, ix, part] -= moved
+                    loose[iy, ix, part] += moved
+                dusty = (under[iy, ix, IV] + loose[iy, ix, IV]) / after
+                cover[iy, ix] += (1.0 - cover[iy, ix]) * stirred * dusty
     return load
 
 

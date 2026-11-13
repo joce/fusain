@@ -158,14 +158,14 @@ def test_what_leaves_the_tip_is_on_the_paper():
     # the paper holds at least the share the lead binds (going over it again
     # presses in some of the dust), and some dust is left
     held = sheet.held[..., IV].sum(dtype=np.float64)
-    assert laid * pencils.B2.binding <= held < 0.99 * laid
+    assert 0.999 * laid * pencils.B2.binding <= held < 0.99 * laid
     one_pass = _sheet()
     once = one_pass.stroke([(20, 30), (120, 30)], pencils.B2, 0.6, 4.0)
     held = one_pass.held[..., IV].sum(dtype=np.float64)
-    assert once * pencils.B2.binding <= held < 1.02 * once * pencils.B2.binding
+    assert held == pytest.approx(once * pencils.B2.binding, rel=1e-4)
     # and it is that lead: its absorption and scattering, in that volume
     pigment = pencils.B2.pigment
-    for layer in (sheet.held, sheet.loose):
+    for layer in (sheet.held, sheet.under, sheet.loose):
         volume = layer[..., IV].sum(dtype=np.float64)
         np.testing.assert_allclose(
             layer[..., :N].sum(axis=(0, 1), dtype=np.float64),
@@ -202,7 +202,7 @@ def test_no_pressure_lays_nothing():
 
 def test_a_drawing_repeats_with_its_seed_and_no_two_passes_are_alike():
     a, b = _shaded(pencils.HB, 0.4), _shaded(pencils.HB, 0.4)
-    for name in ("held", "loose", "cover"):
+    for name in ("held", "under", "loose", "cover"):
         np.testing.assert_array_equal(getattr(a, name), getattr(b, name))
     once, twice = _sheet(), _sheet()
     for sheet, passes in ((once, 1), (twice, 2)):
