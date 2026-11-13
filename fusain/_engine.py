@@ -87,9 +87,18 @@ PRESS_IN = 0.15
 COVERS = 0.2
 BURY = 0.985
 #: Wax films over the tooth: a film this thick is as slick as it gets, and a
-#: pass then lays only this much less than on bare paper (resist).
+#: pass of a waxy medium then lays only this much less than on bare paper
+#: (resist).
 WAX_FULL = 0.35
 RESIST = 0.85
+#: A dry medium, which the tooth has to scrape off, hardly takes on wax at
+#: all; a medium with this share of wax or more counts as waxy.
+RESIST_DRY = 0.97
+STICKS = 0.3
+#: A waxy medium softer than FIRM is a greasy paste, which sticks to wax: the
+#: softest loses this share of its resist.
+FIRM = 0.6
+GREASE = 0.8
 #: Pressed harder than BURNISH_FROM, a tip polishes a waxy layer flat: one
 #: pass at full pressure on a film as slick as it gets raises ``press`` by
 #: BURNISH, and a pressed tooth is level, so the white specks close up.
@@ -220,6 +229,15 @@ def settle_dust(fresh, cover, under, loose, k, s, xs, ys, bound):
 
 
 @njit(cache=True, error_model="numpy")
+def resist_of(softness, wax):
+    """How much less of a medium a film of wax as slick as it gets takes than
+    bare paper does."""
+    waxy = min(wax / STICKS, 1.0)
+    greasy = min(max((softness - FIRM) / (1.0 - FIRM), 0.0), 1.0)
+    return RESIST_DRY * (1.0 - waxy) + RESIST * (1.0 - GREASE * greasy) * waxy
+
+
+@njit(cache=True, error_model="numpy")
 def lay_stroke(
     tooth,
     press,
@@ -254,8 +272,8 @@ def lay_stroke(
     What the paper does not hold of it is dust, gathered in ``fresh`` (empty
     before and after) and laid at the end of the pass on top of the dust that
     was there (``loose``), which goes ``under`` it. Wax films over the tooth,
-    which then takes less; pressed hard, the tip polishes it flat (``press``)
-    and smears it along.
+    which then takes less (:func:`resist_of`); pressed hard, the tip polishes
+    it flat (``press``) and smears it along.
 
     Returns the volume the tip has lost: what it laid, less what it has
     dragged off the paper and still carries.
@@ -285,6 +303,7 @@ def lay_stroke(
         * (1.0 + PILE * (1.0 - binding))
     )
     rounded = RIM + (1.0 - RIM) * TILT_RIM * tilt
+    resist = resist_of(softness, wax)
     start = flat**3
     reached = 0.0  # the furthest the tip has been from its path
     # what a tip that polishes drags along
@@ -347,7 +366,7 @@ def lay_stroke(
                 # (a light pass takes less, but not in proportion: the lead
                 # still slides over all it touches)
                 dv = lay * math.sqrt(bearing * min(above / SPAN, 1.0)) * (room / full)
-                dv *= 1.0 - RESIST * waxy
+                dv *= 1.0 - resist * waxy
                 dv = min(dv * per_pass * step, room) * touch
                 fixed = dv * binding
                 for band in range(N):

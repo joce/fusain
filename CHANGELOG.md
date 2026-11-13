@@ -8,6 +8,15 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Wax crayons, `crayons.wax(colour)`: all held, translucent and waxy. The
+  grain of the paper shows until one is pressed hard, layers mix, and a light
+  crayon does not cover a dark one.
+- Oil pastels, `pastels.oil(colour)`: greasy and thick. A finger smears
+  them, less than soft pastel, and a light one half covers a dark one.
+- What a film of wax takes depends on what is laid over it: a waxy pencil or
+  crayon takes a little, as before; a greasy oil pastel sticks to it; and a
+  dry medium (graphite, charcoal, soft pastel) hardly takes at all, where it
+  took as much as a waxy one before.
 - `Stick`: a medium in the hand, with a tip that wears. A point wears to a
   flat as it draws, so its line widens, the sooner the softer the lead;
   `sharpen()` gives the point back. `Sheet.stroke` and `Sheet.shade` take a
