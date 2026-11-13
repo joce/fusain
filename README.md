@@ -66,6 +66,8 @@ from fusain import pastels
 sheet.shade((100, 60, 300, 200), pencils.coloured("#2456a6"), pressure=0.7)
 sheet.shade((200, 60, 400, 200), pencils.coloured("#f2c40f"), pressure=0.7)  # green where they overlap
 sheet.shade((100, 60, 400, 200), pencils.BLENDER, pressure=1.0)              # burnish: the white specks close
+# build colour in light layers (pressure about 0.3): ten or so go on before the wax resists.
+# Press a layer hard and it fills and polishes the tooth, and little will take over it.
 sheet.stroke([(100, 300), (400, 320)], pastels.soft("#f4f1ea"), pressure=0.8, width=14)
 ```
 
