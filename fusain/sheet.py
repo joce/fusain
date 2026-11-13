@@ -15,6 +15,7 @@ from . import hatching
 from ._engine import HELD, IS, IV, LOOSE, N
 from .medium import Medium
 from .paper import Paper
+from .stick import Stick
 from .tools import KNEADED, STUMP, Tool
 
 __all__ = ["DEFAULT_LIGHT", "HELD", "IS", "IV", "LOOSE", "N", "Sheet"]
@@ -128,39 +129,54 @@ class Sheet:
     def stroke(
         self,
         path,
-        medium: Medium,
+        medium: Medium | Stick,
         pressure: Profile = 0.5,
-        width: float = 4.0,
+        width: float | None = None,
         tilt: float = 0.0,
     ) -> float:
         """Draw one pass of ``medium`` along ``path``.
 
         ``path`` is a list of points (a smooth curve through them) or a
-        :class:`murex.Path`; a single point is a dot. ``pressure`` (0 to 1,
-        clipped) is how hard the tip bears on the paper, and what sets the
-        tone: a light touch marks only the peaks of the tooth, a firm one
-        reaches the valleys. A number, one value per point of the path, or a
-        function of u (0 at the start of the stroke, 1 at its end).
-        ``width`` is the width of the tip in pixels. A pencil point is a few
-        times wider than the paper's grain; one narrower than the grain draws
-        a dotted line. ``tilt`` (0 to 1) is how far over the stick is held: 0
-        draws with its point, 1 with its side, which marks a band several
-        times wider than the point, across the stroke: broader, lighter and
+        :class:`murex.Path`; a single point is a dot. ``medium`` is what to
+        draw with, such as ``pencils.HB``, or a :class:`fusain.Stick`, whose
+        tip wears as it draws. ``pressure`` (0 to 1, clipped) is how hard the
+        tip bears on the paper, and what sets the tone: a light touch marks
+        only the peaks of the tooth, a firm one reaches the valleys. A
+        number, one value per point of the path, or a function of u (0 at the
+        start of the stroke, 1 at its end).
+
+        ``width`` is the width of the tip in pixels (4 by default; a stick
+        has its own, so it takes none). A pencil point is a few times wider
+        than the paper's grain; one narrower than the grain draws a dotted
+        line. ``tilt`` (0 to 1) is how far over the stick is held: 0 draws
+        with its point, 1 with its side, which marks a band several times
+        wider than the point, across the stroke: broader, lighter and
         grainier, with soft edges.
 
         Returns the volume of medium laid, which is what the tip lost.
 
-        Raises ValueError, before anything is drawn, unless ``width`` is a
-        finite number above 0, the pressures are finite and ``tilt`` is
-        between 0 and 1.
+        Raises ValueError or TypeError, before anything is drawn, unless
+        ``width`` is a finite number above 0 (and not given for a stick), the
+        pressures are finite and ``tilt`` is between 0 and 1.
         """
-        if not isinstance(medium, Medium):
-            raise TypeError(f"medium must be a Medium, such as pencils.HB: {medium!r}")
+        stick = medium if isinstance(medium, Stick) else None
+        if stick is not None:
+            if width is not None:
+                raise TypeError("a Stick has its own width: give none with it")
+            medium, tip = stick.medium, (stick.point, stick.lead, eng.WEAR, stick.worn)
+            width = stick.width
+        elif isinstance(medium, Medium):
+            width = 4.0 if width is None else width
+            tip = (width, width, 0.0, 0.0)
+        else:
+            raise TypeError(
+                f"medium must be a Medium, such as pencils.HB, or a Stick: {medium!r}"
+            )
         if not 0.0 <= tilt <= 1.0:
             raise ValueError(f"tilt must be between 0 (point) and 1 (side): {tilt!r}")
         xs, ys, bearing, steps = self._sampled(path, pressure, width)
         paper, pigment = self.paper, medium.pigment
-        return float(
+        laid = float(
             eng.lay_stroke(
                 self.tooth,
                 self.press,
@@ -173,20 +189,19 @@ class Sheet:
                 ys,
                 bearing,
                 steps,
-                0.5 * float(width) * _spread(tilt),
-                0.5 * float(width),
-                float(tilt),
+                np.array([*tip, _spread(tilt), tilt], dtype=np.float64),
                 np.ascontiguousarray(pigment.K, dtype=np.float64),
-                float(pigment.S),
-                float(medium.softness),
-                float(medium.binding),
-                float(medium.wax),
-                float(paper.depth),
-                float(paper.bite),
-                float(paper.give),
+                np.array(
+                    [pigment.S, medium.softness, medium.binding, medium.wax],
+                    dtype=np.float64,
+                ),
+                np.array([paper.depth, paper.bite, paper.give], dtype=np.float64),
                 int(self._rng.integers(1 << 31)),
             )
         )
+        if stick is not None:
+            stick.worn = max(stick.worn + laid, 0.0)
+        return laid
 
     # ------------------------------------------------------------------
     def render(
@@ -317,9 +332,9 @@ class Sheet:
     def shade(
         self,
         area,
-        medium: Medium,
+        medium: Medium | Stick,
         pressure: hatching.Pressure = 0.5,
-        width: float = 6.0,
+        width: float | None = None,
         angle: float = 30.0,
         spacing: float | None = None,
         hand: float = 1.0,
@@ -332,10 +347,12 @@ class Sheet:
         ``area`` is a rectangle (x0, y0, x1, y1) or a polygon (three or more
         points). ``pressure`` is a number, or a function of where on the
         sheet (called with arrays of x and of y), for a tone that changes
-        across the area. ``width`` is the width of the tip in pixels and
-        ``angle`` the direction of the strokes in degrees (0 runs across the
-        sheet, 90 up it). ``spacing`` is how far apart they are (by default
-        a little over half a width, so that they overlap). ``hand`` is how
+        across the area. ``width`` is the width of the tip in pixels (6 by
+        default; a :class:`fusain.Stick` has its own, and wears as the
+        shading goes) and ``angle`` the direction of the strokes in degrees
+        (0 runs across the sheet, 90 up it). ``spacing`` is how far apart they
+        are (by default a little over half a width, so that they overlap).
+        ``hand`` is how
         unsteady the hand is: 1 for a natural one, 0 for ruler-straight
         strokes, evenly spaced and all alike. ``tilt`` is as for
         :meth:`stroke`: with the side of the stick the strokes are broader
@@ -345,11 +362,21 @@ class Sheet:
         Returns the volume of medium laid.
 
         Raises ValueError or TypeError, before anything is drawn, unless
-        ``width`` and ``spacing`` are finite numbers above 0, ``angle`` is
-        finite and ``hand`` is finite and not negative.
+        ``width`` (not given for a stick) and ``spacing`` are finite numbers
+        above 0, ``angle`` is finite, ``hand`` is finite and not negative and
+        ``tilt`` is between 0 and 1.
         """
-        if not isinstance(medium, Medium):
-            raise TypeError(f"medium must be a Medium, such as pencils.HB: {medium!r}")
+        stick = medium if isinstance(medium, Stick) else None
+        if stick is not None:
+            if width is not None:
+                raise TypeError("a Stick has its own width: give none with it")
+            width = stick.width
+        elif isinstance(medium, Medium):
+            width = 6.0 if width is None else width
+        else:
+            raise TypeError(
+                f"medium must be a Medium, such as pencils.HB, or a Stick: {medium!r}"
+            )
         if not 0.0 <= tilt <= 1.0:
             raise ValueError(f"tilt must be between 0 (point) and 1 (side): {tilt!r}")
         outline = hatching.as_outline(area)
@@ -369,7 +396,8 @@ class Sheet:
             outline, angle, width, gap, hand, self._rng, broad
         ):
             along = hatching.bearing(pressure, path, firm, hand)
-            laid += self.stroke(path, medium, along, tip, tilt)
+            # (a stick's tip is as wide as it has worn, whatever the hand)
+            laid += self.stroke(path, medium, along, None if stick else tip, tilt)
         return laid
 
     def save(self, path: str, **render_options) -> None:

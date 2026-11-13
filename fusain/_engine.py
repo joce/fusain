@@ -54,6 +54,10 @@ SIDE = 5.0
 #: of what is not rim already) is rounded off, which softens its edges.
 TILT_REACH = 0.25
 TILT_RIM = 0.7
+#: A point wears to a flat as it draws, and its line widens: the cube of the
+#: flat's width, in pixels, grows by this much for each unit of volume the
+#: tip lays (a cone loses volume as the cube of where it is cut).
+WEAR = 0.08
 #: A lead is not even: across the tip it bears up to this much more or less,
 #: in bands about STREAK_WIDTH pixels wide that run the length of the stroke.
 STREAK = 0.35
@@ -228,30 +232,28 @@ def lay_stroke(
     ys,
     pressures,
     steps,
-    radius,
-    length,
-    tilt,
+    tip,
     k,
-    s,
-    softness,
-    binding,
-    wax,
-    depth,
-    bite,
-    give,
+    medium,
+    paper,
     salt,
 ):
     """Draw one pass of a tip through the points (``xs``, ``ys``), bearing
-    with ``pressures`` (0..1) and moving ``steps`` pixels at each. The tip is
-    an ellipse, ``radius`` pixels across the stroke and ``length`` along it
-    (both half-widths; equal for a point), and ``tilt`` (0..1) says how far
-    over on its side the stick is held. Lay the medium (absorption ``k`` per
-    band and scattering ``s`` per unit volume; ``softness``, ``binding`` and
-    the share of ``wax`` in it, 0..1) on the paper (``depth``, ``bite``,
-    ``give``) where the tip touches its tooth. What the paper does not hold
-    of it is dust, gathered in ``fresh`` (empty before and after) and laid at
-    the end of the pass on top of the dust that was there (``loose``), which
-    goes ``under`` it. Wax films over the tooth,
+    with ``pressures`` (0..1) and moving ``steps`` pixels at each.
+
+    ``tip`` is [the width of its flat, the full width of the lead (the flat
+    never gets wider), how fast it wears (:data:`WEAR`, or 0 for a tip that
+    keeps its width), the volume it has worn since it was sharpened, how many
+    times wider than its flat it marks (1 for a point, more on its side), its
+    tilt (0..1)]. It is an ellipse, as long along the stroke as its flat is
+    wide.
+
+    ``medium`` is [scattering per unit volume, softness, binding, the share
+    of wax in it] (its absorption per band is ``k``) and ``paper`` is
+    [depth, bite, give]. The medium is laid where the tip touches the tooth.
+    What the paper does not hold of it is dust, gathered in ``fresh`` (empty
+    before and after) and laid at the end of the pass on top of the dust that
+    was there (``loose``), which goes ``under`` it. Wax films over the tooth,
     which then takes less; pressed hard, the tip polishes it flat (``press``)
     and smears it along.
 
@@ -259,6 +261,16 @@ def lay_stroke(
     dragged off the paper and still carries.
     """
     height, width = tooth.shape
+    flat, lead, wear, worn, spread, tilt = (
+        tip[0],
+        tip[1],
+        tip[2],
+        tip[3],
+        tip[4],
+        tip[5],
+    )
+    s, softness, binding, wax = medium[0], medium[1], medium[2], medium[3]
+    depth, bite, give = paper[0], paper[1], paper[2]
     reach = (REACH_HARD + REACH_SOFT * softness) * (GIVE_NONE + GIVE_FULL * give)
     reach *= 1.0 - TILT_REACH * tilt
     # (a level paper is touched all over: any pressure reaches all of it)
@@ -272,15 +284,11 @@ def lay_stroke(
         * (0.5 + 0.5 * bite)
         * (1.0 + PILE * (1.0 - binding))
     )
-    wide, long = radius + 0.5, length + 0.5
-    bound = max(wide, long)
     rounded = RIM + (1.0 - RIM) * TILT_RIM * tilt
-    # a pixel on the path of the tip's centre gets one pass's worth in all
-    per_pass = 1.0 / (2.0 * long - (rounded * long + 0.5))
-    # what a tip that polishes drags along, and the share of it that it lays
-    # on a pixel it bears on, per pixel moved
+    start = flat**3
+    reached = 0.0  # the furthest the tip has been from its path
+    # what a tip that polishes drags along
     drag = np.zeros(HELD)
-    dragged = BURNISH_LAY / (2.0 * wide * math.pi * wide * long)
     total = 0.0
     for i in range(xs.shape[0]):
         pressure = pressures[i]
@@ -289,6 +297,16 @@ def lay_stroke(
             continue
         x, y = xs[i], ys[i]
         tx, ty = heading(xs, ys, i)
+        if wear > 0.0:  # the flat grows with what the tip has laid
+            flat = min((start + wear * max(worn + total, 0.0)) ** (1.0 / 3.0), lead)
+        wide, long = 0.5 * flat * spread + 0.5, 0.5 * flat + 0.5
+        bound = max(wide, long)
+        reached = max(reached, bound)
+        # a pixel on the path of the tip's centre gets one pass's worth in
+        # all; and of what it drags, the tip lays this share on a pixel it
+        # bears on, per pixel moved
+        per_pass = 1.0 / (2.0 * long - (rounded * long + 0.5))
+        dragged = BURNISH_LAY / (2.0 * wide * math.pi * wide * long)
         x0 = max(int(math.floor(x - bound)), 0)
         x1 = min(int(math.ceil(x + bound)), width)
         y0 = max(int(math.floor(y - bound)), 0)
@@ -340,7 +358,7 @@ def lay_stroke(
                 fresh[iy, ix] += dv - fixed
                 total += dv
     if binding < 1.0:  # (else there is no dust to settle)
-        settle_dust(fresh, cover, under, loose, k, s, xs, ys, bound)
+        settle_dust(fresh, cover, under, loose, k, s, xs, ys, reached)
     # (what the tip still drags at the end has left the paper with it)
     return total - drag[IV]
 
