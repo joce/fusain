@@ -12,14 +12,15 @@ import numpy as np
 from murex.spectral import N_BANDS
 from numba import njit
 
-#: Pigment is packed per pixel as [K (N bands), S, volume], all extensive
-#: (summed over the pigment present); the held layer has a fourth part, the
-#: volume of wax in it. There are three layers: what the paper holds, and
+#: Pigment is packed per pixel as [K (N bands), S, volume, sheen], all
+#: extensive (summed over the pigment present; the sheen is the volume times
+#: the sheen of its medium); the held layer has a fifth part, the volume of
+#: wax in it. There are three layers: what the paper holds, and
 #: over it the dust, in two layers (``under`` and, on top, ``loose``) so that
 #: what was laid last is seen over what was laid before.
 N = N_BANDS
-IS, IV, IW = N, N + 1, N + 2
-LOOSE, HELD = N + 2, N + 3
+IS, IV, IX, IW = N, N + 1, N + 2, N + 3
+LOOSE, HELD = N + 3, N + 4
 
 #: How far down the tooth a tip reaches at full pressure, as a share of a
 #: tooth of depth 1: the hardest lead, and what the softest adds to it. Only
@@ -200,7 +201,7 @@ def burnish(held, press, drag, iy, ix, polish, lay):
 
 
 @njit(cache=True, error_model="numpy")
-def settle_dust(fresh, cover, under, loose, k, s, xs, ys, bound):
+def settle_dust(fresh, cover, under, loose, k, s, sheen, xs, ys, bound):
     """At the end of a pass, put its dust (``fresh``, a volume per pixel) on
     top of the dust that was there, which goes under it, and leave ``fresh``
     empty again. Only where the tip went: within ``bound`` of the points
@@ -226,6 +227,7 @@ def settle_dust(fresh, cover, under, loose, k, s, xs, ys, bound):
                     loose[iy, ix, band] += dust * k[band]
                 loose[iy, ix, IS] += dust * s
                 loose[iy, ix, IV] += dust
+                loose[iy, ix, IX] += dust * sheen
 
 
 @njit(cache=True, error_model="numpy")
@@ -267,7 +269,7 @@ def lay_stroke(
     wide.
 
     ``medium`` is [scattering per unit volume, softness, binding, the share
-    of wax in it] (its absorption per band is ``k``) and ``paper`` is
+    of wax in it, its sheen] (its absorption per band is ``k``) and ``paper`` is
     [depth, bite, give]. The medium is laid where the tip touches the tooth.
     What the paper does not hold of it is dust, gathered in ``fresh`` (empty
     before and after) and laid at the end of the pass on top of the dust that
@@ -288,6 +290,7 @@ def lay_stroke(
         tip[5],
     )
     s, softness, binding, wax = medium[0], medium[1], medium[2], medium[3]
+    sheen = medium[4]
     depth, bite, give = paper[0], paper[1], paper[2]
     reach = (REACH_HARD + REACH_SOFT * softness) * (GIVE_NONE + GIVE_FULL * give)
     reach *= 1.0 - TILT_REACH * tilt
@@ -373,11 +376,12 @@ def lay_stroke(
                     held[iy, ix, band] += fixed * k[band]
                 held[iy, ix, IS] += fixed * s
                 held[iy, ix, IV] += fixed
+                held[iy, ix, IX] += fixed * sheen
                 held[iy, ix, IW] += dv * wax
                 fresh[iy, ix] += dv - fixed
                 total += dv
     if binding < 1.0:  # (else there is no dust to settle)
-        settle_dust(fresh, cover, under, loose, k, s, xs, ys, reached)
+        settle_dust(fresh, cover, under, loose, k, s, sheen, xs, ys, reached)
     # (what the tip still drags at the end has left the paper with it)
     return total - drag[IV]
 
@@ -410,7 +414,7 @@ def rub_stroke(
     pixel; and over each of its own widths the tool lays the share ``lay`` of
     what it carries back down, as dust on top.
 
-    Returns what the tool carries at the end: [K (N bands), S, volume].
+    Returns what the tool carries at the end: [K (N bands), S, volume, sheen].
     """
     height, width = cover.shape
     bound = radius + 0.5

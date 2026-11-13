@@ -8,6 +8,19 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Graphite shines. `Medium.sheen` is how much of a medium mirrors the light
+  (graphite only, the more the softer the lead), `Sheet.shine()` is how much
+  of each pixel does, and `Sheet.render` adds the lamp's reflection: heavy
+  graphite turns silvery under a high lamp and stays dark under a raking one,
+  where charcoal stays black. `render(gloss=0)` renders matte.
+
+### Changed
+
+- A drawing with graphite in it renders a little lighter in its darks under
+  the default lamp, from the shine. `gloss=0` gives the earlier picture.
+- The pigment layers of a `Sheet` have one more component, the sheen, before
+  the wax of the held layer (`fusain.sheet.IX`).
+
 - Wax crayons, `crayons.wax(colour)`: all held, translucent and waxy. The
   grain of the paper shows until one is pressed hard, layers mix, and a light
   crayon does not cover a dark one.

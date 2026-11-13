@@ -1,6 +1,6 @@
 # Core model: design proposal
 
-Status: accepted (issue `fusain-ilv`). Steps 1 to 4 of the build order are built, and tilt, wear and crayon from step 5; the rest is not.
+Status: accepted (issue `fusain-ilv`). Steps 1 to 5 of the build order are built; step 6 is not.
 
 ## What fusain has to get right
 
@@ -37,8 +37,8 @@ Per pixel, all `float32`:
 | `tooth` | Height of the paper surface, 0 (valley) to 1 (peak). Set once from the paper's texture. |
 | `press` | How far the tooth has been crushed or polished here (0 to 1): burnishing, and lines indented with a stylus. |
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
-| `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, and how much of the volume is wax. |
-| `under`, `loose` | Pigment lying on the surface as dust: K, S and volume, in two layers. `loose` is on top; what a new pass covers goes `under`. |
+| `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. |
+| `under`, `loose` | Pigment lying on the surface as dust: K, S, volume and sheen, in two layers. `loose` is on top; what a new pass covers goes `under`. |
 
 That is about 0.34 KB per pixel, as much as oilpaint. As there, storing summed
 absorption and scattering lets any number of pigments mix correctly at a fixed
@@ -74,7 +74,7 @@ code runs all of them; only the numbers change.
 | `binding` | Share of the deposit that is held at once rather than left as dust | vine charcoal, soft pastel | coloured pencil, wax crayon |
 | `wax` | Binder that films over the tooth: resist, burnishing | graphite, charcoal | coloured pencil, crayon, oil pastel |
 | opacity (of the pigment) | How strongly it hides what is underneath | coloured pencil | pastel |
-| `sheen` (to come) | Metallic lustre of the laid pigment | everything else | graphite |
+| `sheen` | How much of it mirrors the light once the paper holds it | everything else | graphite, the more the softer the lead |
 
 Presets group by family: `pencils.HB`, `pencils.B6`, `charcoal.VINE`,
 `charcoal.COMPRESSED`, `pastels.soft("#c0392b")`, `pastels.oil(...)`,
@@ -158,8 +158,8 @@ These are numba kernels under the same rules as oilpaint's (no `fastmath`, no
 `parallel`), so a drawing repeats exactly. Their constants are in
 `fusain/_engine.py`. They were set so that tones land near these figures,
 which are estimates from experience, not measurements of real drawings: on
-cartridge paper, one even layer of HB reflects about 0.8 of what the paper
-does at a light pressure and 0.4 at full pressure; 6B about 0.5 and 0.13; 4H
+cartridge paper and without its shine, one even layer of HB reflects about
+0.8 of what the paper does at a light pressure and 0.4 at full pressure; 6B about 0.5 and 0.13; 4H
 at full pressure about 0.75; and light layers of HB level off near 0.5.
 
 ## Rendering
@@ -168,8 +168,17 @@ Per pixel: Kubelka-Munk reflectance of the `loose` layer over the `held` layer
 over the paper's own colour, on the covered share of the pixel; the rest shows
 bare paper.
 By default a fairly high lamp shows the tooth faintly, as on a scan; a raking
-light brings it out, and `lighting=False` renders the sheet flat. Still to
-come: a specular term for graphite's shine where it is thick and polished.
+light brings it out, and `lighting=False` renders the sheet flat.
+
+Graphite shines. A film of it that the paper holds mirrors the lamp, the more
+the thicker it is (a heavy layer of a soft lead shines fully, a light layer of
+HB hardly at all), and matte dust lying over it hides it. The sheet is seen
+from straight above, so the mirrored light is strongest with the lamp
+overhead and all but gone under a raking one; it is added to the picture as
+white light, in a broad lobe, since graphite is satin and not a mirror. Under
+the default lamp, three firm layers of 6B reflect about 0.10 of what the paper
+does, against 0.06 without the shine: graphite never looks as black as
+charcoal. `render(gloss=0)` leaves the shine out, as a scanner does.
 
 ## What the prototype showed
 

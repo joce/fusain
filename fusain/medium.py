@@ -29,6 +29,10 @@ class Medium:
         and makes it slick: later layers take less and less, and a firm pass
         polishes the film flat, which closes up the white specks of the
         paper (burnishing). Graphite, charcoal and soft pastel have none.
+    sheen:
+        0..1: how much of it mirrors the light once the paper holds it, as
+        graphite does. A thick layer of it shines under a lamp, so that it
+        never looks quite black. Charcoal, pastel and wax have none.
     name:
         Optional label.
     """
@@ -37,12 +41,13 @@ class Medium:
     softness: float
     binding: float = 0.85
     wax: float = 0.0
+    sheen: float = 0.0
     name: str = ""
 
     def __post_init__(self):
         if not isinstance(self.pigment, Pigment):
             raise TypeError(f"pigment must be a murex Pigment, got {self.pigment!r}")
-        for field in ("softness", "binding", "wax"):
+        for field in ("softness", "binding", "wax", "sheen"):
             if not 0.0 <= getattr(self, field) <= 1.0:
                 raise ValueError(
                     f"{field} must be between 0 and 1, got {getattr(self, field)!r}"

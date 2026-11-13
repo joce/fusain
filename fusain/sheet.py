@@ -12,13 +12,13 @@ from murex.spline import Profile
 
 from . import _engine as eng
 from . import hatching
-from ._engine import HELD, IS, IV, LOOSE, N
+from ._engine import HELD, IS, IV, IX, LOOSE, N
 from .medium import Medium
 from .paper import Paper
 from .stick import Stick
 from .tools import KNEADED, STUMP, Tool
 
-__all__ = ["DEFAULT_LIGHT", "HELD", "IS", "IV", "LOOSE", "N", "Sheet"]
+__all__ = ["DEFAULT_LIGHT", "HELD", "IS", "IV", "IX", "LOOSE", "N", "Sheet"]
 
 #: The lamp a sheet is rendered under by default (x, y, z; y points down the
 #: image): from the upper left and fairly high, so that the tooth shows
@@ -28,6 +28,15 @@ DEFAULT_LIGHT = (-0.6, -0.8, 2.4)
 AMBIENT = 0.3
 #: Height of the deepest tooth of a paper of depth 1, as a share of its grain.
 TOOTH_HEIGHT = 0.12
+#: Shine: what a film as shiny as it gets adds to the light a pixel sends
+#: back (linear, the paper's white being 1) when it mirrors the lamp squarely.
+SHEEN = 0.06
+#: A held film of this much sheen per covered area is as shiny as it gets,
+#: and matte dust this thick over it hides all but 1/e of its shine.
+SHEEN_FULL = 0.6
+SHEEN_HIDE = 0.1
+#: How narrow the mirrored light is: graphite is satin, not a mirror.
+SHININESS = 12.0
 #: Rows rendered at a time (bounds the float64 working memory).
 ROWS = 64
 
@@ -94,6 +103,17 @@ class Sheet:
     def pigment(self) -> np.ndarray:
         """Volume of pigment at each pixel, held and loose, (H, W)."""
         return self.held[..., IV] + self.under[..., IV] + self.loose[..., IV]
+
+    def shine(self) -> np.ndarray:
+        """How much of each pixel mirrors the light, 0..1, (H, W): where the
+        paper holds a film of a medium with sheen (graphite), the more the
+        thicker it is, and the less the more dust of another kind lies over
+        it."""
+        cover = np.maximum(self.cover, np.float32(1e-6))
+        film = np.minimum(self.held[..., IX] / cover / np.float32(SHEEN_FULL), 1.0)
+        dust = self.under[..., IV] + self.loose[..., IV]
+        matte = np.maximum(dust - self.under[..., IX] - self.loose[..., IX], 0.0)
+        return self.cover * film * np.exp(-matte / cover / np.float32(SHEEN_HIDE))
 
     def reflectance(self) -> np.ndarray:
         """Reflectance spectrum of the drawing, (H, W, N_BANDS) float32: the
@@ -192,7 +212,13 @@ class Sheet:
                 np.array([*tip, _spread(tilt), tilt], dtype=np.float64),
                 np.ascontiguousarray(pigment.K, dtype=np.float64),
                 np.array(
-                    [pigment.S, medium.softness, medium.binding, medium.wax],
+                    [
+                        pigment.S,
+                        medium.softness,
+                        medium.binding,
+                        medium.wax,
+                        medium.sheen,
+                    ],
                     dtype=np.float64,
                 ),
                 np.array([paper.depth, paper.bite, paper.give], dtype=np.float64),
@@ -209,6 +235,7 @@ class Sheet:
         lighting: bool = True,
         light: Sequence[float] | None = DEFAULT_LIGHT,
         relief: float = 1.0,
+        gloss: float = 1.0,
     ) -> np.ndarray:
         """Render to an sRGB float image (H, W, 3) in 0..1.
 
@@ -219,20 +246,31 @@ class Sheet:
         faintly, as on a scan. ``relief`` scales the apparent depth of the
         tooth. With ``lighting=False`` the sheet is rendered flat.
 
+        The lamp also shows the shine of graphite: seen from straight above,
+        a heavy layer mirrors a high lamp and looks silvery, and hardly
+        mirrors a raking one. ``gloss`` scales that shine: 0 renders the
+        drawing matte, as a scanner sees it.
+
         When lit, raises ValueError unless ``light`` is three finite numbers
-        with z > 0 and ``relief`` is finite and not negative.
+        with z > 0 and ``relief`` and ``gloss`` are finite and not negative.
         """
-        shade = None
+        shade = glint = None
         if lighting:
             lamp = _check_light(DEFAULT_LIGHT if light is None else light)
-            if not (math.isfinite(relief) and relief >= 0):
-                raise ValueError(f"relief must be finite and >= 0, got {relief!r}")
-            shade = self._shade(lamp, float(relief))
+            for name, value in (("relief", relief), ("gloss", gloss)):
+                if not (math.isfinite(value) and value >= 0):
+                    raise ValueError(f"{name} must be finite and >= 0, got {value!r}")
+            slopes = self._slopes(float(relief))
+            shade = self._shade(lamp, slopes)
+            if gloss > 0 and self.held[..., IX].any():
+                glint = self._glint(lamp, slopes) * np.float32(SHEEN * gloss)
         out = np.empty((self.height, self.width, 3), np.float32)
         for rows in self._row_chunks():
             lin = sp.reflectance_to_linear_rgb(self._reflectance_rows(rows))
             if shade is not None:
                 lin *= shade[rows][..., None]
+            if glint is not None:
+                lin += glint[rows][..., None]
             out[rows] = sp.linear_to_srgb(np.clip(lin, 0.0, 1.0))
         return out
 
@@ -243,15 +281,34 @@ class Sheet:
         ground = self.tooth + (1.0 - self.tooth) * self.press
         return ground * np.float32(scale)
 
-    def _shade(self, lamp: np.ndarray, relief: float) -> np.ndarray:
-        """Brightness of each pixel under the lamp, 1 where the paper is level."""
+    def _slopes(self, relief: float) -> tuple[np.ndarray, np.ndarray]:
+        """The slope of the surface along x and along y, each (H, W)."""
         height = self.surface_height(relief).astype(np.float64)
         # (a sheet one pixel wide or high has no slope that way)
         gy = np.gradient(height, axis=0) if self.height > 1 else np.zeros_like(height)
         gx = np.gradient(height, axis=1) if self.width > 1 else np.zeros_like(height)
-        facing = (lamp[2] - gx * lamp[0] - gy * lamp[1]) / np.sqrt(1.0 + gx**2 + gy**2)
-        lit = np.maximum(facing, 0.0) / lamp[2]
+        return gx, gy
+
+    @staticmethod
+    def _facing(towards: np.ndarray, slopes: tuple[np.ndarray, np.ndarray]):
+        """Cosine of the angle between the surface and a unit direction."""
+        gx, gy = slopes
+        facing = towards[2] - gx * towards[0] - gy * towards[1]
+        return np.maximum(facing / np.sqrt(1.0 + gx**2 + gy**2), 0.0)
+
+    def _shade(self, lamp: np.ndarray, slopes) -> np.ndarray:
+        """Brightness of each pixel under the lamp, 1 where the paper is level."""
+        lit = self._facing(lamp, slopes) / lamp[2]
         return (AMBIENT + (1.0 - AMBIENT) * lit).astype(np.float32)
+
+    def _glint(self, lamp: np.ndarray, slopes) -> np.ndarray:
+        """How much of the lamp each pixel mirrors to an eye straight above
+        the sheet, 0..1: its shine, times how squarely its surface faces
+        halfway between the lamp and the eye."""
+        halfway = lamp + np.array([0.0, 0.0, 1.0])
+        halfway /= np.linalg.norm(halfway)
+        mirrored = self._facing(halfway, slopes) ** SHININESS
+        return (self.shine() * mirrored).astype(np.float32)
 
     def smudge(
         self,
