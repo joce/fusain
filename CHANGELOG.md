@@ -8,6 +8,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Rubbing evens the dust out. A stump or a finger now spreads the dust under
+  it from grain to grain before it is worked into the paper, so a rubbed
+  tone is smooth: charcoal laid with the side of a stick no longer stays
+  speckled, streaks between light strokes close, and a stump smooths
+  compressed charcoal. It pressed the dust in where it lay before.
 - A firm pencil no longer wears a waxed layer away. Pressed hard over wax, a
   tip drags part of the layer along; what it still carried when the stroke
   ended left the paper with it, so many short firm strokes stripped the
