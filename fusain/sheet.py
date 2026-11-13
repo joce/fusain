@@ -15,6 +15,7 @@ from . import hatching
 from ._engine import HELD, IS, IV, IX, LOOSE, N
 from .medium import Medium
 from .paper import Paper
+from .pens import Pen
 from .stick import Stick
 from .tools import KNEADED, STUMP, Tool
 
@@ -37,6 +38,9 @@ SHEEN_FULL = 0.6
 SHEEN_HIDE = 0.1
 #: How narrow the mirrored light is: graphite is satin, not a mirror.
 SHININESS = 12.0
+#: The lines of a pen's hatching are this many of its widths apart: side by
+#: side, where a pencil's strokes overlap.
+PEN_SPACING = 1.6
 #: Fixative wets the dust it sets, which then scatters this much less light.
 FIXATIVE_DARKENS = 0.15
 #: Rows rendered at a time (bounds the float64 working memory).
@@ -93,6 +97,10 @@ class Sheet:
         # the volume of dust that fixative has set at each pixel, in the
         # dust underneath and in the dust on top
         self.fixed = np.zeros((H, W, 2), np.float32)
+        # the ink of pens: a stain in the paper, packed as dust is, and the
+        # share of each pixel it is on (None until a pen has drawn)
+        self.ink: np.ndarray | None = None
+        self.inked: np.ndarray | None = None
 
     def copy(self) -> Sheet:
         """An independent copy: drawing on one leaves the other alone."""
@@ -103,6 +111,8 @@ class Sheet:
         names = ("tooth", "press", "cover", "held", "under", "loose", "_fresh", "fixed")
         for name in names:
             setattr(new, name, getattr(self, name).copy())
+        if self.ink is not None and self.inked is not None:
+            new.ink, new.inked = self.ink.copy(), self.inked.copy()
         return new
 
     # ------------------------------------------------------------------
@@ -137,25 +147,41 @@ class Sheet:
         layers = (self.held[rows], self.under[rows], self.loose[rows])
         out = np.empty((*layers[0].shape[:2], N))
         out[:] = self.ground
+        stained = self._stain(out, rows)
         marked = layers[0][..., IV] > 0
         for layer in layers[1:]:
             marked |= layer[..., IV] > 0
         if marked.any():
             # the pigment lies on the covered share of the pixel, that much
-            # thicker; the rest of the pixel is bare paper
+            # thicker; the rest of the pixel is bare paper (inked or not)
             share = np.clip(self.cover[rows][marked].astype(np.float64), 1e-6, 1.0)
-            seen = self.ground
+            bare = out[marked] if stained else self.ground
+            seen = bare
             for layer in layers:  # from the paper up
                 packed = layer[marked].astype(np.float64) / share[:, None]
                 seen = sp.km_layer(packed[:, :N], packed[:, IS], seen)
-            out[marked] = share[:, None] * seen + (1.0 - share[:, None]) * self.ground
+            out[marked] = share[:, None] * seen + (1.0 - share[:, None]) * bare
         return out
+
+    def _stain(self, out: np.ndarray, rows: slice) -> bool:
+        """Stain the paper of these rows (``out``, its reflectance) with the
+        ink in it. Returns whether there was any."""
+        if self.ink is None or self.inked is None:
+            return False
+        inked = self.inked[rows] > 0
+        if not inked.any():
+            return False
+        share = np.clip(self.inked[rows][inked].astype(np.float64), 1e-6, 1.0)
+        packed = self.ink[rows][inked].astype(np.float64) / share[:, None]
+        seen = sp.km_layer(packed[:, :N], packed[:, IS], self.ground)
+        out[inked] = share[:, None] * seen + (1.0 - share[:, None]) * self.ground
+        return True
 
     # ------------------------------------------------------------------
     def stroke(
         self,
         path,
-        medium: Medium | Stick,
+        medium: Medium | Stick | Pen,
         pressure: Profile = 0.5,
         width: float | None = None,
         tilt: float = 0.0,
@@ -179,12 +205,19 @@ class Sheet:
         wider than the point, across the stroke: broader, lighter and
         grainier, with soft edges.
 
+        ``medium`` can also be a :class:`fusain.Pen`, a ballpoint: it has its
+        own width and no side (``tilt`` stays 0), its line is nearly as dark
+        at a light touch as at a firm one, and its ink is a stain in the
+        paper (:attr:`ink`), under everything else, which no tool takes off.
+
         Returns the volume of medium laid, which is what the tip lost.
 
         Raises ValueError or TypeError, before anything is drawn, unless
-        ``width`` is a finite number above 0 (and not given for a stick), the
-        pressures are finite and ``tilt`` is between 0 and 1.
+        ``width`` is a finite number above 0 (and not given for a stick or a
+        pen), the pressures are finite and ``tilt`` is between 0 and 1.
         """
+        if isinstance(medium, Pen):
+            return self._roll(path, medium, pressure, width, tilt)
         stick = medium if isinstance(medium, Stick) else None
         if stick is not None:
             if width is not None:
@@ -196,7 +229,8 @@ class Sheet:
             tip = (width, width, 0.0, 0.0)
         else:
             raise TypeError(
-                f"medium must be a Medium, such as pencils.HB, or a Stick: {medium!r}"
+                "medium must be a Medium, such as pencils.HB, a Stick or a Pen: "
+                f"{medium!r}"
             )
         if not 0.0 <= tilt <= 1.0:
             raise ValueError(f"tilt must be between 0 (point) and 1 (side): {tilt!r}")
@@ -235,6 +269,41 @@ class Sheet:
         if stick is not None:
             stick.worn = max(stick.worn + laid, 0.0)
         return laid
+
+    def _roll(self, path, pen: Pen, pressure: Profile, width, tilt) -> float:
+        """One pass of a ballpoint pen along ``path``; see :meth:`stroke`."""
+        if width is not None:
+            raise TypeError("a Pen has its own width: give none with it")
+        if tilt != 0.0:
+            raise ValueError(
+                f"a pen has no side to draw with: tilt must be 0: {tilt!r}"
+            )
+        xs, ys, bearing, steps = self._sampled(path, pressure, pen.width)
+        if self.ink is None or self.inked is None:
+            self.ink = np.zeros((self.height, self.width, LOOSE), np.float32)
+            self.inked = np.zeros((self.height, self.width), np.float32)
+        paper = self.paper
+        return float(
+            eng.roll_stroke(
+                self.tooth,
+                self.press,
+                self.cover,
+                self.held,
+                self.under,
+                self.loose,
+                self.ink,
+                self.inked,
+                xs,
+                ys,
+                bearing,
+                steps,
+                0.5 * float(pen.width),
+                np.ascontiguousarray(pen.ink.K, dtype=np.float64),
+                np.array([pen.ink.S, pen.flow], dtype=np.float64),
+                np.array([paper.depth, paper.bite, paper.give], dtype=np.float64),
+                int(self._rng.integers(1 << 31)),
+            )
+        )
 
     # ------------------------------------------------------------------
     def render(
@@ -425,7 +494,7 @@ class Sheet:
     def shade(
         self,
         area,
-        medium: Medium | Stick,
+        medium: Medium | Stick | Pen,
         pressure: hatching.Pressure = 0.5,
         width: float | None = None,
         angle: float = 30.0,
@@ -459,22 +528,25 @@ class Sheet:
         above 0, ``angle`` is finite, ``hand`` is finite and not negative and
         ``tilt`` is between 0 and 1.
         """
-        stick = medium if isinstance(medium, Stick) else None
-        if stick is not None:
+        own = isinstance(medium, Stick | Pen)  # (it has its own width)
+        if own:
             if width is not None:
-                raise TypeError("a Stick has its own width: give none with it")
-            width = stick.width
+                kind = type(medium).__name__
+                raise TypeError(f"a {kind} has its own width: give none with it")
+            width = medium.width
         elif isinstance(medium, Medium):
             width = 6.0 if width is None else width
         else:
             raise TypeError(
-                f"medium must be a Medium, such as pencils.HB, or a Stick: {medium!r}"
+                "medium must be a Medium, such as pencils.HB, a Stick or a Pen: "
+                f"{medium!r}"
             )
         if not 0.0 <= tilt <= 1.0:
             raise ValueError(f"tilt must be between 0 (point) and 1 (side): {tilt!r}")
         outline = hatching.as_outline(area)
         broad = width * _spread(tilt)  # how wide a stroke's mark is
-        gap = hatching.SPACING * broad if spacing is None else spacing
+        apart = PEN_SPACING if isinstance(medium, Pen) else hatching.SPACING
+        gap = apart * broad if spacing is None else spacing
         for name, value in (("width", width), ("spacing", gap)):
             if not (math.isfinite(value) and value > 0):
                 raise ValueError(
@@ -490,7 +562,7 @@ class Sheet:
         ):
             along = hatching.bearing(pressure, path, firm, hand)
             # (a stick's tip is as wide as it has worn, whatever the hand)
-            laid += self.stroke(path, medium, along, None if stick else tip, tilt)
+            laid += self.stroke(path, medium, along, None if own else tip, tilt)
         return laid
 
     def save(self, path: str, **render_options) -> None:

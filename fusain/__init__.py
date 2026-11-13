@@ -8,10 +8,11 @@ Quick start::
     sheet.save("paper.png", light=(-0.6, -0.8, 0.5))   # a raking light
 """
 
-from . import charcoal, crayons, papers, pastels, pencils, tools
+from . import charcoal, crayons, papers, pastels, pencils, pens, tools
 from ._about import __version__
 from .medium import Medium
 from .paper import Paper
+from .pens import Pen
 from .sheet import Sheet
 from .stick import Stick
 from .tools import Tool
@@ -19,6 +20,7 @@ from .tools import Tool
 __all__ = [
     "Medium",
     "Paper",
+    "Pen",
     "Sheet",
     "Stick",
     "Tool",
@@ -28,5 +30,6 @@ __all__ = [
     "papers",
     "pastels",
     "pencils",
+    "pens",
     "tools",
 ]

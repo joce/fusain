@@ -114,6 +114,32 @@ BURNISH = 1.5
 #: included.
 BURNISH_LIFT = 0.6
 BURNISH_LAY = 0.8
+#: A ballpoint pen. Its ball is hard and small: at full pressure it reaches
+#: this far down the tooth (times what the paper gives, as a tip does), and
+#: a light touch reaches nearly as far (far more than in proportion): a
+#: light line is thinner and paler, but it is still a line.
+BALL_REACH = 3.0
+BALL_POWER = 0.3
+#: A ball is round: from its middle to its rim its surface rises this far
+#: off the paper, in depths of the tooth, so a light line is narrower than
+#: the ball.
+BALL_ROUND = 2.5
+#: Pass after pass the ball meets the paper more alike than a stick does:
+#: the share of a stick's JITTER it has.
+BALL_JITTER = 0.5
+#: The ball lays its ink at a steady rate: one pass at full pressure leaves a
+#: film this thick where it touches, and the lightest pass this share of it.
+BALL_INK = 0.03
+BALL_LIGHT = 0.15
+#: The ink does not come quite evenly: by this share either way, over
+#: lengths of about BALL_SURGE pixels.
+BALL_UNEVEN = 0.2
+BALL_SURGE = 12.0
+#: The ball skids on a film of pigment: it lays less from the first of these
+#: thicknesses (per covered area) and nothing from the second. On wax it
+#: writes as badly as a dry medium does (RESIST_DRY).
+SKID_FROM = 0.25
+SKID_FULL = 1.0
 #: A tool that rubs reaches the dust underneath less than the dust on top:
 #: the share of its lift it has there.
 UNDER_LIFT = 0.7
@@ -529,6 +555,114 @@ def rub_stroke(
                 dusty = max(free, 0.0) / after
                 cover[iy, ix] += (1.0 - cover[iy, ix]) * stirred * dusty
     return load
+
+
+@njit(cache=True, error_model="numpy")
+def ball_grip(cover, held, under, loose, iy, ix):
+    """The share of its ink a ball lays at a pixel: all of it on bare paper,
+    less where it skids on a film of pigment or of wax."""
+    covered = cover[iy, ix]
+    if covered <= 0.0:
+        return 1.0
+    thick = (held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]) / covered
+    skid = min(max((thick - SKID_FROM) / (SKID_FULL - SKID_FROM), 0.0), 1.0)
+    waxy = min(held[iy, ix, IW] / covered / WAX_FULL, 1.0)
+    # (only the covered share of the pixel is slick)
+    return (1.0 - skid * covered) * (1.0 - RESIST_DRY * waxy * covered)
+
+
+@njit(cache=True, error_model="numpy")
+def surge_at(travel, salt):
+    """How much more or less ink than its share (1) the ball gives after
+    rolling ``travel`` pixels."""
+    along = travel / BALL_SURGE
+    band = int(math.floor(along))
+    blend = along - band
+    surge = unit_noise(band, 1, salt + 2) * (1.0 - blend)
+    surge += unit_noise(band + 1, 1, salt + 2) * blend
+    return 1.0 + BALL_UNEVEN * (2.0 * surge - 1.0)
+
+
+@njit(cache=True, error_model="numpy")
+def roll_stroke(
+    tooth,
+    press,
+    cover,
+    held,
+    under,
+    loose,
+    ink,
+    inked,
+    xs,
+    ys,
+    pressures,
+    steps,
+    radius,
+    k,
+    pen,
+    paper,
+    salt,
+):
+    """Roll one pass of a ballpoint pen, its ball of ``radius`` pixels,
+    through the points (``xs``, ``ys``), bearing with ``pressures`` (0..1)
+    and moving ``steps`` pixels at each.
+
+    ``pen`` is [the scattering of its ink per unit volume, how freely it
+    flows] (the ink's absorption per band is ``k``) and ``paper`` is [depth,
+    bite, give]. The ball lays ink at a steady rate wherever it touches the
+    paper: how much does not depend on the tooth, as it does for a stick,
+    and only a little on the pressure, which sets how much of the tooth the
+    ball reaches. The ink is a stain in the paper (``ink``, packed as dust
+    is, on the share ``inked`` of each pixel), under whatever the paper
+    carries; where that is thick or waxy, the ball skids and lays less.
+
+    Returns the volume of ink laid.
+    """
+    height, width = tooth.shape
+    s, flow = pen[0], pen[1]
+    depth, give = paper[0], paper[2]
+    reach = BALL_REACH * (GIVE_NONE + GIVE_FULL * give)
+    reach = reach / depth if depth > 1e-6 else 1e9
+    rise = BALL_ROUND / depth if depth > 1e-6 else 0.0
+    bound = radius + 0.5
+    per_pass = 1.0 / (2.0 * bound - 1.0)
+    travel = 0.0
+    total = 0.0
+    for i in range(xs.shape[0]):
+        pressure = pressures[i]
+        step = steps[i]
+        travel += step
+        if pressure <= 0.0 or step <= 0.0:
+            continue
+        x, y = xs[i], ys[i]
+        rate = BALL_INK * flow * (BALL_LIGHT + (1.0 - BALL_LIGHT) * pressure)
+        rate *= surge_at(travel, salt) * per_pass * step
+        x0 = max(int(math.floor(x - bound)), 0)
+        x1 = min(int(math.ceil(x + bound)), width)
+        y0 = max(int(math.floor(y - bound)), 0)
+        y1 = min(int(math.ceil(y + bound)), height)
+        for iy in range(y0, y1):
+            for ix in range(x0, x1):
+                dx, dy = ix + 0.5 - x, iy + 0.5 - y
+                d = math.sqrt(dx * dx + dy * dy)
+                edge = min(bound - d, 1.0)
+                if edge <= 0.0:
+                    continue
+                level = 1.0 - reach * pressure**BALL_POWER + rise * (d / bound) ** 2
+                level += BALL_JITTER * JITTER * (unit_noise(ix, iy, salt) - 0.5)
+                ground = tooth[iy, ix] + (1.0 - tooth[iy, ix]) * press[iy, ix]
+                above = ground + MICRO - level
+                touch = min(max(above / (2.0 * MICRO), 0.0), 1.0) * edge
+                if touch <= 0.0:
+                    continue
+                inked[iy, ix] = max(inked[iy, ix], touch)
+                dv = rate * touch * ball_grip(cover, held, under, loose, iy, ix)
+                for band in range(N):
+                    ink[iy, ix, band] += dv * k[band]
+                ink[iy, ix, IS] += dv * s
+                ink[iy, ix, IV] += dv
+                total += dv
+    return total
 
 
 def as_kernel_arrays(points: np.ndarray, pressure: np.ndarray, spacing: float):

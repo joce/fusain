@@ -7,13 +7,14 @@
 [![GitHub License](https://img.shields.io/github/license/joce/fusain)](https://github.com/joce/fusain/blob/main/LICENSE)
 
 A drawing simulator for dry and semi-dry media: graphite and coloured pencils,
-charcoal, pastel, crayon and the like, laid down on a paper with tooth. Wet
-media (ink, felt-tip markers, paint) are out of scope; for oil paint, see the
-sister project [oilpaint](https://github.com/joce/oilpaint). The two share their
-colour science and stroke paths through [murex](https://github.com/joce/murex).
+charcoal, pastel, crayon, ballpoint pen and the like, laid down on a paper with
+tooth. Wet media (ink, felt-tip markers, paint) are out of scope; for oil
+paint, see the sister project [oilpaint](https://github.com/joce/oilpaint).
+The two share their colour science and stroke paths through
+[murex](https://github.com/joce/murex).
 
 Early days. So far there are papers, graphite and coloured pencils, charcoal,
-soft, hard and oil pastels, wax crayons, stumps and erasers. Tone depends on how hard a stick is pressed and
+soft, hard and oil pastels, wax crayons, ballpoint pens, stumps and erasers. Tone depends on how hard a stick is pressed and
 how many layers are laid, as on real paper. Charcoal and pastel leave dust
 that a stump drags about and an eraser lifts; coloured pencils are waxy and
 translucent, so their layers mix to the eye; a light pastel covers a dark one.
@@ -106,6 +107,21 @@ Bottom, oil pastels on tan paper. Left: light colours over a dark blue ground,
 which they half cover. Middle: orange and blue side by side, and the same with
 the join rubbed with a finger. Right: white oil pastel over black, and lines
 drawn lighter to firmer.
+
+```python
+from fusain import pens
+
+sheet.stroke([(100, 300), (400, 320)], pens.BLUE, pressure=0.6)
+sheet.shade((100, 60, 300, 200), pens.BLACK, pressure=0.4, angle=35)   # hatching
+```
+
+![Ballpoint pens](examples/output/ballpoint.png)
+
+Left: lines from the lightest touch to the firmest, and loops as a hand writes
+them. Middle: hatching in one to four layers, and one layer pressed lighter to
+firmer. Right: a pencil sketch inked over, its right half then rubbed with an
+eraser, which takes the pencil and leaves the ink; and a red pen skidding
+across a patch of wax crayon.
 
 ```python
 from fusain import Stick
