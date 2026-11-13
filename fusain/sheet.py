@@ -462,13 +462,18 @@ class Sheet:
         outline = hatching.as_outline(area)
         gap = 0.5 * width if spacing is None else spacing
         _check_hatching(width, gap, angle, hand)
-        taken = 0.0
-        passes = hatching.strokes(outline, angle, width, gap, hand, self._rng)
-        for k, (path, firm, _) in enumerate(passes):
+        passes = []  # (what each pass presses, worked out before any rubs)
+        strokes = hatching.strokes(outline, angle, width, gap, hand, self._rng)
+        for k, (path, firm, _) in enumerate(strokes):
             path = path[::-1] if k % 2 else path  # to and fro
             along = hatching.bearing(pressure, path, firm, hand)
             points, _, u, _ = spline.as_path(path).sample(max(1.0, width / 8.0))
             touch = np.broadcast_to(np.asarray(along(u), dtype=np.float64), u.shape)
+            if not np.isfinite(touch).all():
+                raise ValueError("pressure must be finite all over the area")
+            passes.append((points, touch))
+        taken = 0.0
+        for points, touch in passes:
             marks = np.nonzero(touch > 0.0)[0]
             if marks.size < 2:
                 continue

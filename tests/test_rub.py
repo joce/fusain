@@ -99,6 +99,12 @@ def test_the_passes_run_at_the_angle_asked_for_and_repeat_with_the_seed():
         ({"angle": float("nan")}, ValueError, "angle must be"),
         ({"hand": -0.5}, ValueError, "hand must be"),
         ({"area": (1, 2, 3)}, ValueError, "an area is"),
+        ({"pressure": float("nan")}, ValueError, "pressure must be finite"),
+        (
+            {"pressure": lambda x, y: np.where(x > 150, np.nan, 0.5)},
+            ValueError,
+            "pressure must be finite",
+        ),
     ],
 )
 def test_rub_checks_its_arguments_before_it_rubs(kw, error, message):

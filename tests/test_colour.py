@@ -1,6 +1,8 @@
 """Colour: layers that mix or cover, and wax (behaviours 4 and 5 of
 docs/design.md), measured."""
 
+import itertools
+
 import numpy as np
 import pytest
 from murex import spectral as sp
@@ -336,3 +338,40 @@ def test_what_a_tip_drags_off_the_sheet_is_counted():
     ]
     # (what it dragged past the edge is gone with it, and is in the count)
     assert _total(sheet) == pytest.approx(before + sum(laid), rel=1e-6)
+
+
+# --------------------------------------------------------------------------
+# building up light layers, as a coloured pencil artist does
+
+
+def test_light_layers_go_on_building_for_ten_or_so():
+    sheet = _sheet()
+    deep = pencils.coloured("#2c7a33")
+    takes = [sheet.shade(BOX, deep, 0.3, angle=30 + 50 * k) for k in range(12)]
+    shares = [take / takes[0] for take in takes]
+    # each takes less than the one before, but slowly: the second most of
+    # what the first did, the sixth still a third, the tenth about a fifth
+    assert shares[1] > 0.7
+    assert shares[5] > 0.3
+    assert 0.12 < shares[9] < 0.3
+    assert all(a > 0.85 * b for a, b in itertools.pairwise(shares))
+
+
+def test_a_dark_pencil_shows_over_a_light_wash_unless_the_wash_was_pressed_hard():
+    lime, deep = pencils.coloured("#b9d233"), pencils.coloured("#2c7a33")
+    bare = _sheet()
+    on_bare = bare.shade(BOX, deep, 0.6)
+    alone = _luminance(bare)
+    taken, tones = [], []
+    for pressure in (0.3, 0.5, 0.75):
+        sheet = _sheet()
+        _layers(sheet, lime, 3, pressure)
+        taken.append(sheet.shade(BOX, deep, 0.6, angle=-20) / on_bare)
+        tones.append(_luminance(sheet))
+    # over a light wash it takes most of what it takes on bare paper, and
+    # the tone comes close to that of the dark pencil alone
+    assert taken[0] > 0.55
+    assert tones[0] < 1.2 * alone
+    # the harder the wash was pressed, the less the dark pencil takes
+    assert taken[0] > taken[1] > taken[2]
+    assert taken[2] < 0.35
