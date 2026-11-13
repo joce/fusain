@@ -51,7 +51,9 @@ def test_fixing_sets_all_the_dust_once():
     dust = float(_dust(sheet).sum(dtype=np.float64))
     assert not sheet.fixed.any()
     assert sheet.fix() == pytest.approx(dust, rel=1e-6)
-    assert np.allclose(sheet.fixed, _dust(sheet), rtol=1e-5, atol=1e-7)
+    assert sheet.fixed.shape == (150, 200, 2)
+    assert np.array_equal(sheet.fixed[..., 0], sheet.under[..., IV])
+    assert np.array_equal(sheet.fixed[..., 1], sheet.loose[..., IV])
     tone = _tone(sheet)
     assert sheet.fix() == pytest.approx(0.0, abs=1e-3)
     assert _tone(sheet) == tone
@@ -128,7 +130,7 @@ def test_a_finger_hardly_moves_fixed_dust(medium):
     fixed.fix()
     carried = [_carried_out(sheet) for sheet in (loose, half, fixed)]
     assert carried[2] < 0.05 * carried[0]
-    assert 0.3 * carried[0] < carried[1] < 0.7 * carried[0]
+    assert 0.4 * carried[0] < carried[1] < 0.85 * carried[0]
 
 
 def test_a_stump_and_a_kneaded_eraser_take_little_and_a_hard_eraser_most():
@@ -161,7 +163,8 @@ def test_rubbing_and_erasing_fixed_dust_conserves_it():
     carried += sheet.erase([(30, 75), (170, 75)], tools.KNEADED, 0.8)
     assert _total(sheet) + carried == pytest.approx(total, rel=1e-5)
     assert sheet.fixed.min() >= 0.0
-    assert (sheet.fixed <= _dust(sheet) + 1e-5).all()
+    for which, layer in enumerate((sheet.under, sheet.loose)):
+        assert (sheet.fixed[..., which] <= layer[..., IV] + 1e-5).all()
     # where the hard eraser went, the fixative went with the dust
     assert sheet.fixed[44:48, 60:140].mean() < 0.3 * sheet.fixed[30:34, 60:140].mean()
 
@@ -179,7 +182,7 @@ def test_fixed_pastel_takes_more_and_the_new_layer_is_loose():
     assert more > 1.2 * loose.shade(BOX, red, 0.7, 12, angle=-20)
     # only what was laid since is free to move
     carried = _carried_out(fixed)
-    assert 0.0 < carried < 0.5 * _carried_out(loose)
+    assert 0.0 < carried < 0.7 * _carried_out(loose)
     assert carried > 5 * _carried_out(_fixed_only())
 
 
@@ -201,3 +204,86 @@ def test_a_pencil_does_not_press_fixed_dust_into_the_paper():
         pressed.append(dust - float(_dust(sheet).sum(dtype=np.float64)))
     assert pressed[0] > 100.0
     assert abs(pressed[1]) < 0.01 * pressed[0]
+
+
+# --------------------------------------------------------------------------
+# a fixed layer under a loose one
+
+
+def _white_over_fixed_black(fix: bool) -> Sheet:
+    sheet = _drawn(pastels.soft(BLACK), layers=1)
+    if fix:
+        sheet.fix()
+    sheet.shade(BOX, pastels.soft(WHITE), 0.8, 12, angle=-30)
+    return sheet
+
+
+def _rubbed(sheet) -> Sheet:
+    for k in range(6):
+        y = 55 + 7 * k
+        sheet.smudge([(40, y), (160, y)], tools.FINGER, 0.7)
+        sheet.smudge([(160, y + 3), (40, y + 3)], tools.FINGER, 0.7)
+    return sheet
+
+
+def test_the_fixed_dust_goes_under_the_new_layer_and_stays_fixed():
+    sheet = _drawn(pastels.soft(BLACK), layers=1)
+    fixed = sheet.fix()
+    sheet.shade(BOX, pastels.soft(WHITE), 0.8, 12, angle=-30)
+    # (no fixative was added or lost; most of it went under with its dust)
+    assert float(sheet.fixed.sum(dtype=np.float64)) == pytest.approx(fixed, rel=1e-5)
+    assert sheet.fixed[INSIDE][..., 0].sum() > 5 * sheet.fixed[INSIDE][..., 1].sum()
+    # the layer on top is loose
+    top = float(sheet.loose[INSIDE][..., IV].sum())
+    assert sheet.fixed[INSIDE][..., 1].sum() < 0.1 * top
+
+
+def test_rubbing_a_new_layer_does_not_stir_up_the_fixed_one_under_it():
+    band = (slice(55, 95), slice(60, 140))
+    tones = {}
+    for fix in (False, True):
+        sheet = _white_over_fixed_black(fix)
+        before = _tone(sheet, band)
+        held = float(sheet.held[band][..., IV].sum())
+        fixed = float(sheet.fixed[band][..., 0].sum())
+        _rubbed(sheet)
+        tones[fix] = _tone(sheet, band) / before
+        pressed = float(sheet.held[band][..., IV].sum()) / held
+        if fix:
+            # the black stays where it was, set, and the finger presses next
+            # to nothing into the paper through it
+            assert float(sheet.fixed[band][..., 0].sum()) > 0.95 * fixed
+            assert float(sheet.under[band][..., IV].sum()) > 0.95 * fixed
+            assert pressed < 1.1
+        else:
+            assert pressed > 2.0
+    # unfixed, the finger grinds the black and the white together into the
+    # paper, a dark grey; fixed, a haze of white is left over the black
+    assert tones[False] < 0.15
+    assert tones[True] > 2 * tones[False]
+
+
+def test_a_second_coat_darkens_only_what_it_newly_sets():
+    sheet = _drawn(pastels.soft(BLACK), layers=1)
+    sheet.fix()
+    sheet.shade(BOX, pastels.soft(WHITE), 0.8, 12, angle=-30)
+    was_set = sheet.fixed.copy()
+    layers = (sheet.under, sheet.loose)
+    scatter = [layer[..., IS].astype(np.float64) for layer in layers]
+    assert sheet.fix() > 0
+    for which, layer in enumerate(layers):
+        volume = layer[..., IV].astype(np.float64)
+        newly = np.clip(volume - was_set[..., which], 0.0, None)
+        share = newly / np.maximum(volume, 1e-9)
+        expected = scatter[which] * (1.0 - 0.15 * share)
+        assert np.allclose(layer[..., IS], expected, rtol=1e-4, atol=1e-6)
+    # where the first coat had set all of a layer, the second leaves it alone
+    all_set = was_set[..., 0] >= 0.999 * sheet.under[..., IV]
+    all_set &= sheet.under[..., IV] > 0
+    assert all_set.sum() > 100
+    assert np.allclose(sheet.under[..., IS][all_set], scatter[0][all_set], rtol=1e-3)
+    # and the new layer on top, loose until now, scatters 15% less
+    top = (slice(50, 100), slice(50, 150))
+    ratio = float(sheet.loose[top][..., IS].sum()) / float(scatter[1][top].sum())
+    assert 0.85 <= ratio < 0.86
+    assert sheet.fix() == pytest.approx(0.0, abs=1e-3)

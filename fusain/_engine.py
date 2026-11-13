@@ -173,25 +173,33 @@ def tip_bearing(dx, dy, tx, ty, wide, long, rounded):
 
 
 @njit(cache=True, error_model="numpy")
-def free_share(fixed, under, loose, iy, ix):
-    """The share of the dust at a pixel that fixative has not set (``fixed``
-    is the volume of dust it has)."""
-    dust = under[iy, ix, IV] + loose[iy, ix, IV]
-    if fixed[iy, ix] <= 0.0 or dust <= 0.0:
+def free_share(fixed, layer, iy, ix, which):
+    """The share of a layer of dust at a pixel that fixative has not set.
+    ``fixed`` holds, for each pixel, the volume it has set in the dust
+    underneath (``which`` 0) and in the dust on top (1)."""
+    there = layer[iy, ix, IV]
+    if fixed[iy, ix, which] <= 0.0 or there <= 0.0:
         return 1.0
-    return 1.0 - min(fixed[iy, ix] / dust, 1.0)
+    return 1.0 - min(fixed[iy, ix, which] / there, 1.0)
 
 
 @njit(cache=True, error_model="numpy")
-def press_dust(held, under, loose, iy, ix, share):
-    """Press the ``share`` of the dust at a pixel into the paper."""
+def press_dust(held, under, loose, fixed, cover, iy, ix, share):
+    """Press the ``share`` of the dust at a pixel into the paper: of the
+    dust that fixative has not set (``fixed``), and less of it the more a
+    layer that is set lies between it and the paper."""
     if loose[iy, ix, IV] <= 0.0 and under[iy, ix, IV] <= 0.0:
         return  # (no dust here: most pixels of a first pass)
+    barrier = fixed[iy, ix, 0] + fixed[iy, ix, 1]
+    if barrier > 0.0:
+        share *= 1.0 - min(barrier / max(cover[iy, ix], 1e-6) / COVERS, 1.0)
+    from_loose = share * free_share(fixed, loose, iy, ix, 1)
+    from_under = share * free_share(fixed, under, iy, ix, 0)
     for part in range(LOOSE):
-        moved = loose[iy, ix, part] * share
+        moved = loose[iy, ix, part] * from_loose
         loose[iy, ix, part] -= moved
         held[iy, ix, part] += moved
-        moved = under[iy, ix, part] * share
+        moved = under[iy, ix, part] * from_under
         under[iy, ix, part] -= moved
         held[iy, ix, part] += moved
 
@@ -214,10 +222,11 @@ def burnish(held, press, drag, iy, ix, polish, lay):
 
 
 @njit(cache=True, error_model="numpy")
-def settle_dust(fresh, cover, under, loose, k, s, sheen, xs, ys, bound):
+def settle_dust(fresh, cover, fixed, under, loose, k, s, sheen, xs, ys, bound):
     """At the end of a pass, put its dust (``fresh``, a volume per pixel) on
     top of the dust that was there, which goes under it, and leave ``fresh``
-    empty again. Only where the tip went: within ``bound`` of the points
+    empty again; the dust that goes under takes with it what fixative has
+    set of it (``fixed``). Only where the tip went: within ``bound`` of the points
     (``xs``, ``ys``)."""
     height, width = fresh.shape
     for i in range(xs.shape[0]):
@@ -236,6 +245,10 @@ def settle_dust(fresh, cover, under, loose, k, s, sheen, xs, ys, bound):
                     moved = loose[iy, ix, part] * buried
                     loose[iy, ix, part] -= moved
                     under[iy, ix, part] += moved
+                # (what fixative has set of it goes under with it)
+                moved = fixed[iy, ix, 1] * buried
+                fixed[iy, ix, 1] -= moved
+                fixed[iy, ix, 0] += moved
                 for band in range(N):
                     loose[iy, ix, band] += dust * k[band]
                 loose[iy, ix, IS] += dust * s
@@ -288,8 +301,8 @@ def lay_stroke(
     What the paper does not hold of it is dust, gathered in ``fresh`` (empty
     before and after) and laid at the end of the pass on top of the dust that
     was there (``loose``), which goes ``under`` it. Dust that fixative has set
-    (``fixed``, a volume per pixel) is not pressed in, and takes less of the
-    room in the tooth. Wax films over the tooth,
+    (``fixed``, its volume in each of the two layers) is not pressed in, and
+    takes less of the room in the tooth. Wax films over the tooth,
     which then takes less (:func:`resist_of`); pressed hard, the tip polishes
     it flat (``press``) and smears it along.
 
@@ -368,7 +381,9 @@ def lay_stroke(
                 cover[iy, ix] = covered
                 there = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
                 thick = (there + fresh[iy, ix]) / covered
-                thick -= (1.0 - FIXED_ROOM) * fixed[iy, ix] / covered
+                thick -= (
+                    (1.0 - FIXED_ROOM) * (fixed[iy, ix, 0] + fixed[iy, ix, 1]) / covered
+                )
                 bearing = min(local, 1.0)
                 passing = per_pass * step * touch
                 waxy = min(held[iy, ix, IW] / covered / WAX_FULL, 1.0)
@@ -378,8 +393,7 @@ def lay_stroke(
                     burnish(held, press, drag, iy, ix, polish, lay_back)
                 # the tip presses some of the dust under it into the paper
                 pressed = min(PRESS_IN * bearing, 1.0) * passing
-                pressed *= free_share(fixed, under, loose, iy, ix)
-                press_dust(held, under, loose, iy, ix, pressed)
+                press_dust(held, under, loose, fixed, cover, iy, ix, pressed)
                 room = full * (FILL_LIGHT + (1.0 - FILL_LIGHT) * bearing) - thick
                 if room <= 0.0:
                     continue
@@ -398,7 +412,7 @@ def lay_stroke(
                 fresh[iy, ix] += dv - kept
                 total += dv
     if binding < 1.0:  # (else there is no dust to settle)
-        settle_dust(fresh, cover, under, loose, k, s, sheen, xs, ys, reached)
+        settle_dust(fresh, cover, fixed, under, loose, k, s, sheen, xs, ys, reached)
     # (what the tip still drags at the end has left the paper with it)
     return total - drag[IV]
 
@@ -431,8 +445,8 @@ def rub_stroke(
     the dust underneath up into the dust on top and spreads it over the
     pixel; and over each of its own widths the tool lays the share ``lay`` of
     what it carries back down, as dust on top. Dust that fixative has set
-    (``fixed``, a volume per pixel) is lifted only as held pigment is, and is
-    neither pressed in nor stirred.
+    (``fixed``, its volume in each of the two layers) is lifted only as held
+    pigment is, and is neither pressed in nor stirred.
 
     Returns what the tool carries at the end: [K (N bands), S, volume, sheen].
     """
@@ -466,13 +480,15 @@ def rub_stroke(
                 local *= streak_at(dx, dy, tx, ty, salt)
                 share = local * per_pass * step  # of one pass at full pressure
                 # lift
-                free = free_share(fixed, under, loose, iy, ix)
                 up_held = min(lift_held * share, 1.0)
+                free = free_share(fixed, loose, iy, ix, 1)
                 up_loose = min(lift_loose * share, 1.0) * free
                 up_loose += up_held * (1.0 - free)
+                free = free_share(fixed, under, iy, ix, 0)
                 up_under = min(UNDER_LIFT * lift_loose * share, 1.0) * free
                 up_under += up_held * (1.0 - free)
-                fixed[iy, ix] -= fixed[iy, ix] * up_held
+                fixed[iy, ix, 0] -= fixed[iy, ix, 0] * up_held
+                fixed[iy, ix, 1] -= fixed[iy, ix, 1] * up_held
                 for part in range(LOOSE):
                     taken = loose[iy, ix, part] * up_loose
                     loose[iy, ix, part] -= taken
@@ -500,14 +516,17 @@ def rub_stroke(
                 cover[iy, ix] += bare * (laid / after)
                 # press in; stir up what is underneath; and push what is
                 # loose into the low ground
-                free = free_share(fixed, under, loose, iy, ix)
-                press_dust(held, under, loose, iy, ix, min(press * share, 1.0) * free)
-                stirred = min(smear * share, 1.0) * free
+                spent = min(press * share, 1.0)
+                press_dust(held, under, loose, fixed, cover, iy, ix, spent)
+                stirred = min(smear * share, 1.0)
+                moving = stirred * free_share(fixed, under, iy, ix, 0)
                 for part in range(LOOSE):
-                    moved = under[iy, ix, part] * stirred
+                    moved = under[iy, ix, part] * moving
                     under[iy, ix, part] -= moved
                     loose[iy, ix, part] += moved
-                dusty = (under[iy, ix, IV] + loose[iy, ix, IV]) / after
+                free = under[iy, ix, IV] + loose[iy, ix, IV]
+                free -= fixed[iy, ix, 0] + fixed[iy, ix, 1]
+                dusty = max(free, 0.0) / after
                 cover[iy, ix] += (1.0 - cover[iy, ix]) * stirred * dusty
     return load
 

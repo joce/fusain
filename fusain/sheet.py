@@ -90,8 +90,9 @@ class Sheet:
         # the dust of the pass being drawn, until it settles (empty between
         # strokes)
         self._fresh = np.zeros((H, W), np.float32)
-        # the volume of dust that fixative has set, at each pixel
-        self.fixed = np.zeros((H, W), np.float32)
+        # the volume of dust that fixative has set at each pixel, in the
+        # dust underneath and in the dust on top
+        self.fixed = np.zeros((H, W, 2), np.float32)
 
     def copy(self) -> Sheet:
         """An independent copy: drawing on one leaves the other alone."""
@@ -369,13 +370,17 @@ class Sheet:
         """
         if not 0.0 <= amount <= 1.0:
             raise ValueError(f"amount must be between 0 and 1, got {amount!r}")
-        dust = self.under[..., IV] + self.loose[..., IV]
-        newly = np.maximum(dust - self.fixed, 0.0) * np.float32(amount)
-        share = newly / np.maximum(dust, np.float32(1e-9))
-        for layer in (self.under, self.loose):
+        total = 0.0
+        for which, layer in enumerate((self.under, self.loose)):
+            volume = layer[..., IV]
+            newly = np.maximum(volume - self.fixed[..., which], 0.0)
+            newly *= np.float32(amount)
+            # (only what is newly set darkens)
+            share = newly / np.maximum(volume, np.float32(1e-9))
             layer[..., IS] *= 1.0 - np.float32(FIXATIVE_DARKENS) * share
-        self.fixed += newly
-        return float(newly.sum(dtype=np.float64))
+            self.fixed[..., which] += newly
+            total += float(newly.sum(dtype=np.float64))
+        return total
 
     def _rub(self, path, tool: Tool, pressure: Profile, width: float | None) -> float:
         if not isinstance(tool, Tool):

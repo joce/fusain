@@ -11,8 +11,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - Fixative, `Sheet.fix(amount=1.0)`: sets the dust where it lies. A stump or
   a finger hardly moves it afterwards and a kneaded eraser lifts little; a
   hard eraser still takes it off. It shows as it lay, a little darker, and
-  takes more layers, which are loose again. `Sheet.fixed` is the volume of
-  dust set at each pixel.
+  takes more layers, which are loose again: rubbing them leaves the fixed
+  layer underneath alone, and a second coat darkens only what it newly sets.
+  `Sheet.fixed` is the volume of dust set at each pixel, in each of the two
+  layers of dust.
 - Graphite shines. `Medium.sheen` is how much of a medium mirrors the light
   (graphite only, the more the softer the lead), `Sheet.shine()` is how much
   of each pixel does, and `Sheet.render` adds the lamp's reflection: heavy

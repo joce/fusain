@@ -38,7 +38,7 @@ Per pixel, all `float32`:
 | `press` | How far the tooth has been crushed or polished here (0 to 1): burnishing, and lines indented with a stylus. |
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
 | `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. |
-| `fixed` | Volume of the dust here that fixative has set. |
+| `fixed` | Volume of the dust here that fixative has set, in each of the two layers of dust. |
 | `under`, `loose` | Pigment lying on the surface as dust: K, S, volume and sheen, in two layers. `loose` is on top; what a new pass covers goes `under`. |
 
 That is about 0.34 KB per pixel, as much as oilpaint. As there, storing summed
@@ -107,8 +107,10 @@ A tool is a tip plus, usually, a medium.
   `loose`), hard eraser (also abrades `held`), burnisher.
 - **Fixative** (built) acts on the whole sheet. It does not move the dust into
   `held`, which would mix a light pastel into the dark one under it: the dust
-  stays in its two layers, and `fixed` records how much of it is set. Dust
-  that is set is lifted only as held pigment is, is not pressed in or stirred,
+  stays in its two layers, and `fixed` records how much of each is set (it
+  goes under with its dust when a new pass covers it). Dust that is set is
+  lifted only as held pigment is, is not pressed in or stirred, keeps loose
+  dust above it from being pressed into the paper,
   scatters a little less light (fixative darkens), and takes half the room in
   the tooth, so that more can be laid over it. What is laid afterwards is
   loose.
