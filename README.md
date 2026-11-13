@@ -82,6 +82,8 @@ white pastel over black, and lines drawn with a hard pastel.
 
 ```python
 sheet.fix()   # fixative: the dust stays where it is, and takes more layers
+# the tooth is full of pastel after five or six layers; fix between stages, as a pastellist does,
+# and a light pastel covers a heavily worked dark one again.
 ```
 
 ![Fixative](examples/output/fixative.png)

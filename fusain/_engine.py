@@ -365,7 +365,8 @@ def lay_stroke(
 
     ``medium`` is [scattering per unit volume, softness, binding, the share
     of wax in it, its sheen] (its absorption per band is ``k``) and ``paper`` is
-    [depth, bite, give]. The medium is laid where the tip touches the tooth.
+    [depth, bite, give, hold]. The medium is laid where the tip touches the
+    tooth.
     What the paper does not hold of it is dust, gathered in ``fresh`` (empty
     before and after) and laid at the end of the pass on top of the dust that
     was there (``loose``), which goes ``under`` it. Dust that fixative has set
@@ -401,6 +402,7 @@ def lay_stroke(
         * (FILL_FLAT + (1.0 - FILL_FLAT) * min(depth, 2.0))
         * (0.5 + 0.5 * bite)
         * (1.0 + PILE * (1.0 - binding))
+        * paper[3]
     )
     rounded = RIM + (1.0 - RIM) * TILT_RIM * tilt
     resist = resist_of(softness, wax)
@@ -687,7 +689,8 @@ def roll_stroke(
 
     ``pen`` is [the scattering of its ink per unit volume, how freely it
     flows] (the ink's absorption per band is ``k``) and ``paper`` is [depth,
-    bite, give]. The ball lays ink at a steady rate wherever it touches the
+    bite, give, hold]. The ball lays ink at a steady rate wherever it touches
+    the
     paper: how much does not depend on the tooth, as it does for a stick,
     and only a little on the pressure, which sets how much of the tooth the
     ball reaches. The ink is a stain in the paper (``ink``, packed as dust

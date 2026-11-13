@@ -262,7 +262,9 @@ class Sheet:
                     ],
                     dtype=np.float64,
                 ),
-                np.array([paper.depth, paper.bite, paper.give], dtype=np.float64),
+                np.array(
+                    [paper.depth, paper.bite, paper.give, paper.hold], dtype=np.float64
+                ),
                 int(self._rng.integers(1 << 31)),
             )
         )
@@ -300,7 +302,9 @@ class Sheet:
                 0.5 * float(pen.width),
                 np.ascontiguousarray(pen.ink.K, dtype=np.float64),
                 np.array([pen.ink.S, pen.flow], dtype=np.float64),
-                np.array([paper.depth, paper.bite, paper.give], dtype=np.float64),
+                np.array(
+                    [paper.depth, paper.bite, paper.give, paper.hold], dtype=np.float64
+                ),
                 int(self._rng.integers(1 << 31)),
             )
         )
