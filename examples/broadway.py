@@ -156,7 +156,6 @@ KERBSTONE = tones("#f4e8cc", "#464c74")
 EARTH = tones("#6e543a", "#3c3444")
 BARK = tones("#a48c6c", "#3a3442")
 TANK = tones("#b47e50", "#5c4c58")
-SKIN = tones("#e8b890", "#8a6c74")
 HYDRANT = tones("#a83c30", "#5e2c3c")
 SIGNAL = tones("#f0c020", "#a08a3c")
 #: The sky, from overhead down to the end of the street, and its clouds.
@@ -749,7 +748,7 @@ def front_arms(fig: Figure, chest: float) -> tuple[Limb, ...]:
         swing = abs(fig.step) * (side * fig.step < 0.0)
         elbow = (side * (chest + 0.015), 0.63 * t + 0.03 * swing)
         hand = (side * (chest - 0.01 - 0.05 * swing), 0.45 * t + 0.08 * swing)
-        held = fig.hands if side < 0 or fig.hands == "pockets" else "swing"
+        held = holding(fig.hands, side)
         if held == "pockets":
             elbow, hand = (side * (chest + 0.04), 0.64 * t), (side * 0.15, 0.5 * t)
         elif held == "bag":
@@ -758,9 +757,20 @@ def front_arms(fig: Figure, chest: float) -> tuple[Limb, ...]:
             elbow = (side * (chest + 0.05), 0.7 * t)
             hand = (side * 0.1, t - 0.65 * t / HEADS)
         elif held == "child":
-            elbow, hand = (side * (chest + 0.04), 0.62 * t), (side * (chest + 0.1), 0.44 * t)
+            elbow, hand = (side * (chest + 0.04), 0.6 * t), (side * (chest + 0.1), 0.42 * t)
         arms.append((root, elbow, hand))
     return tuple(arms)
+
+
+def holding(hands: str, side: float) -> str:
+    """What the hand on one side (-1 the eye's left) does: both go in the
+    pockets; the right holds a child's; the left holds the strap of a bag
+    or a telephone; otherwise it swings (a canvas bag swings with it)."""
+    if hands == "pockets":
+        return hands
+    if hands == "child":
+        return hands if side > 0 else "swing"
+    return hands if side < 0 and hands in ("bag", "phone") else "swing"
 
 
 def side_arms(fig: Figure, chest: float) -> tuple[Limb, ...]:
@@ -787,7 +797,7 @@ def frame(fig: Figure) -> Frame:
     t, b = fig.tall, fig.build
     head = t / HEADS
     if fig.across:
-        chest, skirt = 0.13 * b, 0.15 * b
+        chest, skirt = 0.15 * b, 0.17 * b
         legs, arms = side_legs(fig), side_arms(fig, chest)
     else:
         chest, skirt = 0.22 * b, 0.18 * b
@@ -850,30 +860,23 @@ CARS = (
 CROWD = (
     Figure(0.75, 21.3, "red", "black", "right", 0.8, 1.7, 0.95, 0.4, "black", "long", hands="bag"),
     Figure(-0.3, 22.3, "navy", "grey", "right", -0.7, 1.82, 1.05, 0.47, "dark"),
-    Figure(7.9, 17.6, "navy", "jeans", "toward", 0.7, 1.8, 1.05, 0.52, "dark", hands="pockets"),
-    Figure(8.55, 18.2, "camel", "dark", "toward", -0.6, 1.66, 0.92, 0.34, "brown", "long", hands="bag", scarf="#b8402c"),
-    Figure(6.95, 24.0, "olive", "khaki", "left", 0.0, 1.76, hands="pockets", hem=0.5),
+    Figure(9.5, 17.0, "navy", "jeans", "toward", 0.7, 1.8, 1.05, 0.52, "dark", hands="pockets"),
+    Figure(10.15, 17.4, "camel", "dark", "toward", -0.6, 1.66, 0.92, 0.34, "brown", "long", hands="bag", scarf="#b8402c"),
+    Figure(8.6, 20.0, "teal", "dark", "toward", 0.5, 1.74, hem=0.4, hands="child"),
+    Figure(9.1, 20.1, "mustard", "jeans", "toward", -0.5, 1.12, 0.8, 0.45, "fair"),
+    Figure(6.95, 24.0, "olive", "dark", "left", 0.0, 1.76, hands="pockets", hem=0.5),
     Figure(10.15, 27.0, "black", "grey", "right", 0.0, 1.68, 0.92, 0.34, "fair", "long", lean=0.03, hands="tote"),
     Figure(10.75, 27.2, "brown", "jeans", "left", 0.0, 1.82, 1.05, 0.48, "grey", lean=-0.03),
-    Figure(9.4, 35.5, "plum", "black", "away", 0.7, 1.68, 0.92, 0.38, "dark", "long", hands="tote"),
-    Figure(8.45, 44.0, "teal", "dark", "toward", 0.5, 1.74, hem=0.4, hands="child"),
-    Figure(7.95, 44.1, "mustard", "jeans", "toward", -0.5, 1.12, 0.8, 0.45, "fair"),
+    Figure(11.3, 36.0, "plum", "black", "away", 0.7, 1.68, 0.92, 0.38, "dark", "long", hands="tote"),
     Figure(9.6, 53.0, "cream", "dark", "away", 0.6, 1.7, 0.95, 0.36, "brown", "long"),
     Figure(10.2, 53.6, "charcoal", "jeans", "away", -0.6, 1.8, 1.05, 0.48, "black"),
     Figure(8.9, 66.0, "red", "dark", "toward", 0.6, 1.7, hem=0.38),
-    Figure(9.4, 80.0, "navy", "khaki", "away", 0.6),
-    Figure(10.4, 84.0, "camel", "dark", "toward", -0.6),
-    Figure(8.8, 96.0, "black", "jeans", "toward", 0.6),
-    Figure(9.8, 104.0, "cream", "dark", "away", 0.6),
-    Figure(-8.7, 23.0, "charcoal", "dark", "toward", 0.6, 1.8, 1.05, 0.45, "black", hands="pockets"),
-    Figure(-9.3, 31.0, "camel", "black", "away", 0.6, 1.68, 0.92, 0.36, "fair", "long", hands="bag"),
-    Figure(-9.9, 31.6, "navy", "dark", "away", -0.6, 1.8, 1.05, 0.46, "dark"),
-    Figure(-7.6, 39.5, "cream", "grey", "right", 0.0, 1.72, hem=0.34, hair="brown", cut="long", hands="phone"),
-    Figure(-9.6, 46.5, "olive", "jeans", "toward", 0.6, 1.78, hem=0.48),
-    Figure(-8.8, 58.5, "black", "dark", "away", 0.6, 1.76),
-    Figure(-9.4, 59.2, "teal", "black", "away", -0.6, 1.66, 0.92, 0.36, cut="long"),
+    Figure(-9.4, 22.5, "charcoal", "dark", "toward", 0.6, 1.8, 1.05, 0.45, "black", hands="pockets"),
+    Figure(-10.6, 29.5, "camel", "black", "away", 0.6, 1.68, 0.92, 0.36, "fair", "long", hands="bag"),
+    Figure(-11.2, 30.0, "navy", "dark", "away", -0.6, 1.8, 1.05, 0.46, "dark"),
+    Figure(-7.4, 46.0, "cream", "grey", "right", 0.0, 1.72, hem=0.34, hair="brown", cut="long", hands="phone"),
+    Figure(-9.8, 54.0, "olive", "jeans", "toward", 0.6, 1.78, hem=0.48),
     Figure(-10.2, 72.0, "navy", "khaki", "toward", 0.6),
-    Figure(-8.4, 88.0, "camel", "dark", "toward", -0.6),
     Figure(-9.6, 100.0, "black", "dark", "away", 0.6),
     Figure(-3.0, 121.0, "black", "dark", "right", 0.6),
     Figure(1.5, 122.0, "camel", "dark", "left", 0.6),
@@ -1665,12 +1668,12 @@ class Life(Ground):
         draw = {
             Tree: self.tree,
             Car: self.car,
-            Walker: self.walker,
+            Figure: self.figure,
             Lamp: self.lamp,
             Hydrant: self.hydrant,
             Signal: self.signal,
         }
-        things = [*self.trees, *CARS, *WALKERS, *LAMPS, *HYDRANTS, *SIGNALS]
+        things = [*self.trees, *CARS, *CROWD, *LAMPS, *HYDRANTS, *SIGNALS]
         for count, thing in enumerate(sorted(things, key=lambda thing: -thing.z)):
             draw[type(thing)](thing)
             if thing.z < 130.0 and count % 4 == 0:
@@ -1814,28 +1817,227 @@ class Life(Ground):
             light = (car.x - 0.27, car.x + 0.27)
             self.slab(light, (tall + 0.02, tall + 0.17), z + 2.3, lamp, 0.9)
 
-    def walker(self, walker: Walker) -> None:
-        """Someone walking: shadow, legs in mid-stride, coat and sleeves,
-        head and hair."""
-        x, z, tall = walker.x, walker.z, walker.tall
-        size = rise(z)
-        self.cast((x, 0.0, z), tall, 0.3)
-        coat = distant(COATS[walker.coat], z)
-        legs = distant(COATS["navy" if walker.coat == "black" else "black"], z)
-        hip = 0.47 * tall
-        for way in (-1.0, 1.0):
-            foot = (x + way * (0.05 + walker.stride), 0.0, z)
-            self.rail(((x + 0.07 * way, hip + 0.05, z), foot), legs, 0.8, 0.14 * size)
-        self.rail(((x, 0.85 * tall, z), (x, hip - 0.08, z)), coat, 0.85, 0.4 * size)
-        sleeve = (mix(coat[0], coat[1], 0.6), mix(coat[1], INK, 0.2))
-        ends = ((x + 0.14, 0.83 * tall, z), (x + 0.14, hip, z))
-        self.rail(ends, sleeve, 0.7, 0.13 * size)
-        for way in (-1.0, 1.0):
-            ends = ((x + 0.2 * way, 0.8 * tall, z), (x + 0.25 * way, 0.5 * tall, z))
-            self.rail(ends, sleeve, 0.65, 0.09 * size)
-        head = ((x, 0.965 * tall, z), (x, 0.9 * tall, z))
-        self.rail(head, distant(SKIN, z), 0.85, 0.19 * size)
-        self.rail(level(x - 0.05, x + 0.07, tall, z), far(INK, z), 0.8, 0.1 * size)
+    # people ----------------------------------------------------------------
+
+    def figure(self, fig: Figure) -> None:
+        """Someone in the street, in a few strokes whose shapes follow the
+        body: the shadow that stands them on the ground; the legs, the coat
+        and the arms, the head; a stroke of light down the side the sun is
+        on and the shade down the other. The farther off, the fewer: far
+        away a dab of coat over a dab of legs, and a dot of head."""
+        body, size = frame(fig), rise(fig.z)
+        dress = self.dress(fig)
+        self.sheet.fix()  # (it gives the tooth back)
+        self.figure_shadow(fig, body)
+        if size < 13.0:
+            self.speck(fig, body, dress)
+            return
+        near = size >= 26.0
+        behind = 1 if fig.across else 0  # (seen from the side, an arm is behind)
+        for arm in body.arms[:behind]:
+            self.arm(fig, arm, dress, near)
+        for leg in body.legs:
+            self.leg(fig, leg, dress, near)
+        self.coat(fig, body, dress, near)
+        for arm in body.arms[behind:]:
+            self.arm(fig, arm, dress, near)
+        self.carried(fig, body, dress)
+        self.sheet.fix()
+        self.modelled(fig, body, dress, near)
+        self.head(fig, body, dress, near)
+
+    def dress(self, fig: Figure) -> dict[str, Tones]:
+        """What someone wears, and their skin and hair, as far off as they
+        are, each a stick or two away from the next person's."""
+        z = fig.z
+
+        def worn(pair: Tones) -> Tones:
+            sun, shade = distant(pair, z)
+            return sun + self.crowd.normal(0.0, 0.02, 3), shade + self.crowd.normal(
+                0.0, 0.03, 3
+            )
+
+        coat = worn(COATS[fig.coat])
+        return {
+            "coat": coat,
+            "sleeve": (mix(coat[0], coat[1], 0.25), mix(coat[1], INK, 0.15)),
+            "legs": worn(LEGS[fig.legs]),
+            "hair": worn(HAIR[fig.hair]),
+            "skin": worn(SKINS[fig.skin]),
+            "shoe": distant((SHOE, mix(SHOE, INK, 0.5)), z),
+        }
+
+    def part(self, fig, ends, colours, firm: float, wide: float, **how) -> None:
+        """One stroke of a figure between two points of the plane it stands
+        in (see :class:`Frame`), ``wide`` metres wide, its round ends kept
+        inside them."""
+        points = [(fig.x + u, y, fig.z) for u, y in ends]
+        how.setdefault("square", True)
+        self.rail(points, colours, firm, wide * rise(fig.z), **how)
+
+    def figure_shadow(self, fig: Figure, body: Frame) -> None:
+        """What stands someone on the ground: the dark where the feet press
+        it, in the sun or not; and on sunlit ground the shadow they cast,
+        away up the street like every other: the legs' apart, then the
+        body's and the head's."""
+        size = rise(fig.z)
+        base = np.array([fig.x, 0.0, fig.z])
+        for face, tone in ((ROAD, ROADWAY[1]), (WALK, PAVEMENT[1])):
+            dark = mix(far(tone, fig.z), INK, 0.35)
+            for leg in body.legs:
+                at = fig.x + leg[2][0]
+                ends = level(at - 0.08, at + 0.08, 0.0, fig.z)
+                self.rail(ends, (dark, dark), 0.6, max(0.05 * size, THIN), face)
+        crotch = body.legs[0][0][1]
+        for leg in body.legs:
+            self.cast(base + (leg[2][0], 0.0, 0.0), crotch, 0.12, self.crowd)
+        wide = 1.6 * body.chest
+        self.cast(base + crotch * CAST, body.neck - crotch, wide, self.crowd)
+        head = base + (body.top - body.head) * CAST
+        self.cast(head, body.head, 0.6 * body.head, self.crowd)
+
+    def leg(self, fig: Figure, leg: Limb, dress, near: bool) -> None:
+        """A leg: thigh and shin tapering to the ankle, and the shoe; far
+        off, one stroke."""
+        hip, knee, foot = leg
+        if not near:
+            self.part(fig, (hip, foot), dress["legs"], 0.8, 0.13 * fig.build)
+            return
+        self.part(fig, (hip, knee), dress["legs"], 0.85, 0.15 * fig.build)
+        self.part(fig, (knee, foot), dress["legs"], 0.85, 0.115 * fig.build)
+        way = fig.across
+        toe = (foot[0] + 0.1 * way, foot[1] - 0.02) if way else (foot[0], 0.02)
+        heel = (foot[0] - 0.03 * way, foot[1]) if way else (foot[0], 0.05)
+        self.part(fig, (heel, toe), dress["shoe"], 0.85, 0.075, square=False)
+
+    def coat(self, fig: Figure, body: Frame, dress, near: bool) -> None:
+        """The coat: a block of colour from the collar to the hem, broadest
+        at the shoulders, which slope; strokes from top to bottom, side by
+        side."""
+        size = rise(fig.z)
+        lean = fig.lean + 0.03 * fig.across * abs(fig.step)
+        wide = 2.0 * body.chest * size
+        count = int(np.clip(math.ceil(wide / (6.0 if near else 5.0)), 1, 5))
+        for k in range(count):
+            share = 2.0 * (k + 0.5) / count - 1.0
+            top = (lean + 0.85 * share * body.chest, body.neck - 0.07 * share**2)
+            foot = (share * body.skirt, body.hem)
+            tint = self.vary_by(dress["coat"], 0.012)
+            self.part(fig, (top, foot), tint, 0.85, 1.3 * wide / count / size)
+
+    def vary_by(self, pair: Tones, by: float) -> Tones:
+        """A pair of colours a little off, by the people's own hand."""
+        return pair[0] + self.crowd.normal(0.0, by, 3), pair[1] + self.crowd.normal(
+            0.0, 1.5 * by, 3
+        )
+
+    def arm(self, fig: Figure, arm: Limb, dress, near: bool) -> None:
+        """An arm: the sleeve to the elbow and on to the wrist, and the hand,
+        unless it is in a pocket; far off, one stroke, or none."""
+        root, elbow, hand = arm
+        wide = 0.1 * fig.build
+        if not near:
+            if wide * rise(fig.z) > 1.8:
+                self.part(fig, (root, hand), dress["sleeve"], 0.7, wide)
+            return
+        self.part(fig, (root, elbow), dress["sleeve"], 0.8, 1.05 * wide)
+        self.part(fig, (elbow, hand), dress["sleeve"], 0.8, 0.9 * wide)
+        if fig.hands != "pockets":
+            end = (hand[0], hand[1] - 0.03)
+            self.part(fig, (hand, end), dress["skin"], 0.8, 0.075, square=False)
+
+    def carried(self, fig: Figure, body: Frame, dress) -> None:
+        """What someone carries: a bag on a strap across the body, a canvas
+        bag hanging from a hand."""
+        t, side = fig.tall, -1.0 if not fig.across else -fig.across
+        if fig.hands == "bag":
+            bag = (side * (body.chest + 0.01), 0.55 * t)
+            strap = ((-side * 0.6 * body.chest, body.neck - 0.03), bag)
+            self.part(fig, strap, both(LEATHER, INK, 0.2), 0.75, 0.035, square=False)
+            low = (bag[0], 0.45 * t)
+            self.part(fig, (bag, low), distant(LEATHER, fig.z), 0.85, 0.2)
+        elif fig.hands == "tote":
+            hand = body.arms[0][2]
+            hold = (hand[0] - 0.02 * side, hand[1] + 0.05)
+            low = (hand[0] - 0.03 * side, hand[1] - 0.24)
+            self.part(fig, (hold, low), distant(CANVAS, fig.z), 0.85, 0.28)
+
+    def modelled(self, fig: Figure, body: Frame, dress, near: bool) -> None:
+        """The light and the shade on someone: the sun is behind the eye and
+        to its left, so a stroke of light runs down the coat left of its
+        middle, and the shade down its right edge; near, the leg on the
+        left catches it too."""
+        coat, legs = dress["coat"], dress["legs"]
+        lean = fig.lean + 0.03 * fig.across * abs(fig.step)
+        shade = (mix(coat[0], coat[1], 0.6), mix(coat[1], INK, 0.3))
+        top = (lean + 0.8 * body.chest, body.neck - 0.08)
+        self.part(fig, (top, (0.9 * body.skirt, body.hem + 0.04)), shade, 0.6, 0.06)
+        light = (mix(coat[0], WHITE, 0.3), mix(coat[1], HAZE, 0.25))
+        top = (lean - 0.75 * body.chest, body.neck - 0.06)
+        self.part(fig, (top, (-0.8 * body.skirt, body.hem + 0.06)), light, 0.55, 0.05)
+        if near:
+            hip, knee, foot = min(body.legs, key=lambda leg: leg[2][0])
+            light = (mix(legs[0], WHITE, 0.25), None)
+            ends = ((hip[0] - 0.04, body.hem), (foot[0] - 0.03, foot[1] + 0.1))
+            self.part(fig, ends, light, 0.45, 0.04)
+
+    def head(self, fig: Figure, body: Frame, dress, near: bool) -> None:
+        """The neck, a scarf, the head (an oval, the face toward the eye
+        unless they go away from it) and the hair over it."""
+        top, face, head = body.top, body.face, body.head
+        skin, hair = dress["skin"], dress["hair"]
+        chin = top - head
+        if near:
+            neck = (mix(skin[0], skin[1], 0.4), skin[1])
+            self.part(fig, ((face, chin + 0.03), (face, body.neck)), neck, 0.8, 0.07)
+        if fig.scarf:
+            wool = rgb(fig.scarf)
+            scarf = distant((wool, mix(wool, INK, 0.45)), fig.z)
+            ends = ((face - 0.08, body.neck), (face + 0.08, body.neck))
+            self.part(fig, ends, scarf, 0.85, 0.07, square=False)
+            ends = ((face + 0.05, body.neck), (face + 0.06, body.neck - 0.2))
+            self.part(fig, ends, scarf, 0.8, 0.06)
+        oval = ((face, top), (face, chin))
+        self.part(fig, oval, hair if fig.facing == "away" else skin, 0.85, 0.66 * head)
+        if near or rise(fig.z) > 18.0:
+            self.hair(fig, body, hair)
+        if near and fig.facing != "away":
+            light = (mix(skin[0], WHITE, 0.25), None)
+            ends = ((face - 0.03, top - 0.3 * head), (face - 0.03, top - 0.75 * head))
+            self.part(fig, ends, light, 0.5, 0.035)
+
+    def hair(self, fig: Figure, body: Frame, hair: Tones) -> None:
+        """Hair: a cap over the top of the head, over the back of it from
+        the side, and, worn long, down to the collar."""
+        top, face, head, way = body.top, body.face, body.head, fig.across
+        if fig.facing == "away":
+            if fig.cut == "long":
+                ends = ((face, top - 0.4 * head), (face, body.neck - 0.08))
+                self.part(fig, ends, hair, 0.85, 0.16)
+            return
+        cap = ((face - 0.04 - 0.03 * way, top - 0.04), (face + 0.04 - 0.03 * way, top - 0.04))
+        self.part(fig, cap, hair, 0.85, 0.42 * head, square=False)
+        if way:
+            back = ((face - 0.04 * way, top - 0.05), (face - 0.05 * way, top - 0.6 * head))
+            self.part(fig, back, hair, 0.85, 0.1, square=False)
+        if fig.cut != "long":
+            return
+        for side in (-1.0, 1.0) if not way else (-way,):
+            low = (face + side * 0.07, body.neck - 0.05)
+            self.part(fig, ((face + side * 0.055, top - 0.07), low), hair, 0.85, 0.06)
+
+    def speck(self, fig: Figure, body: Frame, dress) -> None:
+        """Someone far off: a dab of legs, a dab of coat, a dot of head."""
+        hip = body.legs[0][0]
+        for leg in body.legs if fig.across else body.legs[:1]:
+            foot = (leg[2][0] if fig.across else 0.0, 0.03)
+            self.part(fig, (hip, foot), dress["legs"], 0.8, 0.22, hard=True)
+        lean = 0.03 * fig.across * abs(fig.step)
+        coat = ((lean, body.neck), (0.0, body.hem))
+        self.part(fig, coat, dress["coat"], 0.85, 1.7 * body.chest)
+        tone = dress["hair"] if fig.facing == "away" else dress["skin"]
+        dot = ((body.face, body.top), (body.face, body.top - body.head))
+        self.part(fig, dot, tone, 0.85, 0.75 * body.head, hard=True)
 
     def lamp(self, lamp: Lamp) -> None:
         """A street lamp: its shadow, the post, the arm and the lantern."""
