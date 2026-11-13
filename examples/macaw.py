@@ -55,8 +55,8 @@ FACE = [
     (455, 384), (420, 398), (392, 396), (378, 366), (374, 320), (366, 280),
 ]  # fmt: skip
 BROW = [
-    (346, 240), (350, 214), (370, 195), (400, 186), (420, 198), (408, 222),
-    (388, 238), (364, 247),
+    (344, 242), (347, 212), (364, 190), (392, 178), (422, 180), (438, 193),
+    (428, 214), (406, 233), (384, 244), (362, 250),
 ]  # fmt: skip
 UPPER_BILL = [
     (358, 234), (318, 238), (285, 256), (262, 290), (252, 332), (255, 374),
@@ -530,8 +530,8 @@ BLUES = [
 RUSTS = [
     (OXBLOOD, (0.7, 0.9, 1.1, 1.2), 0.55, 1.1),
     (MADDER, (0.4, 0.65, 1.1, 1.2), 0.52, 1.4),
-    (VERMILION, (0.0, 0.25, 0.75, 0.95), 0.5, 1.6),
-    (ORANGE, (-0.2, -0.1, 0.3, 0.55), 0.42, 1.3),
+    (VERMILION, (-0.1, 0.15, 0.75, 0.95), 0.52, 1.8),
+    (ORANGE, (-0.2, -0.1, 0.2, 0.4), 0.38, 1.0),
 ]
 INKS = [
     (CHAR, (0.62, 0.88, 1.1, 1.2), 0.85, 3.0),
@@ -578,7 +578,7 @@ def draw_sketch(hand: Hand) -> None:
 
 #: How much of each colour of the plumage is laid as an even hatching
 #: (the rest goes on in strokes along the feathers).
-SMOOTH = 0.5
+SMOOTH = 0.4
 
 
 def draw_plumage(hand: Hand, bird: Bird) -> None:
@@ -732,7 +732,7 @@ def draw_tail(hand: Hand, bird: Bird) -> None:
     draw_tail_feathers(hand, bird)
     build_up(hand, RUSTS, w * (1.0 - outer), s, angle, length=40, width=4.5, clip=clip, smooth=0.35)
     blue = w * outer * (1.0 - tip)
-    build_up(hand, BLUES, blue, s, angle, length=40, width=4.5, clip=clip, smooth=0.35)
+    build_up(hand, BLUES[:3], blue, s * 0.8 + 0.2, angle, length=40, width=4.5, clip=clip, smooth=0.35)
     hand.layer(SKY, w * tip, angle, 0.42, length=30, width=4.5, cover=1.4, clip=clip)
     hand.layer(TURQ, w * tip * band(s, 0.2, 0.7), angle, 0.36, length=26, clip=clip)
 
@@ -826,13 +826,13 @@ def draw_brow(hand: Hand, bird: Bird) -> None:
     w = soft(brow, 5) * grow(brow, 3)
     clip = grow(brow, 5) & bird.part["whole"] & ~bird.part["upper"] & ~bird.part["face"]
     xx, yy = grid()
-    low = w * np.clip(band(yy, 212, 245) + band(xx, 385, 420), 0.0, 1.0)
-    deep = low * band(yy, 228, 248)
-    hand.layer(OXBLOOD, deep, angle, 0.5, length=6, width=3, cover=1.2, clip=clip)
-    hand.layer(CRIMSON, low, angle, 0.55, length=8, width=3, cover=1.6, clip=clip)
-    hand.layer(SCARLET, w, angle, 0.55, length=9, width=3.5, cover=2.4, clip=clip)
-    top = w * band(yy, 225, 195)
-    hand.layer(FLAME, top, angle, 0.4, length=9, width=3.5, cover=1.0, clip=clip)
+    low = w * np.clip(band(yy, 205, 245) + band(xx, 400, 435), 0.0, 1.0)
+    deep = low * np.clip(band(yy, 225, 250) + band(xx, 415, 440), 0.0, 1.0)
+    hand.layer(OXBLOOD, deep, angle, 0.55, length=6, width=2.6, cover=1.4, clip=clip)
+    hand.layer(CRIMSON, low, angle, 0.58, length=7, width=2.8, cover=1.8, clip=clip)
+    hand.layer(SCARLET, w, angle, 0.58, length=8, width=3.2, cover=2.4, clip=clip)
+    top = w * band(yy, 215, 185)
+    hand.layer(FLAME, top, angle, 0.4, length=8, width=3.2, cover=1.0, clip=clip)
 
 
 #: The ridge of the bill (from its base round to the hook's tip) and the

@@ -989,3 +989,56 @@ def nose(d: Drawing) -> None:
         pts = on_head(curve(knots, 8), 0.002)
         line(d, pts, BLACK_LINE, swell(firm, 0.45, 0.2), 0.03)
         line(d, pts, RED_LINE, swell(0.6, 0.5, 0.2), 0.03)
+
+
+def lip_band(upper: bool, x: np.ndarray):
+    """The heights of a lip's outer border and of the parting at ``x``."""
+    border = curve(LIP_TOP if upper else LIP_BOTTOM, 80)
+    parting = curve(LIP_PARTING, 80)
+    return np.interp(x, *border.T), np.interp(x, *parting.T)
+
+
+def lip_strokes(d: Drawing, upper: bool, pen, firm: float, slant: float, gap: float):
+    """Strokes across a lip from its border to the parting, bowed round its
+    fullness; on the lower lip a light patch is left on the fullest part."""
+    rng = d.rng
+    for x0 in np.arange(-0.09, 0.09, gap) + rng.uniform(0, gap):
+        edge, part = lip_band(upper, np.array([x0]))
+        span = abs(edge[0] - part[0])
+        if span < 0.004:
+            continue
+        t = np.linspace(0.0, 1.0, 7)
+        x = x0 + slant * (t - 0.5) * span + 0.25 * x0 * span * np.sin(np.pi * t) * 4
+        edge, part = lip_band(upper, x)
+        y = edge + (part - edge) * t
+        press = firm * (0.35 + 0.65 * np.sin(np.pi * np.clip(t * 1.1, 0, 1)) ** 0.5)
+        if not upper:
+            shine = np.exp(-(((x + 0.012) / 0.028) ** 2 + ((t - 0.42) / 0.22) ** 2))
+            press = press * (1.0 - 0.95 * shine)
+        line(d, on_head(np.stack([x, y], -1), 0.002), pen, press, 0.02)
+
+
+def lips(d: Drawing) -> None:
+    """Full lips, the most saturated thing in the face: the upper darker (red
+    crossed with blue and black), the lower bright red, the parting a dark
+    lively line, thicker in the middle and at the tucked corners."""
+    for slant in (-0.6, 0.0, 0.6):
+        lip_strokes(d, True, RED, 0.55, slant, 0.0042)
+        lip_strokes(d, False, RED, 0.5, slant, 0.0045)
+    lip_strokes(d, True, BLUE, 0.35, 0.9, 0.006)
+    lip_strokes(d, True, BLACK, 0.25, -0.9, 0.009)
+    lip_strokes(d, False, RED, 0.45, 0.0, 0.0035)
+    parting = on_head(curve(LIP_PARTING, 40), 0.001)
+
+    def dip(u):
+        return 0.45 + 0.4 * np.exp(-(((u - 0.5) / 0.15) ** 2)) + 0.4 * (
+            np.exp(-((u / 0.07) ** 2)) + np.exp(-(((1 - u) / 0.07) ** 2))
+        )
+
+    line(d, parting, BLACK_LINE, dip, 0.02)
+    line(d, parting, RED_LINE, lambda u: dip(u) * 0.9, 0.02)
+    for side in (-1, 1):
+        corner = np.array([[0.092 * side, -0.266], [0.1 * side, -0.27], [0.106 * side, -0.276]])
+        line(d, on_head(corner, 0.001), BLACK, swell(0.6, 0.2), 0.02)
+    top = on_head(curve(LIP_TOP, 40), 0.001)
+    line(d, top, RED, swell(0.35, 0.5, 0.1), 0.02)
