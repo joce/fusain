@@ -8,6 +8,15 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Coloured pencils, `pencils.coloured(colour)`, and `pencils.BLENDER`:
+  translucent and waxy. Layers of two colours mix to the eye; the tooth turns
+  slick as it fills; a firm pass polishes the wax and closes the white specks
+  (burnishing). `Medium.wax` is the share of wax in a stick.
+- Pastels, `pastels.soft(colour)` and `pastels.hard(colour)`: opaque, and
+  nearly all dust. A light pastel covers a dark one, and a finger blends them.
+- Dust lies in two layers, `Sheet.loose` over `Sheet.under`: a pass lays its
+  dust on top of the dust that was there. Rubbing stirs the two together.
+- Sanded card has an even grit and takes pastel all over.
 - `tilt`, for `Sheet.stroke` and `Sheet.shade`: a stick held on its side marks
   a band up to five times wider than its point, lighter, grainier and soft at
   the edges. The tip is now an ellipse, as long along the stroke as the point

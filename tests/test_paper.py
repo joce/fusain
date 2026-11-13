@@ -60,10 +60,18 @@ def test_rough_paper_has_broader_bumps_than_wove_of_the_same_grain():
     assert np.abs(np.diff(wove, axis=1)).mean() > np.abs(np.diff(rough, axis=1)).mean()
 
 
-def test_sanded_card_is_mostly_low_with_sharp_peaks():
-    sanded = _tooth(Paper(texture="sanded"))
-    wove = _tooth(Paper(texture="wove"))
-    assert np.median(sanded) < np.median(wove) - 0.05
+def test_sanded_card_is_an_even_field_of_sharp_grit():
+    sanded = _tooth(Paper(texture="sanded", grain=3.0)).astype(np.float64)
+    wove = _tooth(Paper(texture="wove", grain=3.0)).astype(np.float64)
+    # as many grains high as low, and no broad patches of either
+    assert abs(np.median(sanded) - 0.5) < 0.05
+    blocks = sanded[:120, :160].reshape(10, 12, 16, 10).mean(axis=(1, 3))
+    assert blocks.std() < 0.02
+    # sharper than the bumps of a wove paper of the same grain
+    assert (
+        np.abs(np.diff(sanded, axis=1)).mean()
+        > 1.1 * np.abs(np.diff(wove, axis=1)).mean()
+    )
 
 
 @pytest.mark.parametrize(

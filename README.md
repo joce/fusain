@@ -12,11 +12,13 @@ media (ink, felt-tip markers, paint) are out of scope; for oil paint, see the
 sister project [oilpaint](https://github.com/joce/oilpaint). The two share their
 colour science and stroke paths through [murex](https://github.com/joce/murex).
 
-Early days. So far there are papers, graphite pencils from 9H to 9B, charcoal,
-stumps and erasers. Tone depends on how hard a stick is pressed and how many
-layers are laid, as on real paper; charcoal leaves dust that a stump drags
-about and an eraser lifts, while graphite mostly stays put. Pastel, colour and
-worn tips are still to come; the plan is in [docs/design.md](docs/design.md).
+Early days. So far there are papers, graphite and coloured pencils, charcoal,
+pastels, stumps and erasers. Tone depends on how hard a stick is pressed and
+how many layers are laid, as on real paper. Charcoal and pastel leave dust
+that a stump drags about and an eraser lifts; coloured pencils are waxy and
+translucent, so their layers mix to the eye; a light pastel covers a dark one.
+Crayon and worn tips are still to come; the plan is in
+[docs/design.md](docs/design.md).
 
 ```python
 from fusain import Sheet, papers, pencils
@@ -54,6 +56,25 @@ Vine charcoal, compressed charcoal and a 4B pencil on Ingres paper. Across all
 three, from the top: untouched; a stump dragged through and out onto the bare
 paper; a finger rubbed to and fro; a kneaded eraser pulled through three
 times; a vinyl eraser pulled through once.
+
+```python
+from fusain import pastels
+
+sheet.shade((100, 60, 300, 200), pencils.coloured("#2456a6"), pressure=0.7)
+sheet.shade((200, 60, 400, 200), pencils.coloured("#f2c40f"), pressure=0.7)  # green where they overlap
+sheet.shade((100, 60, 400, 200), pencils.BLENDER, pressure=1.0)              # burnish: the white specks close
+sheet.stroke([(100, 300), (400, 320)], pastels.soft("#f4f1ea"), pressure=0.8, width=14)
+```
+
+![Coloured pencils and pastels](examples/output/colour.png)
+
+Top, coloured pencils on cartridge paper. Left: red, yellow and blue, lighter
+to firmer. Middle: the same three laid over one another: green, orange and
+violet where two overlap. Right: three layers of red, the right half then
+burnished with a colourless blender. Bottom, soft pastels on grey laid paper.
+Left: light colours over a dark blue ground, which they cover. Middle: orange
+and blue side by side, and the same with the join rubbed with a finger. Right:
+white pastel over black, and lines drawn with a hard pastel.
 
 ![The papers under a raking light](examples/output/papers.png)
 

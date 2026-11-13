@@ -24,6 +24,11 @@ class Medium:
     binding:
         0..1: the share of what it lays that is held by the paper at once,
         the rest lying on it as dust that can still be moved.
+    wax:
+        0..1: the share of it that is wax (or oil). Wax films over the tooth
+        and makes it slick: later layers take less and less, and a firm pass
+        polishes the film flat, which closes up the white specks of the
+        paper (burnishing). Graphite, charcoal and soft pastel have none.
     name:
         Optional label.
     """
@@ -31,12 +36,13 @@ class Medium:
     pigment: Pigment
     softness: float
     binding: float = 0.85
+    wax: float = 0.0
     name: str = ""
 
     def __post_init__(self):
         if not isinstance(self.pigment, Pigment):
             raise TypeError(f"pigment must be a murex Pigment, got {self.pigment!r}")
-        for field in ("softness", "binding"):
+        for field in ("softness", "binding", "wax"):
             if not 0.0 <= getattr(self, field) <= 1.0:
                 raise ValueError(
                     f"{field} must be between 0 and 1, got {getattr(self, field)!r}"

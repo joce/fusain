@@ -1,6 +1,6 @@
 # Core model: design proposal
 
-Status: accepted (issue `fusain-ilv`). Steps 1 to 3 of the build order are built; the rest is not.
+Status: accepted (issue `fusain-ilv`). Steps 1 to 4 of the build order are built, and tilt from step 5; the rest is not.
 
 ## What fusain has to get right
 
@@ -37,16 +37,20 @@ Per pixel, all `float32`:
 | `press` | How far the tooth has been crushed or polished here (0 to 1): burnishing, and lines indented with a stylus. |
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
 | `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, and how much of the volume is wax. |
-| `loose` | Pigment lying on the surface as dust: K, S and volume. |
+| `under`, `loose` | Pigment lying on the surface as dust: K, S and volume, in two layers. `loose` is on top; what a new pass covers goes `under`. |
 
-That is about 0.23 KB per pixel (oilpaint needs 0.35). As there, storing
-summed absorption and scattering lets any number of pigments mix correctly at
-a fixed cost.
+That is about 0.34 KB per pixel, as much as oilpaint. As there, storing summed
+absorption and scattering lets any number of pigments mix correctly at a fixed
+cost.
 
-Two layers, `held` and `loose`, play the part of oilpaint's two wet layers.
-The difference between them is what can still move: a stump, an eraser or a
-later stroke shifts `loose`; only a hard eraser or a blade touches `held`.
-Pressure moves pigment from `loose` to `held`. So does fixative.
+`held` is what is fixed; the two layers of dust are what can still move: a
+stump, an eraser or a later stroke shifts them, and only a hard eraser or a
+blade touches `held`. Pressure moves pigment from the dust to `held`. So does
+fixative. There are two layers of dust because order matters: dust of two
+pigments in one layer is a mixture, and in a mixture of light and dark the
+dark wins, whereas a light pastel laid over a dark one covers it. So a pass
+lays its dust on top, and the dust that was there goes under it; rubbing
+stirs the two together.
 
 Sizes are in pixels, and the paper's grain sets the scale of a drawing: the
 tooth of a drawing paper is finer than a pencil line, which is two or three
@@ -67,9 +71,9 @@ code runs all of them; only the numbers change.
 | --- | --- | --- | --- |
 | `softness` | How easily it wears, and how far it gives to reach into the tooth | 6H pencil, hard pastel | 8B pencil, vine charcoal, soft pastel |
 | `binding` | Share of the deposit that is held at once rather than left as dust | vine charcoal, soft pastel | coloured pencil, wax crayon |
-| `wax` | Binder that films over the tooth: resist, burnishing, gloss | graphite, charcoal | crayon, oil pastel |
-| `opacity` | How strongly it hides what is underneath (as in oilpaint's `Paint`) | coloured pencil | pastel |
-| `sheen` | Metallic lustre of the laid pigment | everything else | graphite |
+| `wax` | Binder that films over the tooth: resist, burnishing | graphite, charcoal | coloured pencil, crayon, oil pastel |
+| opacity (of the pigment) | How strongly it hides what is underneath | coloured pencil | pastel |
+| `sheen` (to come) | Metallic lustre of the laid pigment | everything else | graphite |
 
 Presets group by family: `pencils.HB`, `pencils.B6`, `charcoal.VINE`,
 `charcoal.COMPRESSED`, `pastels.soft("#c0392b")`, `crayons.wax(...)`, and so
@@ -120,9 +124,15 @@ tip:
    the paper's bite, not on how much the tooth holds; so a toothier paper
    takes more passes to fill. It is split between `held` and `loose` by the
    medium's `binding`, and it is what the tip loses.
-5. **Working what is there.** The tip presses some of the `loose` pigment
-   under it into `held`. Still to come: dragging some of it along, and high
-   pressure on a waxy layer raising `press`.
+5. **Working what is there.** The tip presses some of the dust under it into
+   `held`. At the end of the pass its own dust settles on top of the dust
+   that was there, which goes `under`: all but a little of it once the new
+   dust is thick enough to cover it.
+6. **Wax.** A waxy medium films over the tooth, which then takes less
+   (resist). Pressed hard, the tip polishes the film: it raises `press`,
+   which levels the tooth so that every part of the pixel is touched, and it
+   drags some of the waxy layer along and lays it back down, valleys
+   included. That closes the white specks (burnishing).
 
 A stump, a finger or an eraser runs the same way but lays nothing of its own.
 Where it bears, it lifts a share of the `loose` pigment (and, for an eraser,

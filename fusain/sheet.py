@@ -160,6 +160,7 @@ class Sheet:
         return float(
             eng.lay_stroke(
                 self.tooth,
+                self.press,
                 self.cover,
                 self.held,
                 self.under,
@@ -175,6 +176,7 @@ class Sheet:
                 float(pigment.S),
                 float(medium.softness),
                 float(medium.binding),
+                float(medium.wax),
                 float(paper.depth),
                 float(paper.bite),
                 float(paper.give),

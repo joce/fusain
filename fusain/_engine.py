@@ -69,6 +69,9 @@ LAY = 1.7
 #: A light touch fills the tooth less: the share of the full thickness that
 #: no pressure at all would reach.
 FILL_LIGHT = 0.5
+#: Dust piles up where a film would not: a medium that is all dust fills the
+#: tooth with this much more again than one the paper holds entirely.
+PILE = 1.0
 #: A paper with hardly any tooth still holds this share of a full one's.
 FILL_FLAT = 0.45
 #: Share of the dust under a tip that one pass at full pressure presses into
@@ -78,7 +81,22 @@ PRESS_IN = 0.15
 #: it: all but a little of it (the tip stirs some up) once the new dust is
 #: this thick, in proportion if it is thinner and does not cover it all.
 COVERS = 0.2
-BURY = 0.9
+BURY = 0.985
+#: Wax films over the tooth: a film this thick is as slick as it gets, and a
+#: pass then lays only this much less than on bare paper (resist).
+WAX_FULL = 0.35
+RESIST = 0.85
+#: Pressed harder than BURNISH_FROM, a tip polishes a waxy layer flat: one
+#: pass at full pressure on a film as slick as it gets raises ``press`` by
+#: BURNISH, and a pressed tooth is level, so the white specks close up.
+BURNISH_FROM = 0.6
+BURNISH = 1.5
+#: Polishing also smears the waxy layer: of what the paper holds there, the
+#: tip drags along this share at full pressure in one pass, and lays this
+#: share of what it drags back down over each of its own widths, valleys
+#: included.
+BURNISH_LIFT = 0.6
+BURNISH_LAY = 0.8
 #: A tool that rubs reaches the dust underneath less than the dust on top:
 #: the share of its lift it has there.
 UNDER_LIFT = 0.7
@@ -121,8 +139,77 @@ def streak_at(dx, dy, tx, ty, salt):
 
 
 @njit(cache=True, error_model="numpy")
+def tip_bearing(dx, dy, tx, ty, wide, long, rounded):
+    """How a tip bears on the pixel ``dx``, ``dy`` from its centre, going the
+    way (``tx``, ``ty``): the share of its pressure it has there, and how far
+    inside its edge that is, in pixels up to 1. The tip is an ellipse,
+    ``wide`` across the stroke and ``long`` along it (half-widths), level but
+    for the share ``rounded`` of it at the rim. (0, 0) outside it."""
+    forward, sideways = dx * tx + dy * ty, dy * tx - dx * ty
+    out = math.sqrt((forward / long) ** 2 + (sideways / wide) ** 2)
+    if out >= 1.0:
+        return 0.0, 0.0
+    d = math.sqrt(dx * dx + dy * dy)
+    across = d / out if out > 1e-9 else min(wide, long)
+    inside = across - d
+    return min(inside / (rounded * across + 0.5), 1.0), min(inside, 1.0)
+
+
+@njit(cache=True, error_model="numpy")
+def press_dust(held, under, loose, iy, ix, share):
+    """Press the ``share`` of the dust at a pixel into the paper."""
+    for part in range(LOOSE):
+        moved = loose[iy, ix, part] * share
+        loose[iy, ix, part] -= moved
+        held[iy, ix, part] += moved
+        moved = under[iy, ix, part] * share
+        under[iy, ix, part] -= moved
+        held[iy, ix, part] += moved
+
+
+@njit(cache=True, error_model="numpy")
+def burnish(held, press, drag, iy, ix, polish, lay):
+    """Polish a pixel by ``polish`` (the share of one full pass on a film as
+    slick as it gets): press its tooth flat, take that share of the lift of
+    what it holds onto the tip (``drag``, packed as the held layer is), and
+    lay the share ``lay`` of what the tip drags back down on it."""
+    press[iy, ix] = min(press[iy, ix] + BURNISH * polish, 1.0)
+    up = min(BURNISH_LIFT * polish, 1.0)
+    down = min(lay, 1.0)
+    for part in range(HELD):
+        taken = held[iy, ix, part] * up
+        drag[part] += taken
+        given = drag[part] * down
+        drag[part] -= given
+        held[iy, ix, part] += given - taken
+
+
+@njit(cache=True, error_model="numpy")
+def settle_dust(fresh, cover, under, loose, k, s, left, top):
+    """At the end of a pass, put its dust (``fresh``, a volume per pixel of
+    the box at ``left``, ``top``) on top of the dust that was there, which
+    goes under it."""
+    for row in range(fresh.shape[0]):
+        for column in range(fresh.shape[1]):
+            dust = fresh[row, column]
+            if dust <= 0.0:
+                continue
+            iy, ix = top + row, left + column
+            buried = BURY * min(dust / cover[iy, ix] / COVERS, 1.0)
+            for part in range(LOOSE):
+                moved = loose[iy, ix, part] * buried
+                loose[iy, ix, part] -= moved
+                under[iy, ix, part] += moved
+            for band in range(N):
+                loose[iy, ix, band] += dust * k[band]
+            loose[iy, ix, IS] += dust * s
+            loose[iy, ix, IV] += dust
+
+
+@njit(cache=True, error_model="numpy")
 def lay_stroke(
     tooth,
+    press,
     cover,
     held,
     under,
@@ -138,6 +225,7 @@ def lay_stroke(
     s,
     softness,
     binding,
+    wax,
     depth,
     bite,
     give,
@@ -148,13 +236,16 @@ def lay_stroke(
     an ellipse, ``radius`` pixels across the stroke and ``length`` along it
     (both half-widths; equal for a point), and ``tilt`` (0..1) says how far
     over on its side the stick is held. Lay the medium (absorption ``k`` per
-    band and scattering ``s`` per unit volume, ``softness`` and ``binding``
-    0..1) on the paper (``depth``, ``bite``, ``give``) where the tip touches
-    its tooth. What the paper does not hold of it is dust, laid at the end of
-    the pass on top of the dust that was there (``loose``), which goes
-    ``under`` it.
+    band and scattering ``s`` per unit volume; ``softness``, ``binding`` and
+    the share of ``wax`` in it, 0..1) on the paper (``depth``, ``bite``,
+    ``give``) where the tip touches its tooth. What the paper does not hold
+    of it is dust, laid at the end of the pass on top of the dust that was
+    there (``loose``), which goes ``under`` it. Wax films over the tooth,
+    which then takes less; pressed hard, the tip polishes it flat (``press``)
+    and smears it along.
 
-    Returns the volume laid, which is the volume worn off the tip.
+    Returns the volume the tip has lost: what it laid, less what it has
+    dragged off the paper and still carries.
     """
     height, width = tooth.shape
     reach = (REACH_HARD + REACH_SOFT * softness) * (GIVE_NONE + GIVE_FULL * give)
@@ -168,6 +259,7 @@ def lay_stroke(
         * shape
         * (FILL_FLAT + (1.0 - FILL_FLAT) * min(depth, 2.0))
         * (0.5 + 0.5 * bite)
+        * (1.0 + PILE * (1.0 - binding))
     )
     wide, long = radius + 0.5, length + 0.5
     bound = max(wide, long)
@@ -183,6 +275,10 @@ def lay_stroke(
     if right <= left or bottom <= top:
         return 0.0
     fresh = np.zeros((bottom - top, right - left), np.float32)
+    # what a tip that polishes drags along, and the share of it that it lays
+    # on a pixel it bears on, per pixel moved
+    drag = np.zeros(HELD)
+    dragged = BURNISH_LAY / (2.0 * wide * math.pi * wide * long)
     total = 0.0
     for i in range(xs.shape[0]):
         pressure = pressures[i]
@@ -198,21 +294,15 @@ def lay_stroke(
         for iy in range(y0, y1):
             for ix in range(x0, x1):
                 dx, dy = ix + 0.5 - x, iy + 0.5 - y
-                # how far out in the tip this is (1 at its edge), and how
-                # far in from the edge, in pixels
-                forward, sideways = dx * tx + dy * ty, dy * tx - dx * ty
-                out = math.sqrt((forward / long) ** 2 + (sideways / wide) ** 2)
-                if out >= 1.0:
+                share, edge = tip_bearing(dx, dy, tx, ty, wide, long, rounded)
+                if edge <= 0.0:
                     continue
-                d = math.sqrt(dx * dx + dy * dy)
-                across = d / out if out > 1e-9 else min(wide, long)
-                inside = across - d
-                edge = min(inside, 1.0)
-                local = pressure * min(inside / (rounded * across + 0.5), 1.0)
-                local *= streak_at(dx, dy, tx, ty, salt)
+                local = pressure * share * streak_at(dx, dy, tx, ty, salt)
                 level = 1.0 - reach * local**REACH_POWER
                 level += JITTER * (unit_noise(ix, iy, salt) - 0.5)
-                above = tooth[iy, ix] + MICRO - level
+                # (a tooth pressed flat is level with its peaks)
+                ground = tooth[iy, ix] + (1.0 - tooth[iy, ix]) * press[iy, ix]
+                above = ground + MICRO - level
                 touch = min(max(above / (2.0 * MICRO), 0.0), 1.0) * edge
                 if touch <= 0.0:
                     continue
@@ -221,45 +311,35 @@ def lay_stroke(
                 there = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
                 thick = (there + fresh[iy - top, ix - left]) / covered
                 bearing = min(local, 1.0)
+                passing = per_pass * step * touch
+                waxy = min(held[iy, ix, IW] / covered / WAX_FULL, 1.0)
+                if bearing > BURNISH_FROM:
+                    firm = (bearing - BURNISH_FROM) / (1.0 - BURNISH_FROM)
+                    polish, lay_back = firm * waxy * passing, dragged * step * touch
+                    burnish(held, press, drag, iy, ix, polish, lay_back)
                 # the tip presses some of the dust under it into the paper
-                pressed = min(PRESS_IN * bearing * per_pass * step, 1.0) * touch
-                for part in range(LOOSE):
-                    moved = loose[iy, ix, part] * pressed
-                    loose[iy, ix, part] -= moved
-                    held[iy, ix, part] += moved
-                    moved = under[iy, ix, part] * pressed
-                    under[iy, ix, part] -= moved
-                    held[iy, ix, part] += moved
+                press_dust(
+                    held, under, loose, iy, ix, min(PRESS_IN * bearing, 1.0) * passing
+                )
                 room = full * (FILL_LIGHT + (1.0 - FILL_LIGHT) * bearing) - thick
                 if room <= 0.0:
                     continue
                 # (a light pass takes less, but not in proportion: the lead
                 # still slides over all it touches)
                 dv = lay * math.sqrt(bearing * min(above / SPAN, 1.0)) * (room / full)
+                dv *= 1.0 - RESIST * waxy
                 dv = min(dv * per_pass * step, room) * touch
                 fixed = dv * binding
-                for band_k in range(N):
-                    held[iy, ix, band_k] += fixed * k[band_k]
+                for band in range(N):
+                    held[iy, ix, band] += fixed * k[band]
                 held[iy, ix, IS] += fixed * s
                 held[iy, ix, IV] += fixed
+                held[iy, ix, IW] += dv * wax
                 fresh[iy - top, ix - left] += dv - fixed
                 total += dv
-    # the dust of the pass goes on top of the dust that was there
-    for iy in range(top, bottom):
-        for ix in range(left, right):
-            dust = fresh[iy - top, ix - left]
-            if dust <= 0.0:
-                continue
-            buried = BURY * min(dust / cover[iy, ix] / COVERS, 1.0)
-            for part in range(LOOSE):
-                moved = loose[iy, ix, part] * buried
-                loose[iy, ix, part] -= moved
-                under[iy, ix, part] += moved
-            for band_k in range(N):
-                loose[iy, ix, band_k] += dust * k[band_k]
-            loose[iy, ix, IS] += dust * s
-            loose[iy, ix, IV] += dust
-    return total
+    settle_dust(fresh, cover, under, loose, k, s, left, top)
+    # (what the tip still drags at the end has left the paper with it)
+    return total - drag[IV]
 
 
 @njit(cache=True, error_model="numpy")
@@ -352,15 +432,9 @@ def rub_stroke(
                 cover[iy, ix] += bare * (laid / after)
                 # press in; stir up what is underneath; and push what is
                 # loose into the low ground
-                pressed = min(press * share, 1.0)
+                press_dust(held, under, loose, iy, ix, min(press * share, 1.0))
                 stirred = min(smear * share, 1.0)
                 for part in range(LOOSE):
-                    moved = loose[iy, ix, part] * pressed
-                    loose[iy, ix, part] -= moved
-                    held[iy, ix, part] += moved
-                    moved = under[iy, ix, part] * pressed
-                    under[iy, ix, part] -= moved
-                    held[iy, ix, part] += moved
                     moved = under[iy, ix, part] * stirred
                     under[iy, ix, part] -= moved
                     loose[iy, ix, part] += moved
