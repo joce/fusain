@@ -1,5 +1,7 @@
 """A stick: a medium with a tip that wears (behaviour 6 of docs/design.md)."""
 
+from typing import Any
+
 import numpy as np
 import pytest
 
@@ -104,7 +106,8 @@ def test_shading_with_a_stick_wears_it_and_fills_the_area():
 
 def test_a_stick_checks_what_it_is_given():
     with pytest.raises(TypeError, match="medium must be a Medium"):
-        Stick("HB")
+        wrong: Any = "HB"
+        Stick(wrong)
     with pytest.raises(ValueError, match="width must be"):
         Stick(pencils.HB, width=0)
     with pytest.raises(ValueError, match="lead must be"):
