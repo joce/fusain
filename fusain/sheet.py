@@ -37,6 +37,8 @@ SHEEN_FULL = 0.6
 SHEEN_HIDE = 0.1
 #: How narrow the mirrored light is: graphite is satin, not a mirror.
 SHININESS = 12.0
+#: Fixative wets the dust it sets, which then scatters this much less light.
+FIXATIVE_DARKENS = 0.15
 #: Rows rendered at a time (bounds the float64 working memory).
 ROWS = 64
 
@@ -88,6 +90,8 @@ class Sheet:
         # the dust of the pass being drawn, until it settles (empty between
         # strokes)
         self._fresh = np.zeros((H, W), np.float32)
+        # the volume of dust that fixative has set, at each pixel
+        self.fixed = np.zeros((H, W), np.float32)
 
     def copy(self) -> Sheet:
         """An independent copy: drawing on one leaves the other alone."""
@@ -95,7 +99,8 @@ class Sheet:
         new.__dict__.update(self.__dict__)
         new._rng = np.random.default_rng()
         new._rng.bit_generator.state = self._rng.bit_generator.state
-        for name in ("tooth", "press", "cover", "held", "under", "loose", "_fresh"):
+        names = ("tooth", "press", "cover", "held", "under", "loose", "_fresh", "fixed")
+        for name in names:
             setattr(new, name, getattr(self, name).copy())
         return new
 
@@ -205,6 +210,7 @@ class Sheet:
                 self.under,
                 self.loose,
                 self._fresh,
+                self.fixed,
                 xs,
                 ys,
                 bearing,
@@ -347,6 +353,30 @@ class Sheet:
         """
         return self._rub(path, tool, pressure, width)
 
+    def fix(self, amount: float = 1.0) -> float:
+        """Spray fixative over the whole sheet: it sets the share ``amount``
+        (0 to 1) of the dust that was still loose. Dust that is set stays
+        where it is: a stump, a finger or a kneaded eraser hardly moves it,
+        and only a hard eraser takes it off, as it does what the paper holds.
+        It still shows as it lay, one layer over the other, a little darker:
+        fixative wets the pigment, which then scatters less light. And it
+        gives some tooth back, so that a layer that took no more takes some.
+
+        What is drawn afterwards lies over it, as loose as ever.
+
+        Returns the volume of dust newly set. Raises ValueError unless
+        ``amount`` is between 0 and 1.
+        """
+        if not 0.0 <= amount <= 1.0:
+            raise ValueError(f"amount must be between 0 and 1, got {amount!r}")
+        dust = self.under[..., IV] + self.loose[..., IV]
+        newly = np.maximum(dust - self.fixed, 0.0) * np.float32(amount)
+        share = newly / np.maximum(dust, np.float32(1e-9))
+        for layer in (self.under, self.loose):
+            layer[..., IS] *= 1.0 - np.float32(FIXATIVE_DARKENS) * share
+        self.fixed += newly
+        return float(newly.sum(dtype=np.float64))
+
     def _rub(self, path, tool: Tool, pressure: Profile, width: float | None) -> float:
         if not isinstance(tool, Tool):
             raise TypeError(f"tool must be a Tool, such as tools.STUMP, got {tool!r}")
@@ -357,6 +387,7 @@ class Sheet:
             self.held,
             self.under,
             self.loose,
+            self.fixed,
             xs,
             ys,
             bearing,

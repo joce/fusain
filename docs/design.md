@@ -1,6 +1,6 @@
 # Core model: design proposal
 
-Status: accepted (issue `fusain-ilv`). Steps 1 to 5 of the build order are built; step 6 is not.
+Status: accepted (issue `fusain-ilv`). Steps 1 to 5 of the build order are built, and fixative from step 6; the ballpoint pen is not.
 
 ## What fusain has to get right
 
@@ -38,6 +38,7 @@ Per pixel, all `float32`:
 | `press` | How far the tooth has been crushed or polished here (0 to 1): burnishing, and lines indented with a stylus. |
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
 | `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. |
+| `fixed` | Volume of the dust here that fixative has set. |
 | `under`, `loose` | Pigment lying on the surface as dust: K, S, volume and sheen, in two layers. `loose` is on top; what a new pass covers goes `under`. |
 
 That is about 0.34 KB per pixel, as much as oilpaint. As there, storing summed
@@ -46,8 +47,8 @@ cost.
 
 `held` is what is fixed; the two layers of dust are what can still move: a
 stump, an eraser or a later stroke shifts them, and only a hard eraser or a
-blade touches `held`. Pressure moves pigment from the dust to `held`. So does
-fixative. There are two layers of dust because order matters: dust of two
+blade touches `held`. Pressure moves pigment from the dust to `held`.
+Fixative sets the dust where it lies. There are two layers of dust because order matters: dust of two
 pigments in one layer is a mixture, and in a mixture of light and dark the
 dark wins, whereas a light pastel laid over a dark one covers it. So a pass
 lays its dust on top, and the dust that was there goes under it; rubbing
@@ -104,7 +105,13 @@ A tool is a tip plus, usually, a medium.
 - **Tools that lay nothing** use the same stroke runner: stump and finger
   (carry `loose` along and press part of it in), kneaded eraser (lifts
   `loose`), hard eraser (also abrades `held`), burnisher.
-- **Fixative** acts on the whole sheet: `loose` becomes `held`.
+- **Fixative** (built) acts on the whole sheet. It does not move the dust into
+  `held`, which would mix a light pastel into the dark one under it: the dust
+  stays in its two layers, and `fixed` records how much of it is set. Dust
+  that is set is lifted only as held pigment is, is not pressed in or stirred,
+  scatters a little less light (fixative darkens), and takes half the room in
+  the tooth, so that more can be laid over it. What is laid afterwards is
+  loose.
 
 ## One step of a stroke
 

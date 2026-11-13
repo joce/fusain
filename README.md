@@ -19,7 +19,8 @@ that a stump drags about and an eraser lifts; coloured pencils are waxy and
 translucent, so their layers mix to the eye; a light pastel covers a dark one.
 Crayons and oil pastels leave a film of wax that dry media hardly take over.
 A point wears as it draws, until it is sharpened. Heavy graphite shines under
-the lamp. The plan for the rest is in [docs/design.md](docs/design.md).
+the lamp. Fixative sets the dust. The plan for the rest is in
+[docs/design.md](docs/design.md).
 
 ```python
 from fusain import Sheet, papers, pencils
@@ -76,6 +77,18 @@ burnished with a colourless blender. Bottom, soft pastels on grey laid paper.
 Left: light colours over a dark blue ground, which they cover. Middle: orange
 and blue side by side, and the same with the join rubbed with a finger. Right:
 white pastel over black, and lines drawn with a hard pastel.
+
+```python
+sheet.fix()   # fixative: the dust stays where it is, and takes more layers
+```
+
+![Fixative](examples/output/fixative.png)
+
+The same drawing rubbed alike twice; the bottom one was sprayed with fixative
+first. Left: vine charcoal, a stump dragged through and a kneaded eraser
+pulled through. Middle: orange and blue pastel, the join rubbed with a finger.
+Right: white pastel strokes laid over a dark ground after the fixative, the
+lower two rubbed with a finger.
 
 ```python
 from fusain import crayons
