@@ -110,10 +110,11 @@ BURNISH_FROM = 0.6
 BURNISH = 1.5
 #: Polishing also smears the waxy layer: of what the paper holds there, the
 #: tip drags along this share at full pressure in one pass, and lays this
-#: share of what it drags back down over each of its own widths, valleys
-#: included.
+#: many times what it drags back down over each of its own widths, valleys
+#: included: within a pixel or two, so that it closes the white specks next
+#: to it without carrying colour far.
 BURNISH_LIFT = 0.6
-BURNISH_LAY = 0.8
+BURNISH_LAY = 4.0
 #: A ballpoint pen. Its ball is hard and small: at full pressure it reaches
 #: this far down the tooth (times what the paper gives, as a tip does), and
 #: a light touch reaches nearly as far (far more than in proportion): a
@@ -248,6 +249,40 @@ def burnish(held, press, drag, iy, ix, polish, lay):
 
 
 @njit(cache=True, error_model="numpy")
+def set_down(held, cover, drag, x, y, tx, ty, wide, long, rounded):
+    """Where the tip lifts off, at (``x``, ``y``), lay what it still drags
+    (``drag``, packed as the held layer is) on the marked paper under it.
+    Returns the volume it could not lay: all of it, if no marked paper of
+    the sheet is under the tip."""
+    if drag[IV] <= 0.0:
+        return 0.0
+    height, width = cover.shape
+    bound = max(wide, long)
+    x0 = max(int(math.floor(x - bound)), 0)
+    x1 = min(int(math.ceil(x + bound)), width)
+    y0 = max(int(math.floor(y - bound)), 0)
+    y1 = min(int(math.ceil(y + bound)), height)
+    under = 0.0
+    for iy in range(y0, y1):
+        for ix in range(x0, x1):
+            if cover[iy, ix] > 0.0:
+                under += tip_bearing(
+                    ix + 0.5 - x, iy + 0.5 - y, tx, ty, wide, long, rounded
+                )[1]
+    if under <= 0.0:
+        return drag[IV]
+    for iy in range(y0, y1):
+        for ix in range(x0, x1):
+            if cover[iy, ix] > 0.0:
+                edge = tip_bearing(
+                    ix + 0.5 - x, iy + 0.5 - y, tx, ty, wide, long, rounded
+                )[1]
+                for part in range(HELD):
+                    held[iy, ix, part] += drag[part] * edge / under
+    return 0.0
+
+
+@njit(cache=True, error_model="numpy")
 def settle_dust(fresh, cover, fixed, under, loose, k, s, sheen, xs, ys, bound):
     """At the end of a pass, put its dust (``fresh``, a volume per pixel) on
     top of the dust that was there, which goes under it, and leave ``fresh``
@@ -333,7 +368,7 @@ def lay_stroke(
     it flat (``press``) and smears it along.
 
     Returns the volume the tip has lost: what it laid, less what it has
-    dragged off the paper and still carries.
+    dragged off the sheet.
     """
     height, width = tooth.shape
     flat, lead, wear, worn, spread, tilt = (
@@ -367,6 +402,9 @@ def lay_stroke(
     # what a tip that polishes drags along
     drag = np.zeros(HELD)
     total = 0.0
+    # where the tip last bore, and how wide it was there
+    at_x, at_y, at_tx, at_ty = xs[0], ys[0], 1.0, 0.0
+    wide, long = 0.5 * flat * spread + 0.5, 0.5 * flat + 0.5
     for i in range(xs.shape[0]):
         pressure = pressures[i]
         step = steps[i]
@@ -374,6 +412,7 @@ def lay_stroke(
             continue
         x, y = xs[i], ys[i]
         tx, ty = heading(xs, ys, i)
+        at_x, at_y, at_tx, at_ty = x, y, tx, ty
         if wear > 0.0:  # the flat grows with what the tip has laid
             flat = min((start + wear * max(worn + total, 0.0)) ** (1.0 / 3.0), lead)
         wide, long = 0.5 * flat * spread + 0.5, 0.5 * flat + 0.5
@@ -439,8 +478,11 @@ def lay_stroke(
                 total += dv
     if binding < 1.0:  # (else there is no dust to settle)
         settle_dust(fresh, cover, fixed, under, loose, k, s, sheen, xs, ys, reached)
-    # (what the tip still drags at the end has left the paper with it)
-    return total - drag[IV]
+    # what the tip still drags it leaves where it lifts off; only off the
+    # sheet does it leave the paper with it
+    return total - set_down(
+        held, cover, drag, at_x, at_y, at_tx, at_ty, wide, long, rounded
+    )
 
 
 @njit(cache=True, error_model="numpy")

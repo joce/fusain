@@ -6,6 +6,14 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A firm pencil no longer wears a waxed layer away. Pressed hard over wax, a
+  tip drags part of the layer along; what it still carried when the stroke
+  ended left the paper with it, so many short firm strokes stripped the
+  layer. It is now laid where the tip lifts off; only what is dragged off the
+  sheet is lost.
+
 ### Added
 
 - Ballpoint pens, `fusain.pens` (`pens.BLUE`, `pens.BLACK`, `pens.RED`,
