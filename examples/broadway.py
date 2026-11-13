@@ -182,7 +182,7 @@ PAINTS = {
 COATS = {
     "red": tones("#cc382c", "#702c40"),
     "navy": tones("#3e4c70", "#242a46"),
-    "camel": tones("#d4a670", "#7a6668"),
+    "camel": tones("#d4a670", "#6e6058"),
     "black": tones("#3e3a3c", "#201e30"),
     "charcoal": tones("#5c5a5c", "#2e2e3e"),
     "olive": tones("#76703e", "#3c4034"),
@@ -717,8 +717,8 @@ def front_legs(fig: Figure) -> tuple[Limb, ...]:
     for side in (-1.0, 1.0):
         lift = 0.0 if side * fig.step >= 0.0 else abs(fig.step)
         hip = (side * 0.075 * b, 0.53 * t)
-        knee = (side * (0.085 * b - 0.02 * lift), 0.28 * t + 0.05 * lift)
-        foot = (side * (0.1 * b - 0.04 * lift), 0.03 + 0.08 * lift)
+        knee = (side * (0.085 * b - 0.03 * lift), 0.28 * t + 0.06 * lift)
+        foot = (side * (0.11 * b - 0.07 * lift), 0.03 + 0.12 * lift)
         legs.append((hip, knee, foot))
     return tuple(sorted(legs, key=lambda leg: -leg[2][1]))
 
@@ -860,7 +860,7 @@ CARS = (
 CROWD = (
     Figure(0.75, 21.3, "red", "black", "right", 0.8, 1.7, 0.95, 0.4, "black", "long", hands="bag"),
     Figure(-0.3, 22.3, "navy", "grey", "right", -0.7, 1.82, 1.05, 0.47, "dark"),
-    Figure(9.5, 17.0, "navy", "jeans", "toward", 0.7, 1.8, 1.05, 0.52, "dark", hands="pockets"),
+    Figure(9.5, 17.0, "navy", "jeans", "toward", 0.7, 1.8, 1.05, 0.48, "dark", hands="pockets"),
     Figure(10.15, 17.4, "camel", "dark", "toward", -0.6, 1.66, 0.92, 0.34, "brown", "long", hands="bag", scarf="#b8402c"),
     Figure(8.6, 20.0, "teal", "dark", "toward", 0.5, 1.74, hem=0.4, hands="child"),
     Figure(9.1, 20.1, "mustard", "jeans", "toward", -0.5, 1.12, 0.8, 0.45, "fair"),
@@ -1833,6 +1833,16 @@ class Life(Ground):
             self.speck(fig, body, dress)
             return
         near = size >= 26.0
+        for _ in range(2):  # (a second layer, over the first, fixed, covers)
+            self.masses(fig, body, dress, near)
+            self.sheet.fix()
+        self.carried(fig, body, dress)
+        self.modelled(fig, body, dress, near)
+        self.head(fig, body, dress, near)
+
+    def masses(self, fig: Figure, body: Frame, dress, near: bool) -> None:
+        """The masses of a figure: an arm behind the body, the legs, the
+        coat, the arms before it, the neck and a scarf."""
         behind = 1 if fig.across else 0  # (seen from the side, an arm is behind)
         for arm in body.arms[:behind]:
             self.arm(fig, arm, dress, near)
@@ -1841,10 +1851,18 @@ class Life(Ground):
         self.coat(fig, body, dress, near)
         for arm in body.arms[behind:]:
             self.arm(fig, arm, dress, near)
-        self.carried(fig, body, dress)
-        self.sheet.fix()
-        self.modelled(fig, body, dress, near)
-        self.head(fig, body, dress, near)
+        skin, face = dress["skin"], body.face
+        if near:
+            neck = (mix(skin[0], skin[1], 0.3), skin[1])
+            ends = ((face, body.top - 0.8 * body.head), (face, body.neck))
+            self.part(fig, ends, neck, 0.8, 0.07)
+        if fig.scarf:
+            wool = rgb(fig.scarf)
+            scarf = distant((wool, mix(wool, INK, 0.45)), fig.z)
+            ends = ((face - 0.08, body.neck), (face + 0.08, body.neck))
+            self.part(fig, ends, scarf, 0.85, 0.07, square=False)
+            ends = ((face + 0.05, body.neck), (face + 0.06, body.neck - 0.2))
+            self.part(fig, ends, scarf, 0.8, 0.06)
 
     def dress(self, fig: Figure) -> dict[str, Tones]:
         """What someone wears, and their skin and hair, as far off as they
@@ -1853,8 +1871,8 @@ class Life(Ground):
 
         def worn(pair: Tones) -> Tones:
             sun, shade = distant(pair, z)
-            return sun + self.crowd.normal(0.0, 0.02, 3), shade + self.crowd.normal(
-                0.0, 0.03, 3
+            return sun + self.crowd.normal(0.0, 0.015, 3), shade + self.crowd.normal(
+                0.0, 0.01, 3
             )
 
         coat = worn(COATS[fig.coat])
@@ -1901,10 +1919,10 @@ class Life(Ground):
         off, one stroke."""
         hip, knee, foot = leg
         if not near:
-            self.part(fig, (hip, foot), dress["legs"], 0.8, 0.13 * fig.build)
+            self.part(fig, (hip, foot), dress["legs"], 0.8, 0.15 * fig.build)
             return
-        self.part(fig, (hip, knee), dress["legs"], 0.85, 0.15 * fig.build)
-        self.part(fig, (knee, foot), dress["legs"], 0.85, 0.115 * fig.build)
+        self.part(fig, (hip, knee), dress["legs"], 0.85, 0.17 * fig.build)
+        self.part(fig, (knee, foot), dress["legs"], 0.85, 0.125 * fig.build)
         way = fig.across
         toe = (foot[0] + 0.1 * way, foot[1] - 0.02) if way else (foot[0], 0.02)
         heel = (foot[0] - 0.03 * way, foot[1]) if way else (foot[0], 0.05)
@@ -1922,13 +1940,13 @@ class Life(Ground):
             share = 2.0 * (k + 0.5) / count - 1.0
             top = (lean + 0.85 * share * body.chest, body.neck - 0.07 * share**2)
             foot = (share * body.skirt, body.hem)
-            tint = self.vary_by(dress["coat"], 0.012)
+            tint = self.vary_by(dress["coat"], 0.01)
             self.part(fig, (top, foot), tint, 0.85, 1.3 * wide / count / size)
 
     def vary_by(self, pair: Tones, by: float) -> Tones:
         """A pair of colours a little off, by the people's own hand."""
         return pair[0] + self.crowd.normal(0.0, by, 3), pair[1] + self.crowd.normal(
-            0.0, 1.5 * by, 3
+            0.0, 0.7 * by, 3
         )
 
     def arm(self, fig: Figure, arm: Limb, dress, near: bool) -> None:
@@ -1982,23 +2000,12 @@ class Life(Ground):
             self.part(fig, ends, light, 0.45, 0.04)
 
     def head(self, fig: Figure, body: Frame, dress, near: bool) -> None:
-        """The neck, a scarf, the head (an oval, the face toward the eye
-        unless they go away from it) and the hair over it."""
+        """The head: an oval, the face toward the eye unless they go away
+        from it, the hair over it, and the light on its left."""
         top, face, head = body.top, body.face, body.head
         skin, hair = dress["skin"], dress["hair"]
-        chin = top - head
-        if near:
-            neck = (mix(skin[0], skin[1], 0.4), skin[1])
-            self.part(fig, ((face, chin + 0.03), (face, body.neck)), neck, 0.8, 0.07)
-        if fig.scarf:
-            wool = rgb(fig.scarf)
-            scarf = distant((wool, mix(wool, INK, 0.45)), fig.z)
-            ends = ((face - 0.08, body.neck), (face + 0.08, body.neck))
-            self.part(fig, ends, scarf, 0.85, 0.07, square=False)
-            ends = ((face + 0.05, body.neck), (face + 0.06, body.neck - 0.2))
-            self.part(fig, ends, scarf, 0.8, 0.06)
-        oval = ((face, top), (face, chin))
-        self.part(fig, oval, hair if fig.facing == "away" else skin, 0.85, 0.66 * head)
+        oval = ((face, top), (face, top - head))
+        self.part(fig, oval, hair if fig.facing == "away" else skin, 0.9, 0.66 * head)
         if near or rise(fig.z) > 18.0:
             self.hair(fig, body, hair)
         if near and fig.facing != "away":
@@ -2015,16 +2022,16 @@ class Life(Ground):
                 ends = ((face, top - 0.4 * head), (face, body.neck - 0.08))
                 self.part(fig, ends, hair, 0.85, 0.16)
             return
-        cap = ((face - 0.04 - 0.03 * way, top - 0.04), (face + 0.04 - 0.03 * way, top - 0.04))
-        self.part(fig, cap, hair, 0.85, 0.42 * head, square=False)
+        cap = ((face - 0.04 - 0.03 * way, top - 0.03), (face + 0.04 - 0.03 * way, top - 0.03))
+        self.part(fig, cap, hair, 0.85, 0.3 * head, square=False)
         if way:
             back = ((face - 0.04 * way, top - 0.05), (face - 0.05 * way, top - 0.6 * head))
             self.part(fig, back, hair, 0.85, 0.1, square=False)
         if fig.cut != "long":
             return
         for side in (-1.0, 1.0) if not way else (-way,):
-            low = (face + side * 0.07, body.neck - 0.05)
-            self.part(fig, ((face + side * 0.055, top - 0.07), low), hair, 0.85, 0.06)
+            low = (face + side * 0.08, body.neck - 0.05)
+            self.part(fig, ((face + side * 0.07, top - 0.06), low), hair, 0.85, 0.045)
 
     def speck(self, fig: Figure, body: Frame, dress) -> None:
         """Someone far off: a dab of legs, a dab of coat, a dot of head."""

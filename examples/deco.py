@@ -1,4 +1,4 @@
-"""A sketch of an art deco tower, in charcoal on Ingres paper.
+"""A sketch of an art deco tower, in charcoal on a cream charcoal paper.
 
 Run from the repository root: ``python examples/deco.py``. Writes
 ``examples/output/deco.png``.
@@ -24,7 +24,8 @@ where such a building carries it: a rising sun over the door, a fan of rays
 up the bays of the crown, a band of chevrons above them. The sky is vine
 charcoal rubbed with a finger, a bank of cloud heavy behind the lit side and
 clearing behind the shadow side, so that light stands against dark all the
-way up.
+way up; the buildings are lifted out of it with a kneaded eraser, so that the
+dark comes right up to their edges.
 """
 
 from __future__ import annotations
@@ -41,6 +42,12 @@ from murex import filters, noise, write_png
 from fusain import Medium, Sheet, charcoal, papers, tools
 
 WIDTH, HEIGHT = 900, 1300
+#: Charcoal paper: a felted tooth with no pattern to it, on a thick, soft
+#: sheet that lets the stick down into it, so that the darks go deep and the
+#: grain shows in a tone as flecks of paper; warm cream.
+PAPER = papers.CARTRIDGE.with_(
+    depth=0.9, bite=0.55, give=0.6, color="#eee8d7", name="charcoal paper"
+)
 
 #: The camera: where the eye is (x and y on the ground, z up, in metres),
 #: what it looks at, its focal length in pixels and where on the sheet the
@@ -490,7 +497,7 @@ class Scene:
     how the light falls on it."""
 
     def __init__(self, seed: int = 1931):
-        self.sheet = Sheet(WIDTH, HEIGHT, paper=papers.INGRES, seed=seed)
+        self.sheet = Sheet(WIDTH, HEIGHT, paper=PAPER, seed=seed)
         self.rng = np.random.default_rng(seed)
         self.boxes = tower()
         self.ledges = len(self.boxes) // 2  # (the first of the ledges)
@@ -575,13 +582,30 @@ def draw_sky(scene: Scene) -> None:
     the cloud is heavy, left as it falls."""
     dark, open_ = scene.air, scene.sky
     heavy = np.clip((dark - 0.5) * 2.2, 0.0, 1.0)
-    scene.sweep(SLANT, 3.4, vine(1.0, 8.0), (0.12 + 0.75 * dark) * inset(open_, 3))
-    scene.sweep(SLANT - 28.0, 3.4, vine(1.0, 8.0), 0.8 * dark * inset(open_, 3))
-    scene.sweep(-12.0, 9.0, finger(0.8), inset(open_, 6))
-    scene.sweep(100.0, 9.0, finger(0.8), inset(open_, 6))
-    scene.sweep(SLANT + 5.0, 3.3, black(0.75, 5.0), heavy * inset(open_, 2))
-    scene.sweep(SLANT - 6.0, 9.0, stump(0.4, 12.0), heavy * inset(open_, 5))
-    scene.sweep(SLANT + 8.0, 5.0, black(0.7, 4.0), heavy**2 * inset(open_, 2))
+    scene.sweep(SLANT, 3.4, vine(1.0, 8.0), (0.06 + 0.8 * dark) * inset(open_, 1))
+    scene.sweep(SLANT - 28.0, 3.4, vine(1.0, 8.0), 0.8 * dark * inset(open_, 1))
+    scene.sweep(-12.0, 9.0, finger(0.8), inset(open_, 3))
+    scene.sweep(100.0, 9.0, finger(0.8), inset(open_, 3))
+    scene.sweep(SLANT + 5.0, 3.3, black(0.75, 5.0), heavy * inset(open_, 1))
+    scene.sweep(SLANT - 6.0, 9.0, stump(0.4, 12.0), heavy * inset(open_, 3))
+    scene.sweep(SLANT + 8.0, 5.0, black(0.7, 4.0), heavy**2 * inset(open_, 1))
+    lift_out(scene)
+
+
+def lift_out(scene: Scene) -> None:
+    """What the sky's strokes ran over of the buildings, lifted back out to
+    the paper with the point of a kneaded eraser, so that the sky's dark
+    comes right up to their edges."""
+    solid = 1.0 - scene.sky - (scene.seen == GROUND)
+    rows, cols = np.nonzero(solid)
+    area = (cols.min() - 4, rows.min() - 4, cols.max() + 5, rows.max() + 5)
+    where = inset(solid, 2)
+
+    def pressure(x, y):
+        return 0.9 * sample(where, x, y)
+
+    for angle in (90.0, 0.0):
+        scene.sheet.rub(area, tools.KNEADED, pressure, 5.0, angle, 2.0, hand=0.0)
 
 
 def draw_shade(scene: Scene) -> None:
@@ -597,6 +621,8 @@ def draw_shade(scene: Scene) -> None:
         if face.wide > 24.0:
             scene.hatch(face, UP, inset(mine, 4), stump(0.7), 5.0)
         scene.hatch(face, UP, high * inset(mine, 1), black(0.8, 4.0), 3.2)
+        if face.wide > 24.0:
+            scene.hatch(face, UP, high * inset(mine, 4), stump(0.5), 6.0)
 
 
 def draw_cast(scene: Scene) -> None:
@@ -608,8 +634,10 @@ def draw_cast(scene: Scene) -> None:
         near = face.box.part == "block"
         mine = mine * scene.hidden * (scene.margin if near else 1.0)
         fall = (SUN[1], SUN[2])
-        scene.hatch(face, fall, mine, black(0.75 if near else 0.55, 3.4), 3.0)
+        scene.hatch(face, fall, mine, black(0.48 if near else 0.45, 3.4), 3.0)
         scene.hatch(face, UP, inset(mine, 1), vine(0.5, 4.0), 4.0)
+        if face.wide > 12.0:
+            scene.hatch(face, fall, inset(mine, 3), stump(0.35, 7.0), 5.0)
 
 
 def draw_haze(scene: Scene) -> None:
@@ -687,12 +715,12 @@ def draw_strip(scene: Scene, face: Face, mine: np.ndarray, strip) -> None:
     clear = 0.55 + 0.45 * float(filters.smoothstep(-20.0, 120.0, middle))
     recess = [(face.point(at, foot), face.point(at, top))]
     scene.strokes(
-        recess, stick((0.32 if face.lit else 0.7) * clear, tip), mine, 150.0, 0.3
+        recess, stick((0.22 if face.lit else 0.7) * clear, tip), mine, 150.0, 0.3
     )
     if face.lit:
         jamb = at + 0.5 * wide * np.sign(SUN[1])
         shadow = [(face.point(jamb, foot), face.point(jamb, top))]
-        scene.strokes(shadow, stick(0.5 * clear, 2.0), mine, 200.0, 0.3)
+        scene.strokes(shadow, stick(0.42 * clear, 2.0), mine, 200.0, 0.3)
     for floor in np.arange(math.ceil(foot / FLOOR) * FLOOR, top - 2.5, FLOOR):
         clear = 0.55 + 0.45 * float(filters.smoothstep(-20.0, 120.0, floor))
         blind = (
@@ -834,21 +862,27 @@ def draw_fans(scene: Scene) -> None:
         if face.box.tier != CROWN or face.axis != front:
             continue
         high = face.z1 - LEDGE_DEEP - 0.4
-        touch = pencil(0.8, 2.2) if face.lit else black(0.8, 2.2)
+        stick = pencil if face.lit else black
+        apex = face.point(0.0, low)
         for s in np.linspace(face.lo + 1.2, face.hi - 1.2, 7):
-            scene.stroke(face.point(0.0, low), face.point(s, high), touch, mine, 0.0)
+            scene.stroke(apex, face.point(s, high), stick(0.95, 2.4), mine, 0.0)
 
 
 def draw_chevrons(scene: Scene) -> None:
-    """The tier over the crown's bays: a band of chevrons under its ledge."""
+    """The tier over the crown's bays: a band of chevrons under its ledge,
+    the teeth that hang from the ledge dark."""
     for face, mine in scene.faces("tier"):
         if face.box.tier != CROWN + 1:
             continue
-        high = face.z1 - LEDGE_DEEP - 0.6
-        teeth = np.linspace(face.lo + 1.0, face.hi - 1.0, 11)
-        path = face.point(teeth, high - 6.0 * (np.arange(11) % 2))
+        high = face.z1 - LEDGE_DEEP - 0.4
+        teeth = np.linspace(face.lo + 1.0, face.hi - 1.0, 9)
+        for k in range(1, 9, 2):
+            tip = face.point(teeth[k], high - 7.0)
+            for s in np.linspace(teeth[k - 1], teeth[k + 1], 5)[1:-1]:
+                scene.stroke(tip, face.point(s, high), pencil(0.7, 2.4), mine, 0.0)
+        path = face.point(teeth, high - 7.0 * (np.arange(9) % 2))
         for a, b in itertools.pairwise(path):
-            scene.stroke(a, b, pencil(0.9, 2.2), mine, wobble=0.0)
+            scene.stroke(a, b, pencil(0.95, 2.4), mine, wobble=0.0)
 
 
 def main() -> None:
