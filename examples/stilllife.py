@@ -1985,7 +1985,7 @@ def wall_targets(m: PenMaps):
     shape = m.keep.shape
     fade = smoothstep(0.3, 0.75, m.keep)
     fade = fade * (0.85 + 0.15 * blobs(shape, 200, 4))
-    blue = np.where(wall, 0.03 + 0.035 * smoothstep(0.5, 0.66, D), 0) * fade
+    blue = np.where(wall, 0.03 + 0.035 * smoothstep(0.6, 0.72, D), 0) * fade
     black = np.where(wall, 0.035 * smoothstep(0.6, 0.72, D), 0) * fade
     return blue, black
 
@@ -2179,8 +2179,9 @@ def hatch_cloth(h: Hatcher):
     top = ~m.hang  # the hanging folds are told by the bending stripes alone
     lay_layers(h, BLUE, blue * top, ((0, 0.0, 0.035, 0.22), (8, 0.035, 0.05, 0.25),
                                      (72, 0.085, 0.06, 0.26)), CLOTH_KW)  # fmt: skip
-    lay_layers(h, RED, red * top, ((-10, 0.0, 0.05, 0.22), (60, 0.05, 0.04, 0.24)),
-               CLOTH_KW)
+    lay_layers(
+        h, RED, red * top, ((-10, 0.0, 0.05, 0.22), (60, 0.05, 0.04, 0.24)), CLOTH_KW
+    )
     lay_layers(h, BLACK, black * top, ((12, 0.0, 0.06, 0.26),), CLOTH_KW)
     face, warm = flesh_targets(m)
     lay_layers(h, BLUE, face, ((0, 0.0, 0.05, 0.16),), FRUIT_KW | {"once": True})
@@ -2207,14 +2208,12 @@ def hatch_darks(h: Hatcher):
                                  (-60, 0.26, 0.24, 0.48)), POT)  # fmt: skip
     red, black = table_targets(h.maps)
     lay_layers(h, RED, red, ((0, 0.0, 0.09, 0.3),), TABLE_KW)
-    lay_layers(
-        h, BLACK, black, ((1, 0.0, 0.08, 0.3), (6, 0.08, 0.12, 0.32)), TABLE_KW
-    )
+    lay_layers(h, BLACK, black, ((1, 0.0, 0.08, 0.3), (6, 0.08, 0.12, 0.32)), TABLE_KW)
 
 
 def hatch_wall(h: Hatcher):
     """One open diagonal over the whole wall, a second crossing it only
-    where the wall is darkest, a little black at the very darkest."""
+    where the wall is darkest."""
     blue, black = wall_targets(h.maps)
     kw: dict[str, Any] = {
         "length": (150, 340),
@@ -2224,7 +2223,7 @@ def hatch_wall(h: Hatcher):
     }
     h.lay(Pass(BLUE, 0, 0.0, 0.03, 0.22, **kw), blue)
     h.lay(Pass(BLUE, 90, 0.03, 0.035, 0.24, **kw), blue)
-    h.lay(Pass(BLACK, 30, 0.0, 0.035, 0.25, **kw), black)
+    del black  # a lone dark patch on the wall would read as a thing
 
 
 def hatch_small(h: Hatcher):
@@ -2389,8 +2388,10 @@ def draw_half_face(h: Hatcher):
     for sx in (-0.1, 0.1):
         for k in range(5):
             off = (k - 2) * 0.012
-            seed = half_face_point(np.full(12, sx + off * (1 - abs(k - 2) / 3)),
-                                   np.linspace(3.2 + 0.08 * abs(k - 2), 4.0, 12))
+            seed = half_face_point(
+                np.full(12, sx + off * (1 - abs(k - 2) / 3)),
+                np.linspace(3.2 + 0.08 * abs(k - 2), 4.0, 12),
+            )
             surface_line(h, seed, BLACK, 0.55, 0.65, 0.4)
     for _ in range(9):
         t = rng.uniform(0, 2 * np.pi)
