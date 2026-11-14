@@ -1,7 +1,7 @@
 """A great green macaw, in coloured pencil on white paper.
 
 Run from the repository root: ``python examples/macaw.py``. Writes
-``examples/output/macaw.png`` (in about a minute).
+``examples/output/macaw.png`` (in about two minutes).
 
 A great green macaw (Ara ambiguus) on a branch, its body turned a little
 toward us and leaning forward, its head turned further and cocked, the long
@@ -25,6 +25,14 @@ dark where one form lies over another in shadow and lost in the light. The
 head is carried furthest: the bill built in strokes along its arch, the
 eye, the bare face with its broken lines of tiny dark feathers, the velvet
 red brow. The drawing loosens toward the end of the tail.
+
+Then the feathers, the bill and the brow are burnished with a colourless
+blender, along the lie of the feathers and the arch of the horn: the wax is
+pressed into the valleys of the tooth, the white flecks of the paper close
+and the colours deepen. Only the end of the tail keeps its grain. No eraser
+takes a light out of burnished wax, so the lights are scratched out of it
+with the point of a knife: the edges of the flight feathers, the thin light
+under the bill's cutting edge, the catchlight in the eye.
 """
 
 # cspell:words ambiguus culmen headness lognormal tomium TURQ
@@ -197,6 +205,38 @@ class Hand:
         self.sheet.erase(
             np.asarray(pts, dtype=np.float64).tolist(), tool, pressure, width
         )
+
+    def scratch(self, pts, pressure, width: float = 2.0) -> None:
+        """A fine light line scratched out of the wax with the point of a
+        knife, through ``pts`` (N, 2) of the sheet."""
+        self.erase(pts, tools.KNIFE, pressure, width)
+
+    def burnish(self, weight, angle, firm: float = 1.0, **how) -> None:
+        """Burnish where ``weight`` > 0 with the colourless blender: firm
+        strokes along the field ``angle``, which press the wax into the
+        valleys of the tooth, so that the white specks of the paper close
+        and the colour deepens. ``cover`` is how many times over they cover
+        the area; they keep inside ``clip``."""
+        length, width = how.get("length", 26.0), how.get("width", 5.0)
+        clip = how.get("clip", weight > 0.02)
+        count = int(how.get("cover", 1.5) * float(weight.sum()) / (width * length))
+        seed = self.seeds(weight, count)
+        if not len(seed):
+            return
+        sx = np.clip(seed[:, 0].astype(int), 0, WIDTH - 1)
+        sy = np.clip(seed[:, 1].astype(int), 0, HEIGHT - 1)
+        at, own = angle[sy, sx], np.clip(weight[sy, sx], 0.0, 1.0)
+        start = seed - 0.5 * length * np.stack([np.cos(at), np.sin(at)], 1)
+        steps = max(int(length / 4.0), 2)
+        paths = self.trace(start, angle, steps, 4.0, 0.02, how.get("spread", 0.1))
+        for path, w0 in zip(paths, own, strict=True):
+            path = inside_run(path, clip)
+            if len(path) < 2:
+                continue
+            u = np.linspace(0.0, 1.0, len(path))
+            bear = firm * w0 * (0.8 + 0.2 * np.sin(math.pi * u))
+            bear *= self.rng.uniform(0.9, 1.0)
+            self.sheet.stroke(path.tolist(), pencils.BLENDER, bear.tolist(), width)
 
 
 @dataclass
@@ -568,6 +608,12 @@ def draw_bill(hand: Hand, bird: Bird) -> None:
     lay_horn(hand, bird, Horn(0, "upper", upper_f, upper_c, upper_dark))
     warm_tip(hand, bird, upper_c)
     bill_edges(hand, bird)
+    # horn is polished: burnished along its arch, and the thin light under
+    # the cutting edge scratched out of the wax afterwards
+    horn = bird.part["upper"] | bird.part["lower"]
+    inside = soft(horn, 2) > 0.7
+    hand.burnish(horn * inside, bird.angle, 0.95, length=18, width=4.0, spread=0.02)
+    bill_light(hand, bird)
 
 
 def warm_tip(hand: Hand, bird: Bird, curves: np.ndarray) -> None:
@@ -582,15 +628,12 @@ def warm_tip(hand: Hand, bird: Bird, curves: np.ndarray) -> None:
 
 
 def bill_edges(hand: Hand, bird: Bird) -> None:
-    """The bill's sure lines: the cutting edge, crisp and dark, with a thin
-    light along it on the lower mandible; the hooked point's outline over
-    the lower mandible; the gape; the base against the face."""
+    """The bill's sure lines: the cutting edge, crisp and dark; the hooked
+    point's outline over the lower mandible; the gape; the base against the
+    face."""
     model = bird.model
     tomium = mm.smooth_curve(mm.bill_point(mm.TOMIUM), 50)
     edge = mm.on_bill(model, 0, tomium + mm.grain_offset(tomium, 0.008))
-    below = mm.on_bill(model, 1, tomium + mm.grain_offset(tomium, -0.03), 1.4)
-    for a, b in spans(mm.visible(model, below, 8.0)):
-        hand.erase(below[a:b, :2], tools.KNEADED, (0.45 * swell(b - a)).tolist(), 2.2)
     bear = 0.95 * np.linspace(0.7, 1.0, 50)
     hand.line(BLACK, edge[:, :2], bear, 3.0, 0.08)
     hook = np.concatenate(
@@ -606,6 +649,16 @@ def bill_edges(hand: Hand, bird: Bird) -> None:
     pts = mm.on_bill(model, 0, base + mm.grain_offset(base, 0.012))
     seen = mm.visible(model, pts, 5.0, ("upper",))
     hand.line(CHAR, pts[:, :2], 0.7 * swell(40) * seen, 2.6, 0.1)
+
+
+def bill_light(hand: Hand, bird: Bird) -> None:
+    """The thin light along the cutting edge, on the lower mandible: no
+    eraser lifts it out of so dense a dark, so it is scratched out with the
+    point of a knife."""
+    tomium = mm.smooth_curve(mm.bill_point(mm.TOMIUM), 50)
+    below = mm.on_bill(bird.model, 1, tomium + mm.grain_offset(tomium, -0.03), 1.4)
+    for a, b in spans(mm.visible(bird.model, below, 8.0)):
+        hand.scratch(below[a:b, :2], (0.3 * swell(b - a)).tolist())
 
 
 #: The pencils of the tail, darks first: colour, which of its colours it
@@ -817,7 +870,6 @@ def draw_wing(hand: Hand, bird: Bird) -> None:
     )
     covert_accents(hand, bird, DEEP, 0.9, 0.5)
     mm.draw_flight(model, Pencil(hand, NIGHT, 0.9), hand.rng)
-    lift_flight_edges(hand, bird)
 
 
 def covert_arc(bird: Bird, row: dict, a: float, b: float) -> np.ndarray:
@@ -852,19 +904,19 @@ def covert_accents(hand: Hand, bird: Bird, colour: str, gain: float, least=0.0):
             hand.line(colour, pts[i:j, :2], bear, width, 0.3)
 
 
-def lift_flight_edges(hand: Hand, bird: Bird) -> None:
-    """The light caught along each flight feather's free edge, lifted out
-    with the kneaded eraser just inside its dark line."""
+def flight_lights(hand: Hand, bird: Bird) -> None:
+    """The light caught along each flight feather's free edge, just inside
+    its dark line: a fine line scratched out of the burnished wax with the
+    point of a knife, lightly, so that a little of the colour stays."""
     for j, (edge, reach) in enumerate(mm.FLIGHT[:-1]):
         u = np.linspace(mm.GREATER + 0.02, reach - 0.04, 40)
         up, low = mm.wing_edges(u)
         v = up + (edge - 0.03) * (low - up)
         pts = mm.on_wing(bird.model, np.stack([u, v], 1))
         seen = mm.visible(bird.model, pts, 4.0, ("wing",))
-        firm, width = (0.75, 5.0) if j < 4 else (0.5, 4.0)
+        firm = 0.3 if j < 4 else 0.2
         for a, b in spans(seen):
-            bear = firm * swell(b - a)
-            hand.erase(pts[a:b, :2], tools.KNEADED, bear.tolist(), width)
+            hand.scratch(pts[a:b, :2], (firm * swell(b - a)).tolist())
 
 
 def draw_face(hand: Hand, bird: Bird) -> None:
@@ -892,12 +944,16 @@ def draw_fringe(hand: Hand, bird: Bird) -> None:
     near = (soft(face, 4) > 0.03) & bird.part["feathers"]
     sk = np.nan_to_num(bird.model.skull)
     lower = band(-sk[..., 1], 0.45, 0.75) * (soft(bird.part["face"], 3) > 0.03)
+    eye = soft(eye_masks(bird)[0], 2) > 0.02  # (no feather lies over the eye)
     for x, y in hand.seeds(near * 1.0 + 2.0 * lower, 360):
         ix, iy = min(int(x), WIDTH - 1), min(int(y), HEIGHT - 1)
         a = float(bird.angle[iy, ix]) + hand.rng.normal(0.0, 0.3)
         size = hand.rng.uniform(5.0, 12.0)
         start = (x - 0.4 * size * math.cos(a), y - 0.4 * size * math.sin(a))
         tip = (x + size * math.cos(a), y + size * math.sin(a))
+        along = np.linspace(start, tip, 6)
+        if sample(eye, along).any():
+            continue
         shade = float(bird.shade[iy, ix])
         colour = OLIVE if shade < 0.3 else LEAF if shade < 0.6 else PINE
         hand.sheet.stroke([start, tip], hand.pencil(colour), [0.2, 0.6, 0.15], 2.4)
@@ -975,6 +1031,7 @@ def draw_brow(hand: Hand, bird: Bird) -> None:
         hand.layer(
             colour, weight, angle, firm, length=5, width=2.6, cover=cover, clip=clip
         )
+    hand.burnish(w * (soft(brow, 2) > 0.6), angle, 0.95, length=8, width=3.5)
 
 
 def eye_masks(bird: Bird):
@@ -985,7 +1042,7 @@ def eye_masks(bird: Bird):
     r = np.hypot(sk[..., 0], sk[..., 1])
     iris = near & (r < mm.IRIS)
     pupil = near & (r < mm.PUPIL)
-    glint = np.array([0.4, 0.45]) * mm.IRIS
+    glint = np.array([0.27, 0.32]) * mm.IRIS  # (on the edge of the pupil)
     spared = np.hypot(sk[..., 0] - glint[0], sk[..., 1] - glint[1]) > 0.22 * mm.IRIS
     hood = iris * band(sk[..., 1], 0.1 * mm.IRIS, 0.85 * mm.IRIS)
     rim = iris * band(r, 0.7 * mm.IRIS, 0.95 * mm.IRIS)
@@ -995,7 +1052,8 @@ def eye_masks(bird: Bird):
 def draw_eye(hand: Hand, bird: Bird) -> None:
     """The pale eye in its ring of wrinkled bare skin: straw-yellow iris
     with a darker rim, black pupil, the heavy upper lid and its shadow, the
-    lower lid, one catchlight toward the light left as paper."""
+    lower lid, one catchlight toward the light left as paper, and scratched
+    clean with the point of a knife."""
     model = bird.model
     iris, pupil, hood, rim, glint = eye_masks(bird)
     draw_eye_skin(hand, bird)
@@ -1013,8 +1071,7 @@ def draw_eye(hand: Hand, bird: Bird) -> None:
         MAUVE, mm.on_head(model, lower)[:, :2], (0.5 * swell(24)).tolist(), 2.2, 0.1
     )
     centre = mm.on_head(model, [glint])[0, :2]
-    for _ in range(3):
-        hand.erase([centre - [0.8, 0.0], centre + [0.8, 0.0]], tools.ERASER, 1.0, 3.2)
+    hand.scratch([centre - [0.9, 0.0], centre + [0.9, 0.0]], 1.0, 3.2)
 
 
 def draw_eye_skin(hand: Hand, bird: Bird) -> None:
@@ -1058,7 +1115,7 @@ def draw_feet(hand: Hand, bird: Bird) -> None:
             (x - 3 * math.cos(a), y - 3 * math.sin(a)),
             (x + 3 * math.cos(a), y + 3 * math.sin(a)),
         ]
-        hand.erase(stroke, tools.KNEADED, [0.2, 0.55, 0.2], 3.0)
+        hand.erase(stroke, tools.ERASER, [0.15, 0.4, 0.15], 3.0)
     hand.tone(BLACK, claws * 1.0, 0.9, (30, -40, 100), 2.2)
     hand.tone(CHAR, claws * 1.0, 0.8, (75,), 2.2)
 
@@ -1110,7 +1167,22 @@ def finish_map(bird: Bird) -> np.ndarray:
     return out * (1.0 - 0.45 * band(yy, HEIGHT - 420.0, HEIGHT - 10.0))
 
 
-def main() -> None:
+def burnish_plumage(hand: Hand, bird: Bird) -> None:
+    """The feathers burnished with the colourless blender, along their lie:
+    the white specks of the paper close and the greens and blues deepen.
+    All of the head, body and wing; the tail less and less toward its end,
+    which is left as the pencil laid it."""
+    yy = np.mgrid[:HEIGHT, :WIDTH][0]
+    part = bird.part
+    down = 1.0 - band(yy, 900.0, 1250.0)
+    where = (part["feathers"] | part["wing"]) * 1.0 + part["tail"] * down
+    inside = soft(where > 0.02, 2) > 0.75  # (the outline stays the pencil's)
+    hand.burnish(where * inside, bird.angle, 1.0, cover=2.2)
+    flight_lights(hand, bird)
+
+
+def draw() -> Sheet:
+    """The drawing, on its sheet."""
     rng = np.random.default_rng(SEED)
     paper = Paper("wove", grain=2.0, depth=0.4, bite=0.5, give=0.4, color="#fbfaf6")
     sheet = Sheet(WIDTH, HEIGHT, paper=paper, seed=SEED)
@@ -1122,16 +1194,24 @@ def main() -> None:
     draw_edges(hand, bird)
     draw_plumage(hand, bird)
     draw_wing(hand, bird)
+    draw_ticks(hand, bird)
+    burnish_plumage(hand, bird)
     draw_face(hand, bird)
     draw_fringe(hand, bird)
-    draw_ticks(hand, bird)
     draw_brow(hand, bird)
     draw_eye(hand, bird)
     draw_feet(hand, bird)
     draw_thigh(hand, bird)
     draw_branch(hand, bird)
+    return sheet
+
+
+def main() -> None:
     out = Path(__file__).parent / "output" / "macaw.png"
-    write_png(str(out), np.round(sheet.render() * 255).astype(np.uint8))
+    # (as a scanner sees it: under a lamp the burnished wax has a gloss,
+    # which greys the darks)
+    image = draw().render(gloss=0.0)
+    write_png(str(out), np.round(image * 255).astype(np.uint8))
     print(f"wrote {out}")
 
 

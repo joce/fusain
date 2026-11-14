@@ -6,7 +6,13 @@ Run from the repository root: ``python examples/colour.py``. Writes
 Top, coloured pencils. Left: red, yellow and blue, each lighter to firmer
 from left to right. Middle: the same three laid over one another, which mix
 to the eye: orange, green and violet where two overlap. Right: three layers
-of red, its right half then burnished with a colourless blender.
+of red, its right half then burnished with a colourless blender, which
+closes the white flecks of the paper and deepens the colour. Three lights
+cross both halves. At the top, a line indented with a stylus before the red
+was laid, which the pencil and the blender both skip. In the middle, a vinyl
+eraser rubbed to and fro: it takes most of the red that kept its tooth, and
+slides on the burnished wax. At the bottom, two lines scratched with the
+point of a knife, back to the paper in both.
 
 Bottom, soft pastels on grey paper. Left: strokes of light colours over a
 dark blue ground, which they cover. Middle: orange and blue side by side,
@@ -26,6 +32,11 @@ from fusain import Sheet, Smudger, papers, pastels, pencils, tools
 RED, YELLOW, BLUE = "#c0392b", "#f2c40f", "#2456a6"
 
 
+def wave(y: float, lift: float = 5.0) -> list[tuple[float, float]]:
+    """A wavy line across the red square, about ``y``."""
+    return [(672 + 21 * j, y + lift * np.sin(j * 1.1)) for j in range(10)]
+
+
 def coloured_pencils() -> Sheet:
     sheet = Sheet(900, 300, paper=papers.CARTRIDGE, seed=31)
     for row, colour in enumerate((RED, YELLOW, BLUE)):
@@ -42,12 +53,19 @@ def coloured_pencils() -> Sheet:
     ):
         for layer in range(2):
             sheet.shade(box, pencils.coloured(colour), 0.7, angle=angle + 50 * layer)
+    # a red square, the right half burnished, and three ways to a light
+    sheet.indent(wave(78), 0.75)
     for layer in range(3):
         sheet.shade(
             (660, 40, 870, 260), pencils.coloured(RED), 0.6, angle=30 + 55 * layer
         )
     for angle in (20, -50):
         sheet.shade((765, 30, 880, 270), pencils.BLENDER, 1.0, angle=angle)
+    for k in range(4):  # the eraser, to and fro
+        ends = [(676, 148 + 2 * (k % 2)), (858, 150 - 2 * (k % 2))]
+        sheet.erase(ends if k % 2 else ends[::-1], tools.ERASER, 0.9, 12)
+    for y in (212, 226):
+        sheet.erase(wave(y, 3.0), tools.KNIFE, 0.9)
     return sheet
 
 
