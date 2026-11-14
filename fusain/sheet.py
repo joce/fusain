@@ -12,7 +12,7 @@ from murex.spline import Profile
 
 from . import _engine as eng
 from . import hatching
-from ._engine import HELD, IS, IV, IX, LOOSE, N
+from ._engine import FILM, HELD, IS, IV, IX, KINDS, LOOSE, PASTE, SET, N
 from .medium import Medium
 from .paper import Paper
 from .pens import Pen
@@ -63,12 +63,14 @@ class Sheet:
 
     Per pixel the sheet holds the height of the tooth (``tooth``, 0 valley to
     1 peak), how far it has been crushed or polished (``press``, 0 to 1), the
-    pigment fixed to the paper (``held``) and the pigment lying on it as dust,
-    which is what a stump, an eraser or a later stroke can still move: in two
+    pigment fixed to the paper (``held``) and the pigment lying on it, in two
     layers, ``loose`` on top and ``under`` beneath it, so that what was laid
-    last is seen over what was laid before. ``cover`` is the share of the
-    pixel that carries pigment: the rest shows bare paper. Memory: about 0.34
-    KB per pixel.
+    last is seen over what was laid before. Most of that is dust, which is
+    what a stump, an eraser or a later stroke can still move; ``bonded``
+    holds how much of each layer is not: dust that is set (:attr:`fixed`), a
+    film of wax laid over the dust (:attr:`film`) and greasy paste
+    (:attr:`paste`). ``cover`` is the share of the pixel that carries
+    pigment: the rest shows bare paper. Memory: about 0.36 KB per pixel.
 
     Raises ValueError or TypeError unless ``width`` and ``height`` are whole
     numbers above 0.
@@ -92,12 +94,14 @@ class Sheet:
         self.held = np.zeros((H, W, HELD), np.float32)
         self.under = np.zeros((H, W, LOOSE), np.float32)
         self.loose = np.zeros((H, W, LOOSE), np.float32)
-        # the dust of the pass being drawn, until it settles (empty between
-        # strokes)
-        self._fresh = np.zeros((H, W), np.float32)
-        # the volume of dust that fixative has set at each pixel, in the
-        # dust underneath and in the dust on top
-        self.fixed = np.zeros((H, W, 2), np.float32)
+        # what the pass being drawn leaves to lie on the sheet, until it
+        # settles (empty between strokes): what the paper does not hold of
+        # it, and its film
+        self._fresh = np.zeros((H, W, 2), np.float32)
+        # of what lies in the layer underneath (0) and in the layer on top
+        # (1), the volume at each pixel that is not loose dust: set, film
+        # and paste
+        self.bonded = np.zeros((H, W, 2, KINDS), np.float32)
         # the ink of pens: a stain in the paper, packed as dust is, and the
         # share of each pixel it is on (None until a pen has drawn)
         self.ink: np.ndarray | None = None
@@ -109,14 +113,37 @@ class Sheet:
         new.__dict__.update(self.__dict__)
         new._rng = np.random.default_rng()
         new._rng.bit_generator.state = self._rng.bit_generator.state
-        names = ("tooth", "press", "cover", "held", "under", "loose", "_fresh", "fixed")
-        for name in names:
+        names = ("tooth", "press", "cover", "held", "under", "loose", "_fresh")
+        for name in (*names, "bonded"):
             setattr(new, name, getattr(self, name).copy())
         if self.ink is not None and self.inked is not None:
             new.ink, new.inked = self.ink.copy(), self.inked.copy()
         return new
 
     # ------------------------------------------------------------------
+    @property
+    def fixed(self) -> np.ndarray:
+        """Volume of the dust that is set, (H, W, 2): in the layer underneath
+        and in the layer on top. Fixative sets dust, and so does a film of
+        wax laid over it. A view: writing to it changes the sheet."""
+        return self.bonded[..., SET]
+
+    @property
+    def film(self) -> np.ndarray:
+        """Volume of film in each of the two layers, (H, W, 2): what a waxy
+        medium (a coloured pencil, a crayon, an oil pastel) laid not on the
+        paper but on what lay over it. It stays on top of that, and no stump
+        or kneaded eraser moves it. A view, as :attr:`fixed` is."""
+        return self.bonded[..., FILM]
+
+    @property
+    def paste(self) -> np.ndarray:
+        """Volume of paste in each of the two layers, (H, W, 2): what the
+        paper does not hold of a greasy medium (an oil pastel), and the dust
+        it was laid over and took up. A finger smears it; a kneaded eraser
+        does not lift it. A view, as :attr:`fixed` is."""
+        return self.bonded[..., PASTE]
+
     def pigment(self) -> np.ndarray:
         """Volume of pigment at each pixel, held and loose, (H, W)."""
         return self.held[..., IV] + self.under[..., IV] + self.loose[..., IV]
@@ -133,8 +160,9 @@ class Sheet:
         return self.cover * film * np.exp(-matte / cover / np.float32(SHEEN_HIDE))
 
     def reflectance(self) -> np.ndarray:
-        """Reflectance spectrum of the drawing, (H, W, N_BANDS) float32: the
-        loose pigment over the held pigment over the paper."""
+        """Reflectance spectrum of the drawing, (H, W, N_BANDS) float32: what
+        lies on top over what lies underneath over the held pigment over the
+        paper."""
         out = np.empty((self.height, self.width, N), np.float32)
         for rows in self._row_chunks():
             out[rows] = self._reflectance_rows(rows)
@@ -211,6 +239,11 @@ class Sheet:
         at a light touch as at a firm one, and its ink is a stain in the
         paper (:attr:`ink`), under everything else, which no tool takes off.
 
+        What the paper holds of the medium goes under the dust that lies
+        there, in the tooth; but a waxy medium (a coloured pencil, a crayon,
+        an oil pastel) is a film, which lies on the dust (:attr:`film`) and
+        sets part of it (:attr:`fixed`).
+
         Returns the volume of medium laid, which is what the tip lost.
 
         Raises ValueError or TypeError, before anything is drawn, unless
@@ -246,7 +279,7 @@ class Sheet:
                 self.under,
                 self.loose,
                 self._fresh,
-                self.fixed,
+                self.bonded,
                 xs,
                 ys,
                 bearing,
@@ -430,6 +463,8 @@ class Sheet:
         """Rub one pass of an eraser along ``path``. A kneaded eraser
         (``tools.KNEADED``, the default) lifts the dust and a little of what
         the paper holds; a vinyl one (``tools.ERASER``) takes nearly all.
+        The paste of an oil pastel, a film of wax laid over dust and the
+        dust set under it come off as what the paper holds does.
 
         ``path`` and ``pressure`` are as for :meth:`stroke`; ``width`` is the
         width of the eraser in pixels (by default the tool's own; a
@@ -503,7 +538,8 @@ class Sheet:
 
     def fix(self, amount: float = 1.0) -> float:
         """Spray fixative over the whole sheet: it sets the share ``amount``
-        (0 to 1) of the dust that was still loose. Dust that is set stays
+        (0 to 1) of the dust that was still loose, and of the paste of an
+        oil pastel. Dust that is set stays
         where it is: a stump, a finger or a kneaded eraser hardly moves it,
         and only a hard eraser takes it off, as it does what the paper holds.
         It still shows as it lay, one layer over the other, a little darker:
@@ -520,12 +556,15 @@ class Sheet:
         total = 0.0
         for which, layer in enumerate((self.under, self.loose)):
             volume = layer[..., IV]
-            newly = np.maximum(volume - self.fixed[..., which], 0.0)
+            # (a film is hard already: fixative sets the dust and the paste)
+            hard = self.fixed[..., which] + self.film[..., which]
+            newly = np.maximum(volume - hard, 0.0)
             newly *= np.float32(amount)
             # (only what is newly set darkens)
             share = newly / np.maximum(volume, np.float32(1e-9))
             layer[..., IS] *= 1.0 - np.float32(FIXATIVE_DARKENS) * share
             self.fixed[..., which] += newly
+            self.paste[..., which] *= np.float32(1.0 - amount)
             total += float(newly.sum(dtype=np.float64))
         return total
 
@@ -540,7 +579,7 @@ class Sheet:
             self.held,
             self.under,
             self.loose,
-            self.fixed,
+            self.bonded,
             xs,
             ys,
             bearing,

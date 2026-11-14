@@ -17,12 +17,15 @@ is judged on. Each one is measurable, so each becomes a test.
    soft one. Rough paper takes more layers than smooth paper.
 3. **Loose and held pigment.** Charcoal and soft pastel leave dust that a
    finger moves and a kneaded eraser lifts. Graphite is held better, wax-based
-   pencil and crayon almost completely.
+   pencil and crayon almost completely. An oil pastel is a paste: a finger
+   smears it, and a kneaded eraser does not lift it.
 4. **Layering.** Coloured pencil is translucent: yellow over blue reads green.
    Pastel is opaque: a light stick covers a dark one.
 5. **Wax.** A waxy layer fills the tooth and turns slick: later layers take
-   badly (resist), dry media hardly at all, and heavy pressure polishes it
-   flat (burnishing).
+   badly (resist), dry media hardly at all, even over one firm line (charcoal
+   shaded over a crayon drawing leaves it showing), and heavy pressure
+   polishes it flat (burnishing). Laid over dust, wax lies on it and binds
+   part of it.
 6. **The tip.** A point wears to a flat, so a line widens as it is drawn.
    The side of a stick lays a broad band. Tilting the pencil widens the mark.
 7. **Conservation.** What leaves the stick is on the paper, on the tool that
@@ -39,10 +42,10 @@ Per pixel, all `float32`:
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
 | `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. |
 | `ink`, `inked` | The ink of pens, a stain in the paper under everything else: K, S and volume, and the share of the pixel it is on. Allocated when a pen first draws. |
-| `fixed` | Volume of the dust here that fixative has set, in each of the two layers of dust. |
-| `under`, `loose` | Pigment lying on the surface as dust: K, S, volume and sheen, in two layers. `loose` is on top; what a new pass covers goes `under`. |
+| `under`, `loose` | Pigment lying on what the paper holds: K, S, volume and sheen, in two layers. `loose` is on top; what a new pass covers goes `under`. Most of it is dust. |
+| `bonded` | Of what lies in each of the two layers, the volume that is not loose dust, of three kinds: `fixed`, dust that is set, by fixative or under a film; `film`, what a waxy medium laid on the dust and not on the paper; `paste`, what the paper does not hold of a greasy medium. |
 
-That is about 0.34 KB per pixel, as much as oilpaint. As there, storing summed
+That is about 0.36 KB per pixel, a little more than oilpaint. As there, storing summed
 absorption and scattering lets any number of pigments mix correctly at a fixed
 cost.
 
@@ -59,6 +62,35 @@ pigments in one layer is a mixture, and in a mixture of light and dark the
 dark wins, whereas a light pastel laid over a dark one covers it. So a pass
 lays its dust on top, and the dust that was there goes under it; rubbing
 stirs the two together.
+
+Not all that lies in the two layers is dust, and `bonded` says how much of
+each is not. The rule is that a medium lies on what it meets:
+
+- **A film.** What the paper holds of a waxy medium (a coloured pencil, a
+  crayon, an oil pastel) is a film of wax, and a film sticks to whatever is
+  under the tip. On bare paper, or over what the paper holds already, that
+  is `held`, as for any medium. Where dust lies on the paper, the film lies
+  on the dust: it goes on top with the dust of the pass, as far as the dust
+  covers the paper (all of it over dust as thick as covers what is under
+  it, less over thinner dust, through which the tip reaches the paper). It
+  is seen over the dust, a later pass buries it as it buries dust, and it
+  is as fast as what the paper holds: only a hard eraser takes it off. A dry
+  medium has no film: what the paper holds of a pencil laid over charcoal
+  dust is in the tooth, under the dust.
+- **Dust that is set.** A film binds part of the loose dust it is laid
+  over: seven tenths of it under a film thick enough to cover it, less under
+  a thinner one. That dust is set where it lies, exactly as fixative sets
+  it, and counts with it in `fixed`.
+- **Paste.** What the paper does not hold of a greasy medium (a waxy one
+  that is soft: an oil pastel) is not dust but paste. It lies in the layers
+  as dust does, so a light oil pastel shows over a dark one, and a tip
+  presses it in as it does dust; but it sticks. A tool moves it only as far
+  as it smears: a finger, a stump or a chamois drags it about and blends it,
+  and it is paste again where they lay it; an eraser, which lifts and does
+  not smear, takes it only as it takes what the paper holds. Dust under a
+  pass of paste turns to paste in the same proportion as dust under a film
+  is set, and a greasy tip ploughs up a little of what it is laid over, so
+  that a light oil pastel only half covers a dark one. Fixative sets paste.
 
 Sizes are in pixels, and the paper's grain sets the scale of a drawing: the
 tooth of a drawing paper is finer than a pencil line, which is two or three
@@ -97,8 +129,9 @@ Presets group by family: `pencils.HB`, `pencils.B6`, `charcoal.VINE`,
 `crayons.wax(...)`, and so on. A wax crayon is all held, translucent and
 waxier than a coloured pencil, so it mixes with what is under it and does not
 cover it. An oil pastel is a greasy paste: less than half of it is held at
-once, and the rest lies in the dust layers, where a finger smears it and a
-later layer half covers it. Pigment colour works as in oilpaint: a colour is turned into K and S
+once, and the rest lies in the two layers as paste, where a finger smears
+it, a later layer half covers it and a kneaded eraser does not lift it.
+Pigment colour works as in oilpaint: a colour is turned into K and S
 spectra.
 
 ## A tool
@@ -119,8 +152,8 @@ A tool is a tip plus, usually, a medium.
   crayon keeps the facets it wore.
 - **Tools that lay nothing** use the same stroke runner: stump and finger
   (carry `loose` along and press part of it in, and slide held graphite),
-  kneaded eraser (lifts `loose`), hard eraser (also abrades `held`),
-  burnisher.
+  kneaded eraser (lifts loose dust), hard eraser (also abrades `held`, and
+  with it what is set, a film and paste), burnisher.
 - **A tool in the hand** (built). A `Smudger` is to a `Tool` what a `Stick`
   is to a medium: the tool as it is held, with what it carries, which it
   keeps from one pass to the next until `clean()`. It lands with its load,
@@ -167,22 +200,32 @@ tip:
 4. **Deposit.** What one pass lays depends on the medium, the pressure and
    the paper's bite, not on how much the tooth holds; so a toothier paper
    takes more passes to fill. It is split between `held` and `loose` by the
-   medium's `binding`, and it is what the tip loses.
+   medium's `binding`, and it is what the tip loses. Of the share that is
+   held, a waxy medium lays as a film on top whatever met dust and not the
+   paper.
 5. **Working what is there.** The tip presses some of the dust under it into
-   `held`. At the end of the pass its own dust settles on top of the dust
-   that was there, which goes `under`: all but a little of it once the new
-   dust is thick enough to cover it.
+   `held`. At the end of the pass its own dust (or paste) and its film
+   settle on top of what was there, which goes `under`: all but a little of
+   it once what is new is thick enough to cover it. The film and the paste
+   bond part of the loose dust they come to lie on.
 6. **Wax.** A waxy medium films over the tooth, which then takes less
    (resist). How much less depends on what is laid over it: a dry medium,
    which the tooth has to scrape off, hardly takes at all; a waxy one takes a
-   little; a greasy paste such as oil pastel sticks to it. Pressed hard, the tip polishes the film: it raises `press`,
+   little; a greasy paste such as oil pastel sticks to it. It also depends
+   on how thick the film is, and not alike for both: wax goes on taking wax,
+   less and less, until the film is `WAX_FULL` thick, so that light layers of
+   coloured pencil build; but a dry medium has no tooth left to scrape it
+   off as soon as the wax covers the tooth, which is the thickness at which
+   any layer covers what is under it (`COVERS`). One firm line of crayon is
+   that thick, so charcoal shaded over it skips it: wax resist. Pressed hard, the tip polishes the film: it raises `press`,
    which levels the tooth so that every part of the pixel is touched, and it
    drags some of the waxy layer along and lays it back down, valleys
    included. That closes the white specks (burnishing).
 
 A stump, a finger or an eraser runs the same way but lays nothing of its own.
 Where it bears, it lifts a share of the `loose` pigment (and, for an eraser,
-of the `held`), carries it, and lays a share of what it carries back down a
+of the `held`; paste as dust if it smears, as held pigment if it does not;
+what is set and a film as held pigment), carries it, and lays a share of what it carries back down a
 little further on, as dust spread over the whole pixel. As strongly as it
 smears, it also spreads the dust under it from grain to grain, within a few
 pixels: that is what evens a rubbed tone, and it goes faster than the
@@ -205,9 +248,10 @@ at full pressure about 0.75; and light layers of HB level off near 0.5.
 
 ## Rendering
 
-Per pixel: Kubelka-Munk reflectance of the `loose` layer over the `held` layer
-over the paper's own colour, on the covered share of the pixel; the rest shows
-bare paper.
+Per pixel: Kubelka-Munk reflectance of the `loose` layer over the `under`
+layer over the `held` layer over the paper's own colour, on the covered share
+of the pixel; the rest shows bare paper. A film is in the layer it was laid
+in, so a crayon drawn over charcoal dust is seen over it.
 By default a fairly high lamp shows the tooth faintly, as on a scan; a raking
 light brings it out, and `lighting=False` renders the sheet flat.
 

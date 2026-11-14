@@ -28,7 +28,7 @@ make pre-push                  # what CI runs: tox (black, ruff, pyright, pytest
 ## Layout
 
 - `paper.py`, `papers.py`: a paper's texture, tooth and colour, and the presets.
-- `sheet.py`: the `Sheet`, with the tooth, the pigment it holds and the two layers of dust over it, strokes and rendering.
+- `sheet.py`: the `Sheet`, with the tooth, the pigment it holds and the two layers that lie over it (dust, and what a binder holds there: `bonded`), strokes and rendering.
 - `medium.py`, `pencils.py`, `charcoal.py`, `pastels.py`, `crayons.py`: what a stick is made of; graphite and coloured pencils, charcoals, soft, hard and oil pastels, wax crayons.
 - `stick.py`: a medium in the hand, with a tip that wears. `pens.py`: ballpoint pens, whose ink is a stain in the paper.
 - `tools.py`: stumps, fingers and erasers, which lay nothing of their own. `smudger.py`: a tool in the hand, which keeps what it picks up.

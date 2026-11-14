@@ -15,12 +15,25 @@ from numba import njit
 #: Pigment is packed per pixel as [K (N bands), S, volume, sheen], all
 #: extensive (summed over the pigment present; the sheen is the volume times
 #: the sheen of its medium); the held layer has a fifth part, the volume of
-#: wax in it. There are three layers: what the paper holds, and
-#: over it the dust, in two layers (``under`` and, on top, ``loose``) so that
-#: what was laid last is seen over what was laid before.
+#: wax at the pixel. There are three layers: what the paper holds, and
+#: over it what lies on that, in two layers (``under`` and, on top,
+#: ``loose``) so that what was laid last is seen over what was laid before.
 N = N_BANDS
 IS, IV, IX, IW = N, N + 1, N + 2, N + 3
 LOOSE, HELD = N + 3, N + 4
+#: Most of what lies in the two layers is loose dust, but not all. For each
+#: of the two (0 underneath, 1 on top) the sheet keeps the volume that is
+#: bonded, of three kinds: dust that is set, by fixative or by a film laid
+#: over it; a film, the share of a waxy medium that would have been held had
+#: it met the paper and not what lay on it; and paste, what the paper does
+#: not hold of a greasy medium. A tool lifts what is set and a film only as
+#: it lifts what the paper holds, and neither stirs them nor presses them in;
+#: paste it moves as far as it smears.
+SET, FILM, PASTE = 0, 1, 2
+KINDS = 3
+#: What a tool carries is packed as dust is, with a fifth part: the volume of
+#: it that is paste.
+IP = N + 3
 
 #: How far down the tooth a tip reaches at full pressure, as a share of a
 #: tooth of depth 1: the hardest lead, and what the softest adds to it. Only
@@ -87,9 +100,18 @@ PRESS_IN = 0.15
 #: this thick, in proportion if it is thinner and does not cover it all.
 COVERS = 0.2
 BURY = 0.985
-#: Wax films over the tooth: a film this thick is as slick as it gets, and a
-#: pass of a waxy medium then lays only this much less than on bare paper
-#: (resist).
+#: A waxy medium is laid as a film, which lies on what it meets: on the
+#: paper, where the paper holds it, or on what lies over the paper, as far
+#: as that covers it (all of it once it is COVERS thick). There it stays on
+#: top, a film, and bonds this share of the loose dust beneath it (where the
+#: film and the paste laid with it are themselves COVERS thick; in proportion
+#: if thinner): the dust is set under a film, and turns to paste under paste.
+BINDS = 0.7
+#: Wax films over the tooth: a film this thick is as slick as it gets to a
+#: waxy medium, and a pass of one then lays only this much less than on bare
+#: paper (resist). A dry medium needs the tooth to scrape it off, and has
+#: none once the wax covers it: to a dry medium a film of wax is as slick as
+#: it gets when it is COVERS thick, so one firm line of crayon is enough.
 WAX_FULL = 0.35
 RESIST = 0.85
 #: Dust that fixative has set takes only this share of the room in the tooth
@@ -103,6 +125,15 @@ STICKS = 0.3
 #: softest loses this share of its resist.
 FIRM = 0.6
 GREASE = 0.8
+#: What the paper does not hold of a greasy medium is paste, not dust: all of
+#: it for a medium this greasy (as a share of the softest), in proportion
+#: for one less greasy. Paste smears under a finger and does not come off on
+#: a kneaded eraser.
+PASTY = 0.5
+#: A greasy tip ploughs into what it is laid over: of the dust and the paste
+#: on top that a pass of paste would bury, this share stays on top and mixes
+#: with it, so a light oil pastel only half covers a dark one.
+PLOUGH = 0.12
 #: Pressed harder than BURNISH_FROM, a tip polishes a waxy layer flat: one
 #: pass at full pressure on a film as slick as it gets raises ``press`` by
 #: BURNISH, and a pressed tooth is level, so the white specks close up.
@@ -138,7 +169,7 @@ BALL_UNEVEN = 0.2
 BALL_SURGE = 12.0
 #: The ball skids on a film of pigment: it lays less from the first of these
 #: thicknesses (per covered area) and nothing from the second. On wax it
-#: writes as badly as a dry medium does (RESIST_DRY).
+#: writes as badly as a dry medium does (RESIST_DRY, on a film COVERS thick).
 SKID_FROM = 0.25
 SKID_FULL = 1.0
 #: A tool that rubs also spreads the dust under it from grain to grain: what
@@ -218,28 +249,38 @@ def tip_bearing(dx, dy, tx, ty, wide, long, rounded):
 
 
 @njit(cache=True, error_model="numpy")
-def free_share(fixed, layer, iy, ix, which):
-    """The share of a layer of dust at a pixel that fixative has not set.
-    ``fixed`` holds, for each pixel, the volume it has set in the dust
-    underneath (``which`` 0) and in the dust on top (1)."""
+def free_share(bonded, layer, iy, ix, which):
+    """The share of a layer at a pixel (``which``: 0 underneath, 1 on top)
+    that can still be moved: loose dust and paste, which is neither set nor
+    a film (``bonded`` holds the volume of each kind in each layer)."""
     there = layer[iy, ix, IV]
-    if fixed[iy, ix, which] <= 0.0 or there <= 0.0:
+    hard = bonded[iy, ix, which, SET] + bonded[iy, ix, which, FILM]
+    if hard <= 0.0 or there <= 0.0:
         return 1.0
-    return 1.0 - min(fixed[iy, ix, which] / there, 1.0)
+    return 1.0 - min(hard / there, 1.0)
 
 
 @njit(cache=True, error_model="numpy")
-def press_dust(held, under, loose, fixed, cover, iy, ix, share):
-    """Press the ``share`` of the dust at a pixel into the paper: of the
-    dust that fixative has not set (``fixed``), and less of it the more a
-    layer that is set lies between it and the paper."""
+def hard_at(bonded, iy, ix):
+    """The volume at a pixel, in the two layers together, that is set or a
+    film: what lies between a tool and whatever is under it."""
+    hard = bonded[iy, ix, 0, SET] + bonded[iy, ix, 0, FILM]
+    return hard + bonded[iy, ix, 1, SET] + bonded[iy, ix, 1, FILM]
+
+
+@njit(cache=True, error_model="numpy")
+def press_dust(held, under, loose, bonded, cover, iy, ix, share):
+    """Press the ``share`` of the dust and of the paste at a pixel into the
+    paper: not what is set or a film (``bonded``), and less of the rest the
+    more of those lies between it and the paper."""
     if loose[iy, ix, IV] <= 0.0 and under[iy, ix, IV] <= 0.0:
         return  # (no dust here: most pixels of a first pass)
-    barrier = fixed[iy, ix, 0] + fixed[iy, ix, 1]
+    from_loose, from_under = share, share
+    barrier = hard_at(bonded, iy, ix)
     if barrier > 0.0:
         share *= 1.0 - min(barrier / max(cover[iy, ix], 1e-6) / COVERS, 1.0)
-    from_loose = share * free_share(fixed, loose, iy, ix, 1)
-    from_under = share * free_share(fixed, under, iy, ix, 0)
+        from_loose = share * free_share(bonded, loose, iy, ix, 1)
+        from_under = share * free_share(bonded, under, iy, ix, 0)
     for part in range(LOOSE):
         moved = loose[iy, ix, part] * from_loose
         loose[iy, ix, part] -= moved
@@ -247,6 +288,10 @@ def press_dust(held, under, loose, fixed, cover, iy, ix, share):
         moved = under[iy, ix, part] * from_under
         under[iy, ix, part] -= moved
         held[iy, ix, part] += moved
+    if bonded[iy, ix, 1, PASTE] > 0.0:
+        bonded[iy, ix, 1, PASTE] -= bonded[iy, ix, 1, PASTE] * share
+    if bonded[iy, ix, 0, PASTE] > 0.0:
+        bonded[iy, ix, 0, PASTE] -= bonded[iy, ix, 0, PASTE] * share
 
 
 @njit(cache=True, error_model="numpy")
@@ -301,13 +346,63 @@ def set_down(held, cover, drag, x, y, tx, ty, wide, long, rounded):
 
 
 @njit(cache=True, error_model="numpy")
-def settle_dust(fresh, cover, fixed, under, loose, k, s, sheen, xs, ys, bound):
-    """At the end of a pass, put its dust (``fresh``, a volume per pixel) on
-    top of the dust that was there, which goes under it, and leave ``fresh``
-    empty again; the dust that goes under takes with it what fixative has
-    set of it (``fixed``). Only where the tip went: within ``bound`` of the points
-    (``xs``, ``ys``)."""
-    height, width = fresh.shape
+def bond_dust(bonded, layer, iy, ix, which, share, film):
+    """Bond the ``share`` of the loose dust in one layer at a pixel: the
+    share ``film`` of that is set, as under a film, and the rest turns to
+    paste."""
+    there = bonded[iy, ix, which, SET] + bonded[iy, ix, which, FILM]
+    there += bonded[iy, ix, which, PASTE]
+    caught = max(layer[iy, ix, IV] - there, 0.0) * share
+    bonded[iy, ix, which, SET] += caught * film
+    bonded[iy, ix, which, PASTE] += caught * (1.0 - film)
+
+
+@njit(cache=True, error_model="numpy")
+def settle_pixel(fresh, cover, bonded, under, loose, pasty, iy, ix):
+    """Make room at a pixel for what a pass has left to settle there
+    (``fresh``: what the paper did not hold of it, and its film): what lay on
+    top goes under, with what is bonded of it, and the film and the paste
+    that come bond part of the loose dust. Returns the volumes of dust and
+    paste, and of film, to lay on top; ``fresh`` is left empty."""
+    rest, film = fresh[iy, ix, 0], fresh[iy, ix, 1]
+    fresh[iy, ix, 0] = 0.0
+    fresh[iy, ix, 1] = 0.0
+    thin = 1.0 / (cover[iy, ix] * COVERS)
+    buried = BURY * min((rest + film) * thin, 1.0)
+    # (a greasy tip ploughs up part of what can be moved, which stays on top)
+    free = free_share(bonded, loose, iy, ix, 1)
+    going = buried * (1.0 - PLOUGH * pasty * free)
+    for part in range(LOOSE):
+        moved = loose[iy, ix, part] * going
+        loose[iy, ix, part] -= moved
+        under[iy, ix, part] += moved
+    for kind in range(KINDS):
+        moved = bonded[iy, ix, 1, kind] * buried
+        if kind == PASTE:
+            moved *= 1.0 - PLOUGH * pasty
+        bonded[iy, ix, 1, kind] -= moved
+        bonded[iy, ix, 0, kind] += moved
+    paste = rest * pasty
+    binder = film + paste
+    if binder > 0.0:
+        share = BINDS * min(binder * thin, 1.0)
+        bond_dust(bonded, under, iy, ix, 0, share, film / binder)
+        bond_dust(bonded, loose, iy, ix, 1, share, film / binder)
+    bonded[iy, ix, 1, FILM] += film
+    bonded[iy, ix, 1, PASTE] += paste
+    return rest, film
+
+
+@njit(cache=True, error_model="numpy")
+def settle_dust(fresh, cover, bonded, under, loose, k, s, sheen, pasty, xs, ys, bound):
+    """At the end of a pass, put what it left to lie on the sheet (``fresh``,
+    two volumes per pixel: what the paper does not hold of the medium, of
+    which the share ``pasty`` is paste and the rest dust, and its film) on
+    top of what lay there, which goes under it with what is bonded of it
+    (``bonded``), and leave ``fresh`` empty again. The film and the paste
+    bond part of the loose dust they come to lie on. Only where the tip
+    went: within ``bound`` of the points (``xs``, ``ys``)."""
+    height, width = cover.shape
     for i in range(xs.shape[0]):
         x0 = max(int(math.floor(xs[i] - bound)), 0)
         x1 = min(int(math.ceil(xs[i] + bound)), width)
@@ -315,33 +410,79 @@ def settle_dust(fresh, cover, fixed, under, loose, k, s, sheen, xs, ys, bound):
         y1 = min(int(math.ceil(ys[i] + bound)), height)
         for iy in range(y0, y1):
             for ix in range(x0, x1):
-                dust = fresh[iy, ix]
-                if dust <= 0.0:
-                    continue
-                fresh[iy, ix] = 0.0  # settled: the next point skips it
-                buried = BURY * min(dust / cover[iy, ix] / COVERS, 1.0)
-                for part in range(LOOSE):
-                    moved = loose[iy, ix, part] * buried
-                    loose[iy, ix, part] -= moved
-                    under[iy, ix, part] += moved
-                # (what fixative has set of it goes under with it)
-                moved = fixed[iy, ix, 1] * buried
-                fixed[iy, ix, 1] -= moved
-                fixed[iy, ix, 0] += moved
+                if fresh[iy, ix, 0] <= 0.0 and fresh[iy, ix, 1] <= 0.0:
+                    continue  # (nothing, or settled already)
+                rest, film = settle_pixel(
+                    fresh, cover, bonded, under, loose, pasty, iy, ix
+                )
+                new = rest + film
                 for band in range(N):
-                    loose[iy, ix, band] += dust * k[band]
-                loose[iy, ix, IS] += dust * s
-                loose[iy, ix, IV] += dust
-                loose[iy, ix, IX] += dust * sheen
+                    loose[iy, ix, band] += new * k[band]
+                loose[iy, ix, IS] += new * s
+                loose[iy, ix, IV] += new
+                loose[iy, ix, IX] += new * sheen
+
+
+@njit(cache=True, error_model="numpy")
+def resist_dry(wax):
+    """How much less of a medium with the share ``wax`` of wax a film of wax
+    takes than bare paper does because the medium is dry: the tooth has to
+    scrape it off."""
+    return RESIST_DRY * (1.0 - min(wax / STICKS, 1.0))
+
+
+@njit(cache=True, error_model="numpy")
+def resist_waxy(softness, wax):
+    """How much less of it the film takes because the medium is waxy: wax
+    slides on wax, unless it is a greasy paste, which sticks."""
+    greasy = min(max((softness - FIRM) / (1.0 - FIRM), 0.0), 1.0)
+    return RESIST * (1.0 - GREASE * greasy) * min(wax / STICKS, 1.0)
 
 
 @njit(cache=True, error_model="numpy")
 def resist_of(softness, wax):
     """How much less of a medium a film of wax as slick as it gets takes than
     bare paper does."""
-    waxy = min(wax / STICKS, 1.0)
+    return resist_dry(wax) + resist_waxy(softness, wax)
+
+
+@njit(cache=True, error_model="numpy")
+def paste_of(softness, wax):
+    """The share that is paste, not dust, of what the paper does not hold of
+    a medium: none of a dry medium or of a firm waxy one, all of a greasy
+    one."""
     greasy = min(max((softness - FIRM) / (1.0 - FIRM), 0.0), 1.0)
-    return RESIST_DRY * (1.0 - waxy) + RESIST * (1.0 - GREASE * greasy) * waxy
+    return min(wax / STICKS, 1.0) * min(greasy / PASTY, 1.0)
+
+
+@njit(cache=True, error_model="numpy")
+def lying_share(under, loose, bonded, covered, iy, ix):
+    """The share of the marked part of a pixel on which something lies over
+    what the paper holds: dust, set or not, or paste. (A film lies on those,
+    and covers no more of the paper than they do.)"""
+    lying = under[iy, ix, IV] + loose[iy, ix, IV]
+    lying -= bonded[iy, ix, 0, FILM] + bonded[iy, ix, 1, FILM]
+    return min(max(lying, 0.0) / covered / COVERS, 1.0)
+
+
+@njit(cache=True, error_model="numpy")
+def deposit(held, fresh, iy, ix, dv, binding, over, k, s, sheen, wax):
+    """Lay the volume ``dv`` of a medium at a pixel: the paper holds the
+    share ``binding`` of it, but for the share ``over`` of that, a film on
+    what lies there; that film and what is not held are left in ``fresh``,
+    to settle on top at the end of the pass. Returns the volume left
+    there."""
+    film = dv * binding * over
+    kept = dv * binding - film
+    for band in range(N):
+        held[iy, ix, band] += kept * k[band]
+    held[iy, ix, IS] += kept * s
+    held[iy, ix, IV] += kept
+    held[iy, ix, IX] += kept * sheen
+    held[iy, ix, IW] += dv * wax
+    fresh[iy, ix, 0] += dv - dv * binding
+    fresh[iy, ix, 1] += film
+    return dv - kept
 
 
 @njit(cache=True, error_model="numpy")
@@ -353,7 +494,7 @@ def lay_stroke(
     under,
     loose,
     fresh,
-    fixed,
+    bonded,
     xs,
     ys,
     pressures,
@@ -378,13 +519,16 @@ def lay_stroke(
     of wax in it, its sheen] (its absorption per band is ``k``) and ``paper`` is
     [depth, bite, give, hold]. The medium is laid where the tip touches the
     tooth.
-    What the paper does not hold of it is dust, gathered in ``fresh`` (empty
-    before and after) and laid at the end of the pass on top of the dust that
-    was there (``loose``), which goes ``under`` it. Dust that fixative has set
-    (``fixed``, its volume in each of the two layers) is not pressed in, and
-    takes less of the room in the tooth. Wax films over the tooth,
-    which then takes less (:func:`resist_of`); pressed hard, the tip polishes
-    it flat (``press``) and smears it along.
+    What the paper does not hold of it is dust, or paste if the medium is
+    greasy (:func:`paste_of`), gathered in ``fresh`` (empty before and after)
+    and laid at the end of the pass on top of what lay there (``loose``),
+    which goes ``under`` it. With it goes the film of a waxy medium: the part
+    of what would have been held that met not the paper but what lies over it
+    (:func:`lying_share`). What is set or a film in the two layers
+    (``bonded``, the volume of each kind in each) is not pressed in, and dust
+    that is set takes less of the room in the tooth. Wax films over the
+    tooth, which then takes less (:func:`resist_of`); pressed hard, the tip
+    polishes it flat (``press``) and smears it along.
 
     Returns the volume the tip has lost: what it laid, less what it has
     dragged off the sheet.
@@ -416,12 +560,14 @@ def lay_stroke(
         * paper[3]
     )
     rounded = RIM + (1.0 - RIM) * TILT_RIM * tilt
-    resist = resist_of(softness, wax)
+    dry, slides = resist_dry(wax), resist_waxy(softness, wax)
+    filmy = min(wax / STICKS, 1.0)  # how far what the paper holds is a film
     start = flat**3
     reached = 0.0  # the furthest the tip has been from its path
     # what a tip that polishes drags along
     drag = np.zeros(HELD)
     total = 0.0
+    lying = 0.0  # what the pass leaves lying on the sheet, to settle
     # where the tip last bore, and how wide it was there
     at_x, at_y, at_tx, at_ty = xs[0], ys[0], 1.0, 0.0
     wide, long = 0.5 * flat * spread + 0.5, 0.5 * flat + 0.5
@@ -465,39 +611,41 @@ def lay_stroke(
                 covered = max(cover[iy, ix], touch)
                 cover[iy, ix] = covered
                 there = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
-                thick = (there + fresh[iy, ix]) / covered
-                thick -= (
-                    (1.0 - FIXED_ROOM) * (fixed[iy, ix, 0] + fixed[iy, ix, 1]) / covered
-                )
+                thick = (there + fresh[iy, ix, 0] + fresh[iy, ix, 1]) / covered
+                was_set = bonded[iy, ix, 0, SET] + bonded[iy, ix, 1, SET]
+                thick -= (1.0 - FIXED_ROOM) * was_set / covered
                 bearing = min(local, 1.0)
                 passing = per_pass * step * touch
-                waxy = min(held[iy, ix, IW] / covered / WAX_FULL, 1.0)
+                waxed = held[iy, ix, IW] / covered
+                waxy = min(waxed / WAX_FULL, 1.0)
                 if bearing > BURNISH_FROM:
                     firm = (bearing - BURNISH_FROM) / (1.0 - BURNISH_FROM)
                     polish, lay_back = firm * waxy * passing, dragged * step * touch
                     burnish(held, press, drag, iy, ix, polish, lay_back)
                 # the tip presses some of the dust under it into the paper
                 pressed = min(PRESS_IN * bearing, 1.0) * passing
-                press_dust(held, under, loose, fixed, cover, iy, ix, pressed)
+                press_dust(held, under, loose, bonded, cover, iy, ix, pressed)
                 room = full * (FILL_LIGHT + (1.0 - FILL_LIGHT) * bearing) - thick
                 if room <= 0.0:
                     continue
                 # (a light pass takes less, but not in proportion: the lead
                 # still slides over all it touches)
                 dv = lay * math.sqrt(bearing * min(above / SPAN, 1.0)) * (room / full)
-                dv *= 1.0 - resist * waxy
+                # (to a dry medium wax is slick as soon as it covers the tooth)
+                dv *= 1.0 - dry * min(waxed / COVERS, 1.0) - slides * waxy
                 dv = min(dv * per_pass * step, room) * touch
-                kept = dv * binding
-                for band in range(N):
-                    held[iy, ix, band] += kept * k[band]
-                held[iy, ix, IS] += kept * s
-                held[iy, ix, IV] += kept
-                held[iy, ix, IX] += kept * sheen
-                held[iy, ix, IW] += dv * wax
-                fresh[iy, ix] += dv - kept
+                over = 0.0  # the share of what is held that lies on dust
+                if filmy > 0.0:
+                    over = filmy * lying_share(under, loose, bonded, covered, iy, ix)
+                lying += deposit(
+                    held, fresh, iy, ix, dv, binding, over, k, s, sheen, wax
+                )
                 total += dv
-    if binding < 1.0:  # (else there is no dust to settle)
-        settle_dust(fresh, cover, fixed, under, loose, k, s, sheen, xs, ys, reached)
+    if lying > 0.0:  # (else the paper holds it all: nothing to settle)
+        pasty = paste_of(softness, wax)
+        settle_dust(
+            fresh, cover, bonded, under, loose, k, s, sheen, pasty, xs, ys, reached
+        )
     # what the tip still drags it leaves where it lifts off; only off the
     # sheet does it leave the paper with it
     return total - set_down(
@@ -523,7 +671,7 @@ def spread_dust(loose, near, iy, ix, take, back):
 
 
 @njit(cache=True, error_model="numpy")
-def slide_graphite(held, loose, slid, fixed, cover, iy, ix, rubbed, back):
+def slide_graphite(held, loose, slid, bonded, cover, iy, ix, rubbed, back):
     """Slide the graphite that the paper holds at a pixel under a tool that
     has ``rubbed`` it (how strongly it smears, times its share of a pass):
     part comes loose as dust on top, the rest goes onto the face of the tool
@@ -535,7 +683,7 @@ def slide_graphite(held, loose, slid, fixed, cover, iy, ix, rubbed, back):
     if rubbed > 0.0 and there > 0.0 and held[iy, ix, IX] > 0.0:
         graphite = min(held[iy, ix, IX] / there, 1.0)
         slip = min(SLIDE * rubbed * graphite**SLIDE_POWER, 1.0)
-        barrier = fixed[iy, ix, 0] + fixed[iy, ix, 1]
+        barrier = hard_at(bonded, iy, ix)
         if barrier > 0.0:
             sealed = barrier / max(cover[iy, ix], 1e-6) / COVERS
             slip *= 1.0 - min(sealed, 1.0)
@@ -551,12 +699,109 @@ def slide_graphite(held, loose, slid, fixed, cover, iy, ix, rubbed, back):
 
 
 @njit(cache=True, error_model="numpy")
+def lift_bonded(layer, bonded, load, iy, ix, which, up_dust, up_paste, up_held):
+    """The share of a layer at a pixel that a tool takes when not all of it
+    is loose dust: the shares ``up_dust`` of its loose dust, ``up_paste`` of
+    its paste and ``up_held`` of what is set or a film in it. What it takes
+    of each kind is taken off ``bonded``, and the paste is counted on the
+    tool (``load``)."""
+    there = layer[iy, ix, IV]
+    if there <= 0.0:
+        return 0.0
+    paste = bonded[iy, ix, which, PASTE]
+    hard = bonded[iy, ix, which, SET] + bonded[iy, ix, which, FILM]
+    hard = min(hard / there, 1.0)
+    pasty = min(paste / there, 1.0 - hard)
+    bonded[iy, ix, which, SET] -= bonded[iy, ix, which, SET] * up_held
+    bonded[iy, ix, which, FILM] -= bonded[iy, ix, which, FILM] * up_held
+    bonded[iy, ix, which, PASTE] -= paste * up_paste
+    load[IP] += paste * up_paste
+    return up_dust * (1.0 - hard - pasty) + up_paste * pasty + up_held * hard
+
+
+@njit(cache=True, error_model="numpy")
+def lift(held, under, loose, bonded, load, iy, ix, lifts, share):
+    """Lift onto a tool (``load``) what it takes at a pixel in the ``share``
+    of a pass at full pressure. ``lifts`` is [how strongly it lifts the
+    dust, how strongly what is held, how strongly it smears]: it takes less
+    of the dust underneath than of the dust on top; what is set or a film
+    only as what the paper holds; and paste as dust if it smears, as what is
+    held if it only lifts."""
+    greasy = min(lifts[2], 1.0)
+    up_held = min(lifts[1] * share, 1.0)
+    up_loose = min(lifts[0] * share, 1.0)
+    up_under = min(UNDER_LIFT * lifts[0] * share, 1.0)
+    kinds = bonded[iy, ix, 1, SET] + bonded[iy, ix, 1, FILM]
+    if kinds + bonded[iy, ix, 1, PASTE] > 0.0:  # (else it is all loose dust)
+        up_paste = up_held + max(up_loose - up_held, 0.0) * greasy
+        up_loose = lift_bonded(
+            loose, bonded, load, iy, ix, 1, up_loose, up_paste, up_held
+        )
+    kinds = bonded[iy, ix, 0, SET] + bonded[iy, ix, 0, FILM]
+    if kinds + bonded[iy, ix, 0, PASTE] > 0.0:
+        up_paste = up_held + max(up_under - up_held, 0.0) * greasy
+        up_under = lift_bonded(
+            under, bonded, load, iy, ix, 0, up_under, up_paste, up_held
+        )
+    for part in range(LOOSE):
+        taken = loose[iy, ix, part] * up_loose
+        loose[iy, ix, part] -= taken
+        load[part] += taken
+        taken = under[iy, ix, part] * up_under
+        under[iy, ix, part] -= taken
+        load[part] += taken
+        taken = held[iy, ix, part] * up_held
+        held[iy, ix, part] -= taken
+        load[part] += taken
+    held[iy, ix, IW] -= held[iy, ix, IW] * up_held
+
+
+@njit(cache=True, error_model="numpy")
+def spread_top(loose, bonded, near, iy, ix, rate, back):
+    """Spread what lies on top at a pixel from grain to grain: take the share
+    ``rate`` of what can be moved of it onto the face of the tool (``near``),
+    and lay the share ``back`` of what is on its face down again; the paste
+    in it stays paste. Returns the volumes laid and taken."""
+    take = rate
+    if bonded[iy, ix, 1, SET] + bonded[iy, ix, 1, FILM] > 0.0:
+        take = rate * free_share(bonded, loose, iy, ix, 1)
+    given, taken = spread_dust(loose, near, iy, ix, take, back)
+    if bonded[iy, ix, 1, PASTE] > 0.0 or near[IP] > 0.0:
+        up = bonded[iy, ix, 1, PASTE] * rate
+        down = (near[IP] + up) * back
+        near[IP] += up - down
+        bonded[iy, ix, 1, PASTE] += down - up
+    return given, taken
+
+
+@njit(cache=True, error_model="numpy")
+def stir_up(under, loose, bonded, iy, ix, stirred):
+    """Stir the share ``stirred`` of what can be moved of the layer
+    underneath at a pixel up into the layer on top. Returns the volume in
+    the two layers that can be moved: the dust and the paste."""
+    moving = stirred
+    hard = bonded[iy, ix, 0, SET] + bonded[iy, ix, 0, FILM]
+    if hard > 0.0:
+        moving = stirred * free_share(bonded, under, iy, ix, 0)
+    for part in range(LOOSE):
+        moved = under[iy, ix, part] * moving
+        under[iy, ix, part] -= moved
+        loose[iy, ix, part] += moved
+    if bonded[iy, ix, 0, PASTE] > 0.0:
+        moved = bonded[iy, ix, 0, PASTE] * stirred
+        bonded[iy, ix, 0, PASTE] -= moved
+        bonded[iy, ix, 1, PASTE] += moved
+    hard += bonded[iy, ix, 1, SET] + bonded[iy, ix, 1, FILM]
+    return max(under[iy, ix, IV] + loose[iy, ix, IV] - hard, 0.0)
+
+
+@njit(cache=True, error_model="numpy")
 def rub_stroke(
     cover,
     held,
     under,
     loose,
-    fixed,
+    bonded,
     xs,
     ys,
     pressures,
@@ -580,15 +825,21 @@ def rub_stroke(
     pixel; and over each of its own widths the tool lays the share ``lay`` of
     what it carries back down, as dust on top. As strongly as it smears, it
     also spreads the dust on top over the pixels around, and slides the
-    graphite that the paper holds (:func:`slide_graphite`). Dust that
-    fixative has set (``fixed``, its volume in each of the two layers) is
-    lifted only as held pigment is, and is neither pressed in nor stirred.
+    graphite that the paper holds (:func:`slide_graphite`).
 
-    ``carried`` is what the tool carries, three rows packed as dust is
-    ([K (N bands), S, volume, sheen]): what it has lifted, the dust on its
-    face, soon laid back, and the held graphite it is pushing along,
-    likewise. The tool lands with it and it is updated in place, so a tool
-    that is not cleaned between two passes gives back as it takes.
+    Not all that lies in the two layers is loose dust (``bonded``, the
+    volume of each kind in each layer). What is set, by fixative or under a
+    film, and a film itself are lifted only as held pigment is, and are
+    neither pressed in nor stirred. Paste is moved as dust is by a tool that
+    smears, and lifted only as held pigment is by one that does not; it is
+    paste again where the tool lays it.
+
+    ``carried`` is what the tool carries, three rows packed as dust is with
+    the volume of paste after ([K (N bands), S, volume, sheen, paste]): what
+    it has lifted, the dust on its face, soon laid back, and the held
+    graphite it is pushing along, likewise. The tool lands with it and it is
+    updated in place, so a tool that is not cleaned between two passes gives
+    back as it takes.
     """
     height, width = cover.shape
     bound = radius + 0.5
@@ -598,6 +849,7 @@ def rub_stroke(
     # on, per pixel moved
     per_pixel = lay / (2.0 * bound * math.pi * bound * bound)
     per_near = SPREAD / (2.0 * bound * math.pi * bound * bound)
+    lifts = np.array([lift_loose, lift_held, smear])
     load = carried[0]
     near = carried[1]  # the dust on the face of the tool, soon laid back
     slid = carried[2]  # held graphite it is pushing along, likewise
@@ -622,30 +874,10 @@ def rub_stroke(
                 local = pressure * min((bound - d) / rim, 1.0) * edge
                 local *= streak_at(dx, dy, tx, ty, salt)
                 share = local * per_pass * step  # of one pass at full pressure
-                # lift
-                up_held = min(lift_held * share, 1.0)
-                free = free_share(fixed, loose, iy, ix, 1)
-                up_loose = min(lift_loose * share, 1.0) * free
-                up_loose += up_held * (1.0 - free)
-                free = free_share(fixed, under, iy, ix, 0)
-                up_under = min(UNDER_LIFT * lift_loose * share, 1.0) * free
-                up_under += up_held * (1.0 - free)
-                fixed[iy, ix, 0] -= fixed[iy, ix, 0] * up_held
-                fixed[iy, ix, 1] -= fixed[iy, ix, 1] * up_held
-                for part in range(LOOSE):
-                    taken = loose[iy, ix, part] * up_loose
-                    loose[iy, ix, part] -= taken
-                    load[part] += taken
-                    taken = under[iy, ix, part] * up_under
-                    under[iy, ix, part] -= taken
-                    load[part] += taken
-                    taken = held[iy, ix, part] * up_held
-                    held[iy, ix, part] -= taken
-                    load[part] += taken
-                held[iy, ix, IW] -= held[iy, ix, IW] * up_held
+                lift(held, under, loose, bonded, load, iy, ix, lifts, share)
                 back = min(per_near * local * step, 1.0)
                 pushed = slide_graphite(
-                    held, loose, slid, fixed, cover, iy, ix, smear * share, back
+                    held, loose, slid, bonded, cover, iy, ix, smear * share, back
                 )
                 # lay, as dust all over the pixel
                 before = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
@@ -655,10 +887,13 @@ def rub_stroke(
                     given = load[part] * down
                     load[part] -= given
                     loose[iy, ix, part] += given
+                if load[IP] > 0.0:  # (the paste in it is paste again)
+                    given = load[IP] * down
+                    load[IP] -= given
+                    bonded[iy, ix, 1, PASTE] += given
                 # spread, from grain to grain
-                take = min(SPREADS * smear * share, 1.0)
-                take *= free_share(fixed, loose, iy, ix, 1)
-                given, taken = spread_dust(loose, near, iy, ix, take, back)
+                rate = min(SPREADS * smear * share, 1.0)
+                given, taken = spread_top(loose, bonded, near, iy, ix, rate, back)
                 laid += given
                 after = before + laid - taken
                 if after <= 1e-9:
@@ -669,16 +904,9 @@ def rub_stroke(
                 # press in; stir up what is underneath; and push what is
                 # loose into the low ground
                 spent = min(press * share, 1.0)
-                press_dust(held, under, loose, fixed, cover, iy, ix, spent)
+                press_dust(held, under, loose, bonded, cover, iy, ix, spent)
                 stirred = min(smear * share, 1.0)
-                moving = stirred * free_share(fixed, under, iy, ix, 0)
-                for part in range(LOOSE):
-                    moved = under[iy, ix, part] * moving
-                    under[iy, ix, part] -= moved
-                    loose[iy, ix, part] += moved
-                free = under[iy, ix, IV] + loose[iy, ix, IV]
-                free -= fixed[iy, ix, 0] + fixed[iy, ix, 1]
-                dusty = max(free, 0.0) / after
+                dusty = stir_up(under, loose, bonded, iy, ix, stirred) / after
                 cover[iy, ix] += (1.0 - cover[iy, ix]) * stirred * dusty
 
 
@@ -691,7 +919,7 @@ def ball_grip(cover, held, under, loose, iy, ix):
         return 1.0
     thick = (held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]) / covered
     skid = min(max((thick - SKID_FROM) / (SKID_FULL - SKID_FROM), 0.0), 1.0)
-    waxy = min(held[iy, ix, IW] / covered / WAX_FULL, 1.0)
+    waxy = min(held[iy, ix, IW] / covered / COVERS, 1.0)
     # (only the covered share of the pixel is slick)
     return (1.0 - skid * covered) * (1.0 - RESIST_DRY * waxy * covered)
 

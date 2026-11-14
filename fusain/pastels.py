@@ -4,8 +4,8 @@ and ``pastels.oil(...)``.
 A pastel is pigment with barely enough gum to hold a stick together. It is
 opaque, so a light one covers a dark one, and nearly all of what it lays is
 dust, which a finger blends. An oil pastel is bound with oil and wax
-instead: greasy and thick, it smears rather than dusts, and a light one half
-covers a dark one.
+instead: greasy and thick, it smears rather than dusts, a light one half
+covers a dark one, and a kneaded eraser does not lift it.
 """
 
 from __future__ import annotations
@@ -35,7 +35,9 @@ def hard(color: ColorLike, name: str | None = None) -> Medium:
 def oil(color: ColorLike, name: str | None = None) -> Medium:
     """An oil pastel of that colour: soft and greasy. Less than half of it is
     held at once; the rest is a paste that a finger smears and a later layer
-    covers. Its wax makes dry media take badly over it."""
+    half covers, and that comes off only as what the paper holds does: on a
+    hard eraser, not on a kneaded one. Its wax makes dry media take badly
+    over it."""
     pigment = Pigment(color, opacity=0.9, name=name)
     label = name or f"{pigment.hex} oil pastel"
     return Medium(pigment, softness=0.85, binding=0.4, wax=0.3, name=label)

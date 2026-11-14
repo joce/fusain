@@ -25,8 +25,50 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   loaded `Smudger` that leaves more than it takes. For a bare tool that is
   what they returned before.
 
+- What lies over the paper is no longer all dust. The two layers that lie
+  over what the paper holds (`Sheet.under`, `Sheet.loose`) also take the film
+  a waxy medium lays on dust and the paste of an oil pastel, and
+  `Sheet.bonded` holds how much of each layer is not loose dust, of three
+  kinds, each with a view of its own: `Sheet.fixed` (dust that is set, by
+  fixative as before, or under a film), `Sheet.film` and `Sheet.paste`. A
+  sheet takes about 0.36 KB per pixel, from 0.34. `Sheet.fix` sets paste as
+  it sets dust. Pictures change little: graphite, charcoal, soft pastel and
+  crayon on bare paper draw as before (ten of the fifteen example images are
+  unchanged to the byte, `lake.png` but for a rounding in a few pixels); the
+  layers of coloured pencil in `colour.png` and `macaw.png` shift by a few
+  levels in places, a part of each layer now lying over the crumbs of the one
+  before; and the oil pastels of `crayons.png` cover a little more evenly.
+- A dry medium takes no better over a thin film of wax than over a thick
+  one: to charcoal, pastel, graphite and a ballpoint, wax is as slick as it
+  gets once it covers the tooth (a film 0.2 thick, from 0.35). A waxy medium
+  over wax builds as before. The ballpoint lines across the patch of crayon
+  in `ballpoint.png` skid a little more.
+
 ### Fixed
 
+- A waxy medium laid over dust lies on it. What the paper holds of a medium
+  was always rendered under the dust, so a coloured pencil or a crayon drawn
+  over charcoal or pastel showed under it: a yellow crayon shaded over vine
+  charcoal darkened it (luminance 0.48 to 0.38) where it now lightens it and
+  turns it yellow (0.53), and over blue soft pastel the patch stayed blue
+  (its red and green over its blue, in linear light: -0.25, now -0.01, the
+  crayon taking badly over a full tooth). The film of a waxy medium now lies
+  on the dust it meets, as far as the dust covers the paper, and binds part
+  of it: a kneaded eraser rubbed over that crayon on charcoal lifts 1650
+  units where it lifted 2260, and a finger carries off 18 where it carried
+  30. A dry medium is held in the tooth, under the dust, as before.
+- A kneaded eraser no longer lifts oil pastel as it lifts dust. What the
+  paper does not hold of an oil pastel is paste: a finger, a stump or a
+  chamois still smears it (and it is paste again where they lay it), but an
+  eraser lifts it only as it lifts what the paper holds. A kneaded eraser
+  rubbed over a layer of oil pastel took 53% of it and now takes 19%, as of
+  a wax crayon, against 69% of vine charcoal; a vinyl eraser still takes
+  80%. Dust that an oil pastel is laid over turns to paste with it.
+- Charcoal shaded over one firm line of wax crayon skips it (wax resist).
+  The line used to take four tenths of what the paper around it took and,
+  being pressed level, to come out as dark as the shaded paper (luminance
+  0.63 to 0.49, the paper around 0.50); it now takes under a tenth and keeps
+  its tone (0.59). Three firm layers were needed before.
 - Soft graphite smudges. A stump, a finger or a chamois hardly changed a
   pencil's tone, whatever the lead: only the little dust a pencil leaves
   moved. Graphite now slides under a tool that smears: what the paper holds
@@ -51,6 +93,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- A third row in `examples/crayons.py`, what lies over what: a sun and
+  waves in one firm line of crayon each with charcoal shaded over them (wax
+  resist), crayon lines over rubbed charcoal and over soft pastel with a
+  stump dragged through, and a kneaded eraser pulled through soft pastel and
+  through oil pastel.
 - A pebbled paper: `Paper(texture="pebbled")`, and the preset
   `papers.CHARCOAL`, a cream charcoal paper. Its tooth is small irregular
   pits, each with its own depth and outline, in a net of rims: between a wove
