@@ -8,6 +8,14 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Soft graphite smudges. A stump, a finger or a chamois hardly changed a
+  pencil's tone, whatever the lead: only the little dust a pencil leaves
+  moved. Graphite now slides under a tool that smears: what the paper holds
+  is pushed from grain to grain and a little comes loose, the more graphite
+  the lead has, so a rubbed 4B or 8B turns smooth and can be dragged out onto
+  bare paper, an HB evens a little, and a hard lead hardly moves. Graphite
+  under set fixative stays put, and no other medium slides. Pictures that rub
+  a pencil change (`examples/output/charcoal.png`).
 - Sanded card takes many more layers of pastel than paper, as it does in
   life: a `Paper` has a `hold` (how much its tooth holds for its depth), and
   `papers.SANDED` holds two and a half times what a paper of its depth does.

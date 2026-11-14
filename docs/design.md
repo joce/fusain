@@ -49,6 +49,11 @@ cost.
 `held` is what is fixed; the two layers of dust are what can still move: a
 stump, an eraser or a later stroke shifts them, and only a hard eraser or a
 blade touches `held`. Pressure moves pigment from the dust to `held`.
+Graphite is the exception: it slides. Under a stump, a finger or a chamois
+the graphite that the paper holds is pushed from grain to grain, and a little
+of it comes loose, the more the softer the lead (the clay of a hard lead
+holds it back); so a soft pencil's tone can be rubbed smooth and dragged out,
+and a hard one's hardly.
 Fixative sets the dust where it lies. There are two layers of dust because order matters: dust of two
 pigments in one layer is a mixture, and in a mixture of light and dark the
 dark wins, whereas a light pastel laid over a dark one covers it. So a pass
@@ -104,8 +109,9 @@ A tool is a tip plus, usually, a medium.
 - **Still to come.** A worn tip stored as its own small height map, so that a
   crayon keeps the facets it wore.
 - **Tools that lay nothing** use the same stroke runner: stump and finger
-  (carry `loose` along and press part of it in), kneaded eraser (lifts
-  `loose`), hard eraser (also abrades `held`), burnisher.
+  (carry `loose` along and press part of it in, and slide held graphite),
+  kneaded eraser (lifts `loose`), hard eraser (also abrades `held`),
+  burnisher.
 - **Fixative** (built) acts on the whole sheet. It does not move the dust into
   `held`, which would mix a light pastel into the dark one under it: the dust
   stays in its two layers, and `fixed` records how much of each is set (it
