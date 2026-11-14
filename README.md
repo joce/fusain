@@ -34,13 +34,14 @@ sheet.stroke([(100, 560), (500, 550)], pencils.B4, tilt=1)             # with th
 sheet.save("drawing.png")
 ```
 
-## Four drawings made with it
+## Six drawings made with it
 
 Each is a single script where every mark is a `sheet.stroke(...)`, or the
 pass of a stump, a finger or an eraser; numpy only decides where the marks
-go. None is copied from a picture. Each subject is first built in space (a
-tower, a street, a bird, a table of things), lit and looked at through a
-camera, and the medium is then laid along the forms that result.
+go. None is copied from a picture. Each subject is first built (a tower, a
+street, a bird, a table of things and a lake in space, lit and looked at
+through a camera; the farm as flat shapes, as its manner asks), and the
+medium is then laid along the forms that result.
 
 * `examples/deco.py`: a sketch of an imagined art deco tower, in charcoal on
   a cream paper. The shadow faces are toned up the wall and rubbed with a
@@ -66,6 +67,20 @@ camera, and the medium is then laid along the forms that result.
   strokes that follow each form wherever tone is still wanting. Red is the
   fruit, blue the shadows on white things, the jug's pattern and the cloth's
   stripes, black the darkest places (about 11,300 strokes, about a minute).
+* `examples/lake.py`: morning mist on a mountain lake, in graphite. Far to
+  near is also hard lead to soft: the sky is a soft lead laid very lightly on
+  its side and rubbed with a finger until its grain is gone; the ridges are
+  rubbed to a haze; the far forest is massed in 2B and pulled down into the
+  mist with a stump; the mist and the lights on the water are lifted with
+  erasers; the near spruces carry the full weight of 8B; and the boat is
+  drawn with a sharp point (about 37,000 strokes, 700 rubs and 500 passes of
+  an eraser, a little over two minutes).
+* `examples/farm.py`: a farm on a hill in wax crayon, as naive art has it:
+  no perspective, everything from its most telling side, bold flat colour.
+  Wax resists what comes after it, so the order is a crayon's: black
+  outlines first on bare paper, then the patterns, then the colours
+  scribbled over them, light before dark; the whites are paper (about
+  11,600 strokes, under a minute).
 
 ![An art deco tower in charcoal](examples/output/deco.png)
 
@@ -89,6 +104,16 @@ then drawn darks first, each colour stroked along the feathers.*
 *A still life in blue, black and red ballpoint, every tone a hatching that
 follows its form: the highlights are bare paper, and the inks mix only where
 their lines cross.*
+
+![Morning mist on a mountain lake in graphite](examples/output/lake.png)
+
+*Morning mist on a mountain lake, in graphite: 4H to 8B, the point and the
+side of the lead, finger, stump and chamois, kneaded and vinyl erasers.*
+
+![A farm on a hill in wax crayon](examples/output/farm.png)
+
+*A farm on a hill in wax crayon: outlines first, then patterns, then colour
+scribbled over them, the paper left for every white.*
 
 ## The media
 
