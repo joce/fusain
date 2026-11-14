@@ -785,6 +785,7 @@ def room_parts():
     front = plane(
         (-80, 0, TABLE_FRONT), (160, 0, 0), (0, -4.5, 0), 160, 6, O_TABLE, M_TABLE
     )
+    front.t1, front.t2 = front.t2, front.t1  # its boards run across
     wall = plane((-110, -10, WALL_Z), (220, 0, 0), (0, 90, 0), 110, 45, O_WALL, M_WALL)
     d1, d2 = unit(1, 1.3, 0), unit(1, -0.8, 0)
     wall.t1, wall.t2 = np.tile(d1, (len(wall.v), 1)), np.tile(d2, (len(wall.v), 1))
@@ -1618,6 +1619,12 @@ class PenMaps:
     lines: dict  # contours: (n, 3) x, y, seen
     stems: list  # stems of the cherries and the apple, in pixels
     dist: np.ndarray  # distance from the eye of what is seen (cm)
+    ao: np.ndarray  # 1 open, less in corners and where things touch
+    shadow: np.ndarray  # the key light's cast shadows (1 lit)
+    hang: np.ndarray  # bool: the cloth hanging over the front
+    strip: np.ndarray  # the bottle's long highlight (0 to 1)
+    across: np.ndarray  # on the cut face, -1 to 1 across it
+    along: np.ndarray  # on the cut face, height along the core (cm)
 
 
 def stem_lines(parts, cam: Camera, dist):
@@ -1650,7 +1657,25 @@ def pen_maps(parts, sc: Scene) -> PenMaps:
         contours(pic, cam, 1),
         stem_lines(parts, cam, b.dist),
         b.dist.astype(np.float32),
+        pic.light.ao.astype(np.float32),
+        pic.light.shadow.astype(np.float32),
+        (b.obj == O_CLOTH) & (b.pos[..., 2] > TABLE_FRONT - 0.3),
+        glass_strip(b, cam).astype(np.float32),
+        b.uv[..., 0].astype(np.float32),
+        b.uv[..., 1].astype(np.float32),
     )
+
+
+def glass_strip(b: Buffers, cam: Camera):
+    """Where the window's reflection runs down the bottle: the points whose
+    horizontal facing is that of the mirror direction, the full height of
+    the glass."""
+    to_eye = unit_rows(cam.eye - b.pos)
+    half = unit_rows(KEY + to_eye) * [1, 0, 1]
+    n = b.normal * [1, 0, 1]
+    c = np.sum(unit_rows(n) * unit_rows(half), axis=-1)
+    tall = b.pos[..., 1] < 29.5
+    return (b.obj == O_BOTTLE) * smoothstep(0.985, 0.995, c) * tall
 
 
 @njit(cache=False)
@@ -1726,6 +1751,7 @@ class Pass:
     spacing: tuple = (3.0, 13.0)
     shortest: int = 14  # points of 2 px
     by_region: bool = False
+    once: bool = False  # a patch the strokes cannot reach is not tried again
 
 
 @dataclass
@@ -1763,6 +1789,8 @@ class Hatcher:
             centre = (np.array([cx, cy]) + self.rng.random(2)) * CELL
             if not self.bundle(ps, centre, goal, field, part, laid):
                 laid[cy, cx] += ps.cap  # nothing could be laid here
+            elif ps.once:
+                laid[cy, cx] = max(laid[cy, cx], coarse[cy, cx])
 
     def bundle(self, ps: Pass, centre, goal, field, part, laid):
         """A bundle of near-parallel strokes across the patch at ``centre``."""
@@ -1770,7 +1798,7 @@ class Hatcher:
         x, y = int(centre[0]), int(centre[1])
         if goal[y, x] <= 0:
             return False
-        turn = math.radians(rng.normal(0, 6))
+        turn = math.radians(rng.normal(0, 9))
         fan = math.radians(rng.uniform(-2.0, 2.0))
         c, s = math.cos(turn), math.sin(turn)
         f = field[y, x]
@@ -1859,27 +1887,50 @@ def near_fruit(m: PenMaps):
 
 
 def white_targets(m: PenMaps):
-    """Shadows on white things: open blue in steps, a little black at the
-    darkest, violet near the fruit; bare paper in the lights."""
-    S = m.shade + 0.08 * masks(m, ("cloth", "stripe"))
-    white = masks(m, WHITES + ("stripe", "jug_blue"))
+    """Shadows on the jug, the bowl and the label: open blue in steps that
+    model the form, black woven into the core shadow, the inside of the
+    mouth dark; bare paper in the lights."""
+    S = m.shade
+    pot = masks(m, ("jug", "jug_blue", "bowl", "label"))
+    inside = masks(m, ("jug_inside",))
     bare = 1 - smoothstep(0.04, 0.12, m.spec)
-    blue = steps(S, (0.2, 0.42, 0.66), (0.035, 0.06, 0.08)) * bare
-    red = 0.6 * near_fruit(m) * blue
-    black = 0.05 * smoothstep(0.78, 0.92, S)
-    k = np.where(white, smoothstep(0.3, 0.75, m.keep), 0)
+    blue = steps(S, (0.2, 0.42, 0.62), (0.045, 0.07, 0.09)) * bare * pot
+    blue = blue + inside * (0.12 + 0.1 * S)
+    black = steps(S, (0.6, 0.78), (0.04, 0.05)) * pot + inside * 0.1 * S
+    red = 0.5 * near_fruit(m) * blue * masks(m, ("bowl",))
+    return blue, red, black
+
+
+def cloth_targets(m: PenMaps):
+    """The cloth: its folds' shadow sides in open blue, the cast shadows as
+    shapes (violet near the fruit), contact shadows dark; the hanging part
+    shaded down its folds."""
+    cloth = masks(m, ("cloth", "stripe"))
+    S = m.shade
+    cast = smoothstep(0.75, 0.3, m.shadow)
+    contact = smoothstep(0.85, 0.55, m.ao)
+    blue = (
+        steps(S, (0.14, 0.32, 0.55), (0.035, 0.05, 0.06)) + 0.05 * cast + 0.08 * contact
+    )
+    red = 0.7 * near_fruit(m) * (0.05 * cast + 0.03 * smoothstep(0.3, 0.6, S))
+    black = 0.05 * contact + 0.03 * smoothstep(0.75, 0.9, S)
+    k = cloth * smoothstep(0.3, 0.75, m.keep)
     return blue * k, red * k, black * k
 
 
+def flesh_targets(m: PenMaps):
+    """A faint tone on the cut face, turning towards the skin."""
+    face = masks(m, ("flesh", "core"))
+    edge = smoothstep(0.55, 0.95, np.abs(m.across))
+    return face * 0.045 * edge, face * 0.03 * edge
+
+
 def fruit_targets(m: PenMaps):
-    """Red on the fruit, closer in shadow, with black and a little blue in
+    """Red on the apples, closer in shadow, with black and a little blue in
     the core of the shadow; the highlight bare paper."""
     S = m.shade
-    fruit = masks(m, FRUIT)
-    cherry = masks(m, ("cherry",))
-    glint = (
-        filters.box_blur((m.spec > np.where(cherry, 0.12, 0.22)).astype(float), 2) > 0.1
-    )
+    fruit = masks(m, ("apple",))
+    glint = filters.box_blur((m.spec > 0.22).astype(float), 2) > 0.1
     bare = (1 - smoothstep(0.06, 0.2, m.spec)) * ~glint
     red = (0.07 + steps(S, (0.3, 0.6), (0.08, 0.09))) * bare
     black = steps(S, (0.55, 0.8), (0.05, 0.07)) * bare
@@ -1887,29 +1938,56 @@ def fruit_targets(m: PenMaps):
     return red * fruit, black * fruit, blue * fruit
 
 
+def cherry_targets(m: PenMaps):
+    """Each cherry a dark red form: a core shadow of black over red, a
+    lighter rim of reflected light, a clean paper highlight, dark where
+    cherries touch."""
+    S = m.shade
+    cherry = masks(m, ("cherry",))
+    glint = filters.box_blur((m.spec > 0.25).astype(float), 1) > 0.15
+    bare = ~glint
+    red = (0.2 + 0.08 * smoothstep(0.2, 0.5, S)) * bare
+    black = (
+        0.09 * smoothstep(0.45, 0.65, S) + 0.12 * smoothstep(0.85, 0.6, m.ao)
+    ) * bare
+    return red * cherry, black * cherry
+
+
 def dark_targets(m: PenMaps):
-    """The bottle, the knife's handle and the table: black over blue (or
-    red for the wood), the highlights left as paper."""
+    """The bottle and the knife's handle: black over blue, the window's
+    strip left as paper, the reflected light at the far edge open."""
     D = m.dark
-    bottle = masks(m, ("bottle", "handle"))
-    bare = 1 - smoothstep(0.1, 0.3, m.spec)
-    black = np.where(bottle, (0.12 + 0.35 * smoothstep(0.45, 0.9, D)) * bare, 0)
-    blue = np.where(bottle, 0.1 + 0.12 * smoothstep(0.3, 0.7, D), 0) * bare
-    table = masks(m, ("table",))
-    black = black + np.where(table, 0.06 + 0.12 * smoothstep(0.6, 0.9, D), 0) * m.keep
-    red = np.where(table, 0.1, 0) * m.keep
-    return black, blue, red
+    dark = masks(m, ("bottle", "handle"))
+    bare = (1 - smoothstep(0.1, 0.3, m.spec)) * (1 - m.strip)
+    black = (0.1 + 0.4 * smoothstep(0.62, 0.9, D)) * bare
+    blue = (0.1 + 0.12 * smoothstep(0.3, 0.7, D)) * bare
+    return black * dark, blue * dark
+
+
+def table_targets(m: PenMaps):
+    """Warm dark wood: red and black along the boards, darker under the
+    cloth's edge."""
+    table = masks(m, ("table",)) * m.keep
+    under = smoothstep(0.9, 0.6, m.ao) + smoothstep(0.7, 0.3, m.shadow)
+    red = 0.09 * table
+    black = (
+        0.06 + 0.08 * smoothstep(0.6, 0.9, m.dark) + 0.06 * np.clip(under, 0, 1)
+    ) * table
+    return red, black
 
 
 def wall_targets(m: PenMaps):
-    """The wall in open blue, black where it is darkest; its patches end
-    raggedly where the drawing stops."""
+    """The wall in patches of open blue at a few angles and densities,
+    black where it is darkest; the patches end raggedly."""
     D = m.dark
     wall = masks(m, ("wall",))
-    ragged = smoothstep(0.35, 0.6, m.keep) * (0.45 + 0.8 * blobs(m.keep.shape, 90, 4))
+    shape = m.keep.shape
+    ragged = smoothstep(0.35, 0.6, m.keep) * (0.4 + 0.9 * blobs(shape, 110, 4))
     blue = np.where(wall, 0.022 + steps(D, (0.52, 0.64), (0.025, 0.035)), 0) * ragged
     black = np.where(wall, 0.04 * smoothstep(0.6, 0.72, D), 0) * ragged
-    return blue, black
+    groups = np.stack([blobs(shape, 150, 20 + k) for k in range(3)])
+    share = groups == groups.max(axis=0)
+    return [blue * g for g in share], black
 
 
 def small_targets(m: PenMaps):
@@ -2058,63 +2136,93 @@ FRUIT_KW: dict[str, Any] = {
 }
 
 
+POT: dict[str, Any] = {"length": (120, 300), "count": (5, 10)}
+CLOTH_KW: dict[str, Any] = {
+    "length": (100, 260),
+    "count": (5, 10),
+    "spacing": (3.5, 13.0),
+}
+CHERRY_KW: dict[str, Any] = {"length": (16, 40), "count": (2, 5), "spacing": (2.8, 7.0),
+                             "shortest": 5, "once": True}  # fmt: skip
+TABLE_KW: dict[str, Any] = {
+    "length": (160, 360),
+    "count": (4, 8),
+    "spacing": (3.5, 12.0),
+}
+
+
+def lay_layers(h: Hatcher, ink, target, layers, kw):
+    for angle, lo, cap, p in layers:
+        h.lay(Pass(ink, angle, lo, cap, p, **kw), target)
+
+
 def hatch_whites(h: Hatcher):
+    """The jug, the bowl and the label: rings round them, lines down their
+    profiles, a third set near the rings in the deepest shadow."""
     blue, red, black = white_targets(h.maps)
-    for ink, t, layers in (
-        (
-            BLUE,
-            blue,
-            ((0, 0.0, 0.04, 0.22), (62, 0.04, 0.06, 0.25), (-48, 0.1, 0.07, 0.28)),
-        ),
-        (RED, red, ((28, 0.0, 0.04, 0.2), (-75, 0.04, 0.05, 0.22))),
-        (BLACK, black, ((80, 0.0, 0.05, 0.25),)),
-    ):
-        for angle, lo, cap, p in layers:
-            h.lay(Pass(ink, angle, lo, cap, p, **LONG), t)
+    blue_layers = (
+        (0, 0.0, 0.045, 0.24),
+        (80, 0.045, 0.07, 0.27),
+        (-16, 0.115, 0.09, 0.3),
+    )
+    lay_layers(h, BLUE, blue, blue_layers, POT)
+    lay_layers(h, RED, red, ((20, 0.0, 0.04, 0.22),), POT)
+    lay_layers(h, BLACK, black, ((8, 0.0, 0.04, 0.26), (70, 0.04, 0.05, 0.3)), POT)
+
+
+def hatch_cloth(h: Hatcher):
+    """Along the folds on the table, a crossing set in the valleys; down the
+    folds where the cloth hangs."""
+    m = h.maps
+    blue, red, black = cloth_targets(m)
+    top, hang = ~m.hang, m.hang
+    lay_layers(h, BLUE, blue * top, ((0, 0.0, 0.035, 0.22), (8, 0.035, 0.05, 0.25),
+                                     (72, 0.085, 0.06, 0.26)), CLOTH_KW)  # fmt: skip
+    lay_layers(h, BLUE, blue * hang, ((0, 0.0, 0.035, 0.22), (7, 0.035, 0.05, 0.25),
+                                      (-7, 0.085, 0.06, 0.27)), CLOTH_KW)  # fmt: skip
+    lay_layers(h, RED, red, ((-10, 0.0, 0.05, 0.22), (60, 0.05, 0.04, 0.24)), CLOTH_KW)
+    lay_layers(h, BLACK, black, ((12, 0.0, 0.06, 0.26),), CLOTH_KW)
+    face, warm = flesh_targets(m)
+    lay_layers(h, BLUE, face, ((0, 0.0, 0.05, 0.16),), FRUIT_KW | {"once": True})
+    lay_layers(h, RED, warm, ((90, 0.0, 0.04, 0.16),), FRUIT_KW | {"once": True})
 
 
 def hatch_fruit(h: Hatcher):
     red, black, blue = fruit_targets(h.maps)
-    cherry = masks(h.maps, ("cherry",))
-    for sel, kw in ((cherry, SMALL), (~cherry, FRUIT_KW)):
-        for ink, t, layers in (
-            (
-                RED,
-                red,
-                ((0, 0.0, 0.07, 0.3), (58, 0.07, 0.08, 0.32), (-38, 0.15, 0.09, 0.35)),
-            ),
-            (BLACK, black, ((70, 0.0, 0.05, 0.3), (-20, 0.05, 0.07, 0.35))),
-            (BLUE, blue, ((110, 0.0, 0.04, 0.28),)),
-        ):
-            for angle, lo, cap, p in layers:
-                h.lay(Pass(ink, angle, lo, cap, p, **kw), np.where(sel, t, 0))
+    lay_layers(h, RED, red, ((0, 0.0, 0.07, 0.3), (58, 0.07, 0.08, 0.32),
+                             (-38, 0.15, 0.09, 0.35)), FRUIT_KW)  # fmt: skip
+    lay_layers(
+        h, BLACK, black, ((70, 0.0, 0.05, 0.3), (-20, 0.05, 0.07, 0.35)), FRUIT_KW
+    )
+    lay_layers(h, BLUE, blue, ((110, 0.0, 0.04, 0.28),), FRUIT_KW)
+    red, black = cherry_targets(h.maps)
+    lay_layers(h, RED, red, ((0, 0.0, 0.1, 0.42), (70, 0.1, 0.08, 0.42)), CHERRY_KW)
+    lay_layers(h, BLACK, black, ((25, 0.0, 0.1, 0.45), (-50, 0.1, 0.1, 0.5)), CHERRY_KW)
 
 
 def hatch_darks(h: Hatcher):
-    black, blue, red = dark_targets(h.maps)
-    for ink, t, layers in (
-        (BLUE, blue, ((0, 0.0, 0.1, 0.3), (75, 0.1, 0.12, 0.35))),
-        (
-            BLACK,
-            black,
-            ((90, 0.0, 0.12, 0.35), (15, 0.12, 0.14, 0.4), (-50, 0.26, 0.2, 0.45)),
-        ),
-        (RED, red, ((35, 0.0, 0.1, 0.3),)),
-    ):
-        for angle, lo, cap, p in layers:
-            h.lay(Pass(ink, angle, lo, cap, p, **LONG), t)
+    black, blue = dark_targets(h.maps)
+    lay_layers(h, BLUE, blue, ((90, 0.0, 0.1, 0.3), (0, 0.1, 0.12, 0.35)), POT)
+    lay_layers(h, BLACK, black, ((90, 0.0, 0.12, 0.38), (12, 0.12, 0.14, 0.42),
+                                 (-60, 0.26, 0.24, 0.48)), POT)  # fmt: skip
+    red, black = table_targets(h.maps)
+    lay_layers(h, RED, red, ((0, 0.0, 0.09, 0.3),), TABLE_KW)
+    lay_layers(
+        h, BLACK, black, ((2, 0.0, 0.08, 0.32), (14, 0.08, 0.12, 0.36)), TABLE_KW
+    )
 
 
 def hatch_wall(h: Hatcher):
-    blue, black = wall_targets(h.maps)
+    blues, black = wall_targets(h.maps)
     kw: dict[str, Any] = {
-        "length": (150, 340),
-        "count": (6, 12),
-        "spacing": (5.0, 16.0),
+        "length": (130, 320),
+        "count": (5, 11),
+        "spacing": (5.0, 18.0),
     }
-    h.lay(Pass(BLUE, 0, 0.0, 0.05, 0.22, **kw), blue)
-    h.lay(Pass(BLUE, 90, 0.05, 0.05, 0.24, **kw), blue)
-    h.lay(Pass(BLACK, 30, 0.0, 0.05, 0.25, **kw), black)
+    for blue, (a1, a2) in zip(blues, ((0, 75), (90, 30), (50, -20)), strict=True):
+        h.lay(Pass(BLUE, a1, 0.0, 0.05, 0.22, **kw), blue)
+        h.lay(Pass(BLUE, a2, 0.05, 0.05, 0.24, **kw), blue)
+    h.lay(Pass(BLACK, 15, 0.0, 0.05, 0.25, **kw), black)
 
 
 def hatch_small(h: Hatcher):
@@ -2135,13 +2243,13 @@ def hatch_small(h: Hatcher):
 
 #: Ink and weight of each object's outline: (pens, weight in shadow).
 OUTLINES = {
-    "jug": ((BLUE, BLACK), 0.45),
-    "bowl": ((BLUE, BLACK), 0.4),
-    "bottle": ((BLACK,), 0.6),
-    "apple": ((BLACK, RED), 0.5),
-    "half_apple": ((BLACK, RED), 0.45),
-    "cherries": ((BLACK,), 0.5),
-    "knife": ((BLACK,), 0.45),
+    "jug": ((BLACK, BLUE), 0.6),
+    "bowl": ((BLACK, BLUE), 0.55),
+    "bottle": ((BLACK,), 0.7),
+    "apple": ((BLACK, RED), 0.6),
+    "half_apple": ((BLACK, RED), 0.55),
+    "cherries": ((BLACK,), 0.55),
+    "knife": ((BLACK,), 0.5),
 }
 
 
@@ -2217,14 +2325,15 @@ def draw_outlines(h: Hatcher):
         inside = m.obj >= O_CHERRY if o == O_CHERRY else m.obj == o
         n = inward(pts, inside)
         S = sample(m.shade, pts + 3 * n)
-        w = strength * smoothstep(0.15, 0.6, S) + 0.05
+        below = smoothstep(0.9, 0.6, sample(m.ao, pts - 3 * n))  # contact
+        w = strength * np.clip(smoothstep(0.15, 0.6, S) + below, 0, 1.2) + 0.05
         draw_contour(h, pts, w, pens_)
 
 
 def draw_rims_and_stems(h: Hatcher):
     m = h.maps
     for name, pen, lo, hi in (
-        ("rim_jug", BLUE, 0.25, 0.5),
+        ("rim_jug", BLACK, 0.3, 0.55),
         ("rim_bowl", BLUE, 0.2, 0.45),
         ("rim_bottle", BLACK, 0.3, 0.5),
         ("foot_jug", BLUE, 0.2, 0.45),
@@ -2241,6 +2350,56 @@ def draw_rims_and_stems(h: Hatcher):
             w = 0.25 + 0.4 * np.sin(np.pi * u)
             h.sheet.stroke([tuple(q) for q in run], BLACK, list(w))
             h.sheet.stroke([tuple(q + [0.6, 0.3]) for q in run], RED, list(0.6 * w))
+
+
+def half_face_point(across, y):
+    """A point on the cut face of the half apple (``across`` -1 to 1, y
+    along its core), as half_apple_parts places it."""
+    prof = catmull_rom(np.array(APPLE_PROFILE), 160)
+    lift = float(prof[:, 0].max()) * 1.02 + CLOTH_Y
+    r = np.interp(y, *_ascending(prof[:, 1], prof[:, 0]))
+    q = np.stack([0 * y, y, r * across], -1) - [0, 3.7, 0]
+    q = q[:, [1, 0, 2]] * [-1, 1, 1] + [0, 0.03, 0]
+    q = tilt(q, (1, 0, 0), 0.16)
+    return place(q, (0, 0, 0), HALF_YAW) + (HALF_AT[0], lift, HALF_AT[1])
+
+
+def _ascending(x, y):
+    order = np.argsort(x)
+    return x[order], y[order]
+
+
+def draw_half_face(h: Hatcher):
+    """The cut face: the skin's red rim, the core's outline, the seed
+    cavity and a few fine radial strokes."""
+    y = np.linspace(0.45, 7.1, 160)
+    for side in (0.965, -0.965):
+        surface_line(h, half_face_point(np.full_like(y, side), y), RED, 0.4, 0.6)
+    a = np.linspace(0, 2 * np.pi, 120)
+    core = half_face_point(0.32 * np.sin(a), 3.9 + 2.3 * np.cos(a))
+    surface_line(h, core, RED, 0.08, 0.12)
+    cavity = half_face_point(0.22 * np.sin(a), 3.6 + 0.8 * np.cos(a))
+    surface_line(h, cavity, BLACK, 0.08, 0.12)
+    rng = np.random.default_rng(3)
+    for t in np.linspace(0.4, 5.9, 7):
+        b = t + rng.normal(0, 0.1)
+        u = np.linspace(0, 1, 20)
+        y0, s0 = 3.9 + 2.3 * np.cos(b), 0.32 * np.sin(b)
+        y1, s1 = 3.9 + 2.9 * np.cos(b), np.clip(1.6 * np.sin(b), -0.85, 0.85)
+        line = half_face_point(s0 + (s1 - s0) * u, y0 + (y1 - y0) * u)
+        surface_line(h, line, RED, 0.04, 0.06)
+
+
+def draw_details(h: Hatcher):
+    """The table's board joints, and the label's crisp edge."""
+    z = np.linspace(WALL_Z, TABLE_FRONT, 300)
+    for x in (-13.0, -26.0):
+        joint = np.stack([np.full_like(z, x), np.zeros_like(z) + 0.01, z], 1)
+        surface_line(h, joint, BLACK, 0.35, 0.5, 0.3, 0.45)
+    m = h.maps
+    for line in outlines(masks(m, ("label",)), 30, 2):
+        pts = resample(line, 2.0)
+        draw_contour(h, pts, np.full(len(pts), 0.35), (BLACK,))
 
 
 def draw_edges(h: Hatcher):
@@ -2264,14 +2423,17 @@ def drawing(m: PenMaps, seed=7) -> Sheet:
     h = Hatcher(sheet, m, np.random.default_rng(seed))
     hatch_whites(h)
     draw_jug_pattern(h)
+    hatch_cloth(h)
     draw_stripes(h)
     hatch_fruit(h)
+    draw_half_face(h)
     hatch_darks(h)
     hatch_wall(h)
     hatch_small(h)
     draw_outlines(h)
     draw_rims_and_stems(h)
     draw_edges(h)
+    draw_details(h)
     return sheet
 
 
