@@ -31,7 +31,8 @@ What each lead and tool does, far to near:
   the glow wiped lighter with the chamois, a few low clouds lifted with the
   kneaded eraser.
 * Far ridges: a 2B (a 4B for the nearest) laid lightly on its side and
-  rubbed with the finger to a haze; 2H and HB down the fall lines of the
+  rubbed with the finger to a haze, then rubbed level once more with the
+  finger, easing in from its edges; 2H and HB down the fall lines of the
   nearer two; each crest a band of tone laid along it, firm at its upper
   edge and fading below (2H on the farthest, HB, then 2B on the nearest),
   pulled down into the mist with the stump. The snow lifted with the
@@ -47,25 +48,28 @@ What each lead and tool does, far to near:
 * Water: a 2B on its side in crossing layers rubbed level with the finger;
   each reflection in its own lead, one grade softer than what it mirrors
   (2B for the forest, 6B for rocks, bank and boat, 8B for the spruces), on
-  its side in two crossing layers, rubbed softly together and dragged down
-  with the finger, then a last light layer of vertical strokes; the far
-  water rubbed level; one or two horizontal gaps lifted across the near
-  reflections, a few 8B accents at the waterline; the breath of wind
+  its side in two crossing layers, rubbed softly together and dragged
+  gently down with the finger, a touch lighter than the thing and fading
+  downward, then a last light layer (across and rubbed under near things,
+  vertical under the far shore); the far water rubbed level; thin lights
+  lifted across the reflections, two across the boat's, one across each
+  rock's; the breath of wind
   lifted in overlapping passes of the kneaded eraser's edge, touched with
-  the vinyl one near the far shore; dark ripples with a sharp 4B.
-* Near shore: the point laid in with the point of a 6B in crossed layers
-  rubbed with the stump, the stump then drawn up the slope and 8B strokes
-  laid up it, left unrubbed; the glow on its top lifted with the kneaded
-  eraser; grass in clumps of flicked 6B strokes (2B where the glow catches
-  it) at the water's edge and round the rocks, bare earth and small stones
-  between; roots from the trees' feet and a dark 8B bank edge. The shingle
+  the vinyl one near the far shore.
+* Near shore: the point's bank one quiet dark tone, a 6B half on its side
+  in two crossed layers and an 8B over them, each rubbed smooth with the
+  stump and the finger; a narrow light along its top lifted with the
+  kneaded eraser where the glow catches it; a few clumps of flicked 6B
+  grass along that top and at the water's edge, nothing between but two or
+  three 8B roots at each tree's foot; a dark 8B bank edge. The shingle
   bank a 2B and 4B rubbed, lighter on top and darker to the water, stones
   as small dabs, and near the eye pebbles, each a 4B arc beneath and a top
   lifted with the kneaded eraser.
-* Rocks: a 4B rubbed with the stump; the sides in short 4B strokes round
-  the form with a tortillon over them, the undersides built dark in 8B,
-  the lit tops lifted with the kneaded eraser; the waterline in 8B, one or
-  two cracks with a sharp 6B.
+* Rocks: kept clear of the bank's tone; a 4B half on its side rubbed with
+  the tortillon; the sides in short 4B strokes round the form with a
+  tortillon over them, the undersides and lower edges built dark in 8B,
+  the lit tops lifted with the kneaded eraser; the waterline in 8B, one
+  crack each with a sharp 6B.
 * Spruces: 4B bundles along the boughs, each bough and trunk drawn along
   its length in 6B, then 8B at full pressure in layers into their cores,
   the ragged lit edges left; needles hung from the boughs with a 6B
@@ -2112,9 +2116,10 @@ def ridge_mask(hand: Hand, ident: int) -> np.ndarray:
 
 def draw_ridges(hand: Hand) -> None:
     """The far ridges: crossed light layers laid with the side of the lead
-    and each rubbed to a haze; then each crest made crisp, the tone ending
-    clean against the lighter sky and softening down into the mist; the
-    snow lifted back to the paper."""
+    and each rubbed to a haze; then each rubbed level with the finger, the
+    pressure easing in from its edges, to one smooth pale tone fading down
+    into the mist; each crest made crisp, the tone ending clean against
+    the lighter sky; the snow lifted back to the paper."""
     for angles in ((20.0, -25.0), (60.0, 120.0)):
         hand.look()
         for ident, lead, tool, _ in RIDGE_HANDS:
@@ -2125,6 +2130,11 @@ def draw_ridges(hand: Hand) -> None:
                 lay_tone(hand, mask, lead, press * (1 - 0.3 * k), angle)
                 rub_area(hand, mask, tool, 0.9, angle + 90.0, 24.0)
                 rub_area(hand, mask, tool, 0.9, 0.0, 24.0)
+    for ident, _, _, _ in RIDGE_HANDS:
+        mask = ridge_mask(hand, ident)
+        soft = filters.box_blur(shrink(mask, 4).astype(np.float64), 10)
+        for angle in (90.0, 30.0, -30.0):
+            rub_area(hand, mask, tools.FINGER, 0.8 * soft, angle, 30.0)
     hand.look()
     for ident, _, _, point in RIDGE_HANDS:
         mask = ridge_mask(hand, ident)
@@ -2198,11 +2208,13 @@ def feather_down(hand: Hand, mask: np.ndarray) -> None:
 
 def draw_mist(hand: Hand) -> None:
     """The mist: lifted with the kneaded eraser in long soft passes across
-    the view, wherever what lies behind it came out too dark."""
+    the view, wherever what lies behind it came out too dark (the ridges
+    are left to their own rubbing)."""
     hand.look()
     rows = np.arange(HEIGHT)[:, None] * np.ones((1, WIDTH))
     band = (hand.st.veil > 0.2) & (rows > CY - 260) & (rows < CY + 120)
     band &= ~hand.mask(TRUNK, BOUGH, ROCK, GROUND, SHINGLE, REED)
+    band &= ~grow(hand.mask(RIDGE1, RIDGE2, RIDGE3, SNOW), 2)
     lift = hand.excess(band, blur=5)
     rng = hand.rng
     for cx, cy in pick(rng, lift, int(lift.sum() / 120.0)):
@@ -2213,35 +2225,48 @@ def draw_mist(hand: Hand) -> None:
         hand.sheet.erase(path, tools.KNEADED, firm, rng.uniform(10.0, 22.0))
 
 
+#: What the water mirrors near the eye (as against the far shore and sky).
+#: (A reed's reflection is too thin to draw: the water's tone stands for
+#: it.)
+NEAR_THINGS = (GROUND, SHINGLE, ROCK, HULL, INSIDE, GUNWALE, THWART, ROPE, STAKE)
+
+
 #: The water: for what it mirrors, the lead its reflection is drawn with
 #: (one grade softer than the thing's own). The sky and the far ridges are
 #: left to the water's own tone.
 WATER_HANDS = (
     ((RIDGE1, HILLS, FOREST), pencils.B2),
-    (
-        (GROUND, SHINGLE, ROCK, REED, HULL, INSIDE, GUNWALE, THWART, ROPE, STAKE),
-        pencils.B6,
-    ),
+    (NEAR_THINGS, pencils.B6),
     ((TRUNK, BOUGH), pencils.B8),
 )
 
 
 def block_in(hand: Hand) -> None:
     """Near the eye, round one: the big tones of the water and the bank
-    laid in with the side of the lead and rubbed; the point laid in with
-    the point of a 6B in crossed layers rubbed with the stump, the stump
-    then drawn up its slope, and 8B strokes laid up the slope over it; the
-    rocks laid in; and the masses of the pines and the boat in bundles of
-    strokes."""
+    laid in with the side of the lead and rubbed; the point's bank as one
+    quiet dark tone; the rocks laid in; and the masses of the pines and
+    the boat in bundles of strokes."""
     hand.look()
-    water, shingle, ground = hand.mask(WATER), hand.mask(SHINGLE), hand.mask(GROUND)
+    water, shingle = hand.mask(WATER), hand.mask(SHINGLE)
     smooth_tone(hand, water, pencils.B2, (-20.0, 25.0), 2.2, 0.75)
     rub_area(hand, water, tools.FINGER, 0.9, 5.0)
-    smooth_tone(hand, ground, pencils.B6, (60.0, -55.0), 3.0, 0.95, tools.STUMP, 0.0)
-    rub_along(hand, ground, tools.STUMP, 0.6)
-    slope_tone(hand, pencils.B8, 2.0)
+    bank_tone(hand)
     smooth_tone(hand, shingle, pencils.B2, (10.0, -40.0), 2.4, 0.85)
-    smooth_tone(hand, hand.mask(ROCK), pencils.B4, (30.0, -35.0), 2.0, 0.8, tools.STUMP)
+    rock = hand.mask(ROCK)
+    hand.look()
+    need = hand.need(rock, 2)
+    for angle in (30.0, -35.0):
+        lay_tone(
+            hand,
+            rock,
+            pencils.B4,
+            np.clip(0.15 + 2.5 * need, 0.0, 0.9),
+            angle,
+            0.6,
+            4.0,
+            0.0,
+        )
+    rub_area(hand, rock, tools.TORTILLON, 0.6, 0.0)
     pine = hand.mask(TRUNK, BOUGH)
     mass = Marks(
         pencils.B4, 3.0, (8.0, 24.0), (0.5, 0.95), (3, 6), 0.8, "taper", 0.15, 0.05
@@ -2273,13 +2298,12 @@ def smooth_tone(
 
 def build_up(hand: Hand) -> None:
     """Round two: the reflections laid into the water and dragged down;
-    the point's ground again up its slope, and the glow on its top lifted
-    back; stones on the bank; the rocks given their planes; the pines'
-    boughs and trunks; the boat's strakes and its dark inside."""
+    the glow on the top of the point lifted; stones on the bank; the
+    rocks given their planes; the pines' boughs and trunks; the boat's
+    strakes and its dark inside."""
     water = hand.mask(WATER)
     reflections(hand, water)
-    slope_tone(hand, pencils.B8, 1.5)
-    light_on_slope(hand)
+    top_light(hand)
     smooth_tone(
         hand, hand.mask(SHINGLE), pencils.B4, (25.0, -20.0), 2.5, 0.9, tools.STUMP
     )
@@ -2304,8 +2328,8 @@ def finish(hand: Hand) -> None:
     """Round three: the reflections again where they want more; the
     deepest darks in 8B in the pines and the boat, built in the cores of
     the boughs and trunks; the rocks' waterlines and cracks; the point's
-    grass, roots and dark bank edge; then the sharp work: the boat's lines
-    and its rope, reeds, pebbles, ripples."""
+    grass clumps, roots and dark bank edge; then the sharp work: the
+    boat's lines and its rope, reeds, pebbles."""
     water = hand.mask(WATER)
     reflections(hand, water, final=True)
     rock_details(hand)
@@ -2317,7 +2341,6 @@ def finish(hand: Hand) -> None:
     boat_lines_drawn(hand)
     draw_reeds(hand)
     pebbles(hand, hand.mask(SHINGLE))
-    ripples(hand, water)
 
 
 def last_look(hand: Hand) -> None:
@@ -2337,30 +2360,33 @@ def reflections(hand: Hand, water: np.ndarray, final: bool = False) -> None:
     """The reflections: for each kind of thing mirrored, its lead (one
     grade softer than the thing's own) laid on its side in two crossing
     layers as hard as the tone wants and rubbed softly together with the
-    finger, and the finger dragged down through them, so that each is a
-    soft mirror image. The finger takes some graphite away, so the last
-    round is a light layer of vertical strokes where they still want it,
-    with one or two horizontal gaps lifted across the darker ones, and at
-    the waterline of near things a few crisp dark accents."""
+    finger, and the finger dragged gently down through them, so that each
+    is one soft mirror image. The finger takes some graphite away, so the
+    last round lays a light layer where they still want it: across, and
+    rubbed again, under near things; in vertical strokes under the far
+    shore and the trees. Then the gaps of light across them, and the far
+    water rubbed level."""
     hand.look()
     for ids, lead in WATER_HANDS:
         mask = water & np.isin(hand.st.mirrored, ids)
-        need = hand.need(mask, 4)
+        near = ids == NEAR_THINGS
+        need = hand.need(mask, 4 if lead is pencils.B2 else 8)
         if need.max() < 0.03:
             continue
+        soft = filters.box_blur((need > 0.03).astype(np.float64), 10)
         if final:
             press = np.clip(0.1 + 2.5 * need, 0.0, 0.8) * (need > 0.03)
-            lay_tone(hand, mask, lead, press, 90.0)
+            lay_tone(hand, mask, lead, press, 0.0 if near else 90.0)
+            if near:
+                rub_area(hand, mask, tools.FINGER, 0.5 * soft, 0.0, 18.0)
             continue
         press = np.clip(0.12 + 3.0 * need, 0.0, 0.9) * (need > 0.03)
         for angle in (60.0, 120.0):
             lay_tone(hand, mask, lead, press, angle)
-        soft = filters.box_blur((need > 0.03).astype(np.float64), 10)
         rub_area(hand, mask, tools.FINGER, 0.6 * soft, 0.0, 18.0)
-        pull_down(hand, need)
+        pull_down(hand, need, 0.3 if near else 0.45)
     if final:
         gaps(hand, water)
-        accents(hand, water)
 
 
 def rock_form(hand: Hand) -> None:
@@ -2393,8 +2419,8 @@ def rock_form(hand: Hand) -> None:
 
 
 def rock_details(hand: Hand) -> None:
-    """The dark line where each rock meets the water and one or two cracks
-    down each, from its top edge, with a sharp 6B."""
+    """The dark line where each rock meets the water and one crack down
+    each, from its top edge, with a sharp 6B."""
     rock = hand.mask(ROCK)
     below = np.roll(hand.mask(WATER), -2, axis=0) & rock
     line = Marks(
@@ -2405,18 +2431,12 @@ def rock_details(hand: Hand) -> None:
     for x, z, size, flat, _ in ROCKS:
         P = project(np.array([[x, size * flat * 0.9, z]]), EYE)[0]
         reach = FOCAL * size * flat / P[2]
-        for _ in range(int(rng.integers(1, 3))):
-            start = P[:2] + [
-                rng.uniform(-0.5, 0.5) * reach,
-                rng.uniform(0.1, 0.4) * reach,
-            ]
-            heading = np.pi / 2 + rng.normal(0.0, 0.5)
-            length = rng.uniform(0.4, 0.9) * reach
-            path = trace(None, start[0], start[1], heading, length, 0.08, rng, 2.0)
-            pts = within(path, rock)
-            draw_line(
-                hand, pts, pencils.B6, 0.8 * profile("taper", len(pts)) ** 0.5, 1.5
-            )
+        x0 = P[0] + rng.uniform(-0.5, 0.5) * reach
+        y0 = P[1] + rng.uniform(0.1, 0.4) * reach
+        heading = np.pi / 2 + rng.normal(0.0, 0.5)
+        length = rng.uniform(0.4, 0.9) * reach
+        pts = within(trace(None, x0, y0, heading, length, 0.08, rng, 2.0), rock)
+        draw_line(hand, pts, pencils.B6, 0.8 * profile("taper", len(pts)) ** 0.5, 1.5)
 
 
 def planks(hand: Hand, outside, inside) -> None:
@@ -2521,23 +2541,13 @@ def lift_ruffles(hand: Hand) -> None:
             )
 
 
-def ripples(hand: Hand, water: np.ndarray) -> None:
-    """Dark ripple marks near the shore, where something dark is mirrored:
-    short, nearly level strokes with a sharp 4B."""
-    near = water & (hand.st.depth < 45.0)
-    dark = near * np.isin(hand.st.mirrored, (TRUNK, BOUGH, ROCK, HULL, REED, GROUND))
-    marks = Marks(
-        pencils.B4, 1.8, (6.0, 22.0), (0.5, 0.8), (1, 3), 2.5, "taper", 0.08, 0.06
-    )
-    lay_marks(hand, marks, dark * 0.25, 0.5, angle=0.0, keep=water)
-
-
 def roots(hand: Hand) -> None:
-    """A few roots from each pine's foot, out and down into the ground."""
+    """Two or three roots from each tree's foot, out and down into the
+    bank."""
     rng = hand.rng
     for tree in PINES:
         foot = np.array([tree.x, ground_at(tree.x, tree.z) + 0.15, tree.z])
-        for _ in range(int(rng.integers(3, 6))):
+        for _ in range(int(rng.integers(2, 4))):
             a = rng.uniform(0, 2 * np.pi)
             reach = rng.uniform(0.6, 1.6) * tree.height / 20.0
             way = [math.cos(a) * reach, -0.35, math.sin(a) * reach]
@@ -2545,7 +2555,7 @@ def roots(hand: Hand) -> None:
             floor = ground_height(line[:, 0], line[:, 2], np.full(6, 0.5))[0]
             line[:, 1] = np.maximum(line[:, 1], floor - 0.05)
             pts = project(line, EYE)[:, :2]
-            draw_line(hand, pts, pencils.B6, np.linspace(0.85, 0.3, 6), 2.4)
+            draw_line(hand, pts, pencils.B8, np.linspace(0.9, 0.3, 6), 2.4)
 
 
 def pebbles(hand: Hand, shingle: np.ndarray) -> None:
@@ -2617,35 +2627,46 @@ def pencil_value(tone: np.ndarray) -> np.ndarray:
 def plan_values(st: Study) -> np.ndarray:
     """The grey to reach at each pixel: the study's tones laid over the
     pencil's range, then the near ground, the bank and the rocks given
-    their planes, as a draughtsman simplifies what he sees."""
+    their planes, and the reflections of near things kept a touch lighter
+    than the things, fading downward, as a draughtsman simplifies what he
+    sees."""
     target = WHITE - pencil_value(st.tone) * (WHITE - BLACK)
     ids = st.ident
     water = (ids == WATER).astype(np.float64)
     wet = filters.box_blur(water, 14)  # (how near the water)
-    far = np.isin(ids, (SKY, CLOUD, RIDGE1, RIDGE2, RIDGE3, HILLS, FOREST, WATER))
+    far = np.isin(ids, (SKY, CLOUD, RIDGE1, RIDGE2, RIDGE3, HILLS, FOREST))
     pine = np.isin(ids, (TRUNK, BOUGH)).astype(np.float64)
     ground = ids == GROUND
-    # the top of the point catches the glow where the far light is just
-    # above it; it darkens towards the water and under the trees
-    lit = filters.box_blur(np.roll(far, 9, axis=0).astype(np.float64), 9, axis=0)
+    # the top of the point catches the glow in a narrow band just under
+    # the far light; it darkens towards the water and under the trees
+    lit = filters.box_blur(np.roll(far, 5, axis=0).astype(np.float64), 5, axis=0)
     shade = filters.box_blur(np.roll(pine, 26, axis=0), 26, axis=0)
-    shaped = target + 70.0 * lit - 22.0 * shade - 28.0 * np.clip(3.0 * wet, 0, 1)
+    shaped = target + 80.0 * lit - 22.0 * shade - 28.0 * np.clip(3.0 * wet, 0, 1)
     target = np.where(ground, shaped, target)
     # the shingle bank: a lighter top plane, darker to the water's edge
     bank = target + 26.0 - 50.0 * np.clip(3.0 * wet, 0.0, 1.0)
     target = np.where(ids == SHINGLE, bank, target)
     target = np.where(ids == ROCK, rock_planes(st), target)
+    mirror = (ids == WATER) & np.isin(st.mirrored, NEAR_THINGS)
+    down = rows_into(mirror)
+    target = np.where(mirror, target + 16.0 + np.clip(0.9 * down, 0.0, 45.0), target)
     return np.clip(target, BLACK, WHITE)
 
 
 def rock_planes(st: Study) -> np.ndarray:
     """The rocks in three planes: a lit top, nearly paper; a mid-toned
-    side; a dark underside."""
+    side; a dark underside, darkest along the lower edge of each rock as
+    seen."""
     up = st.up
     top = filters.smoothstep(0.86, 0.95, up)
     under = 1.0 - filters.smoothstep(0.05, 0.2, up)
     side = 1.0 - top - under
-    return 200.0 * top + 122.0 * side + 78.0 * under
+    planes = 200.0 * top + 122.0 * side + 78.0 * under
+    rock = st.ident == ROCK
+    down = rows_into(rock).astype(np.float64)
+    up_from = rows_into(rock[::-1])[::-1].astype(np.float64)
+    low = filters.smoothstep(0.45, 0.85, down / np.maximum(down + up_from, 1.0))
+    return np.minimum(planes, 200.0 - 125.0 * low)
 
 
 #: For each ridge, how its crest is drawn: the lead, how firm, and whether
@@ -2710,34 +2731,6 @@ def tree_strokes(hand: Hand, tip, foot, clear_spire: bool) -> None:
         draw_line(hand, pts, pencils.HB, [0.15 * clear, 0.75 * clear], 1.4)
 
 
-def slope_tone(hand: Hand, lead, cover: float) -> None:
-    """Strokes of the point up the point's slope, as hard as the tone
-    wants (laid last, over the rubbed tone, and left unrubbed: rubbing
-    lifts some of a dark tone)."""
-    ground = hand.mask(GROUND)
-    keep = grow(ground, 3) & (hand.target < 150.0)  # (the lit top is left)
-    hand.look()
-    need = hand.need(ground, 3)
-    marks = Marks(lead, 2.6, (18.0, 50.0), (0.4, 1.0), (3, 6), 0.8, "taper", 0.1, 0.03)
-    lay_marks(hand, marks, need, cover, keep=keep)
-
-
-def rub_along(hand: Hand, mask: np.ndarray, tool, pressure: float) -> None:
-    """Pull a stump or a finger along the study's directions over
-    ``mask``, stroke by stroke, so that the tone keeps the run of the
-    form."""
-    rng = hand.rng
-    width = tool.width
-    count = int(mask.sum() / (width * 30.0))
-    for cx, cy in pick(rng, mask.astype(float), count):
-        a = hand.angle[int(cy), int(cx)] + rng.normal(0.0, 0.1)
-        pts = within(
-            trace(hand.angle, cx, cy, a, rng.uniform(30, 70), 0.02, rng, 3.0), mask
-        )
-        if len(pts) > 2:
-            hand.sheet.smudge(pts, tool, pressure)
-
-
 def deepen(hand: Hand, mask: np.ndarray, rounds: int) -> None:
     """8B laid in layers into the core of ``mask`` (a pixel in from its
     edge, so that the ragged lit edges stay), as long as it wants more."""
@@ -2754,7 +2747,7 @@ def clear_lights(hand: Hand) -> None:
     """Where the plan wants paper and the sheet came out grey (the mist,
     the far water under it): long soft passes of the kneaded eraser, and
     where it was greyer, of the vinyl one held flat and light, kept off
-    the things that stand in the light."""
+    the things that stand in the light and off the ridges."""
     solid = grow(
         hand.mask(
             TRUNK,
@@ -2772,6 +2765,7 @@ def clear_lights(hand: Hand) -> None:
         ),
         5,
     )
+    solid |= grow(hand.mask(RIDGE1, RIDGE2, RIDGE3, SNOW), 2)
     where = (
         (hand.target > 226.0) & ~solid & ~hand.mask(SKY, CLOUD) & (hand.st.veil > 0.3)
     )
@@ -2793,7 +2787,7 @@ def clear_lights(hand: Hand) -> None:
         )
 
 
-def pull_down(hand: Hand, need: np.ndarray) -> None:
+def pull_down(hand: Hand, need: np.ndarray, pressure: float) -> None:
     """Drag the finger down through a reflection from where it is darkest,
     further the nearer the water is to the eye."""
     rng = hand.rng
@@ -2802,89 +2796,45 @@ def pull_down(hand: Hand, need: np.ndarray) -> None:
         return
     below = np.maximum(starts[:, 1] - CY, 5.0)
     lengths = np.clip(below * rng.uniform(0.1, 0.25, len(starts)), 8.0, 70.0)
-    drag(hand, starts, lengths, tools.FINGER, 0.45, width=12.0)
+    drag(hand, starts, lengths, tools.FINGER, pressure, width=12.0)
 
 
 def gaps(hand: Hand, water: np.ndarray) -> None:
     """Rub the far water level with the finger, so that the mist lies on a
-    smooth mirror; then one or two horizontal lights across the darker
-    reflections near the eye, lifted with the kneaded eraser in a slightly
-    wavering pass."""
-    rng = hand.rng
+    smooth mirror; then the horizontal lights across the near
+    reflections, each a thin wavering pass of the kneaded eraser: two
+    across the boat's, one across each rock's."""
     far = water & (hand.st.depth > 40.0)
     soft = filters.box_blur(far.astype(np.float64), 12)
     rub_area(hand, far, tools.FINGER, 0.8 * soft, 0.0, 24.0)
-    dark = water & (hand.target < 175.0) & (hand.st.depth < 120.0)
-    for cx, cy in pick(rng, dark.astype(float), int(dark.sum() / 9000.0)):
-        length = rng.uniform(25.0, 80.0)
-        path = [
-            (cx - length / 2, cy + rng.normal(0, 0.8)),
-            (cx, cy),
-            (cx + length / 2, cy + rng.normal(0, 0.8)),
-        ]
-        hand.sheet.erase(
-            path,
-            tools.KNEADED,
-            (0.5 * profile("taper", 7)).tolist(),
-            rng.uniform(4.0, 7.0),
-        )
-
-
-def accents(hand: Hand, water: np.ndarray) -> None:
-    """Crisp dark touches in the water right under near things, a few."""
-    near = hand.mask(ROCK, GROUND, HULL, STAKE)
-    line = water & (
-        filters.max_filter(np.roll(near, 3, axis=0).astype(np.float32), 1) > 0.5
-    )
-    marks = Marks(
-        pencils.B8,
-        1.8,
-        (6.0, 18.0),
-        (0.65, 0.9),
-        (1, 2),
-        1.5,
-        "taper",
-        0.06,
-        0.02,
-        False,
-    )
-    lay_marks(hand, marks, line * 0.5, 0.35, angle=0.0, keep=grow(line, 2))
+    boat = water & np.isin(hand.st.mirrored, (HULL, INSIDE, GUNWALE, THWART))
+    if boat.any():
+        ys = np.nonzero(boat.any(axis=1))[0]
+        for share in (0.35, 0.68):
+            gap_across(hand, boat, ys[0] + share * (ys[-1] - ys[0]))
+    mirrored = water & (hand.st.mirrored == ROCK)
+    for x, z, size, flat, _ in ROCKS:
+        P = project(np.array([[x, 0.0, z]]), EYE)[0]
+        reach = FOCAL * size * flat / z
+        y = P[1] + 0.55 * reach
+        x0, x1 = int(P[0] - FOCAL * size / z), int(P[0] + FOCAL * size / z)
+        band = np.zeros_like(mirrored)
+        band[:, max(x0, 0) : max(min(x1, WIDTH), 0)] = True
+        if 0 <= y < HEIGHT and (mirrored & band)[int(y)].any():
+            gap_across(hand, mirrored & band, y)
 
 
 def grass_clumps(hand: Hand) -> None:
-    """Grass on the point: clumps of flicked strokes of different lengths,
-    gathered at the water's edge, round the rocks and along the lit top of
-    the slope; a 6B where it stands dark, a 2B where the glow catches it;
-    bare earth between, with a few small stones."""
+    """Grass on the point, in a few clumps of flicked 6B strokes of
+    different lengths: along its lit top, standing dark against the mist,
+    and at the water's edge; nothing between."""
     ground = hand.mask(GROUND)
-    edges = grow(hand.mask(WATER, ROCK), 18) | (hand.target > 150.0)
-    weight = ground * (0.15 + 0.85 * edges)
+    top = ground & (hand.target > 160.0)
+    edge = ground & grow(hand.mask(WATER), 10) & ~grow(hand.mask(ROCK), 6)
     rng = hand.rng
-    for cx, cy in pick(rng, weight, int(weight.sum() / 700.0)):
-        z = max(float(hand.st.depth[int(cy), int(cx)]), 6.0)
-        tall = FOCAL * 0.35 / z
-        lit = hand.target[int(cy), int(cx)] > 150.0
-        lead = pencils.B2 if lit else pencils.B6
-        for _ in range(int(rng.integers(5, 15))):
-            heading = -np.pi / 2 + rng.normal(0.0, 0.35)
-            length = tall * rng.lognormal(0.0, 0.4)
-            base = (
-                cx + rng.normal(0.0, 0.25 * tall),
-                cy + rng.normal(0.0, 0.08 * tall),
-            )
-            pts = trace(None, *base, heading, length, 0.025, rng, 1.5)
-            draw_line(
-                hand,
-                pts,
-                lead,
-                rng.uniform(0.5, 0.95) * profile("flick", len(pts)),
-                1.6,
-            )
-    bare = ground & ~edges
-    stones = Marks(
-        pencils.B4, 1.8, (3.0, 8.0), (0.4, 0.7), (1, 2), 1.5, "taper", 0.5, 0.15, False
-    )
-    lay_marks(hand, stones, bare * 0.12, 1.0, 0.0, ground)
+    for weight, every in ((top, 260.0), (edge, 700.0)):
+        for cx, cy in pick(rng, weight.astype(float), int(weight.sum() / every)):
+            clump(hand, cx, cy)
 
 
 def bank_edge(hand: Hand) -> None:
@@ -2922,23 +2872,81 @@ def plan_angles(st: Study) -> np.ndarray:
     return np.where(st.ident == GROUND, np.arctan2(uy, ux), st.angle)
 
 
-def light_on_slope(hand: Hand) -> None:
-    """The glow on the top of the point lifted back with the kneaded
-    eraser, in strokes up the slope, where the plan has it light."""
+def rows_into(mask: np.ndarray) -> np.ndarray:
+    """For each pixel of ``mask``, how many rows down it is from where its
+    run of the mask in that column began."""
+    rows = np.arange(HEIGHT)[:, None] * np.ones((1, WIDTH), int)
+    start = np.maximum.accumulate(np.where(mask, 0, rows + 1), axis=0)
+    return np.where(mask, rows - start + 1, 0)
+
+
+def bank_tone(hand: Hand) -> None:
+    """The point's bank as one quiet dark tone: a 6B half on its side in
+    two crossed layers and an 8B over them, each rubbed smooth with the
+    stump and the finger; kept off the rocks, so that they stand clear of
+    it."""
+    ground, rock = hand.mask(GROUND), hand.mask(ROCK)
+    far = hand.mask(SKY, CLOUD, HILLS, FOREST, RIDGE1, RIDGE2, RIDGE3)
+    bank = grow(ground, 5) & ~grow(rock, 1) & ~far
+    hand.look()
+    need = hand.need(bank, 4)
+    press = np.clip(0.15 + 3.0 * need, 0.0, 0.95)
+    for k, (lead, angle) in enumerate(
+        ((pencils.B6, 60.0), (pencils.B6, -55.0), (pencils.B8, 15.0))
+    ):
+        lay_tone(hand, bank, lead, press * (1.0 - 0.1 * k), angle, 0.5, 5.0, 0.0)
+        rub_area(hand, bank, tools.STUMP, 0.7, angle + 90.0)
+        rub_area(hand, bank, tools.FINGER, 0.5, angle + 45.0)
+
+
+def top_light(hand: Hand) -> None:
+    """The glow on the top of the point: a narrow light lifted along it
+    with the kneaded eraser, in short passes along the edge."""
     ground = hand.mask(GROUND)
     lit = ground * np.clip((hand.target - 150.0) / 40.0, 0.0, 1.0)
     rng = hand.rng
-    for cx, cy in pick(rng, lit, int(lit.sum() / 12.0)):
-        a = hand.angle[int(cy), int(cx)]
-        pts = within(
-            trace(hand.angle, cx, cy, a, rng.uniform(12.0, 30.0), 0.02, rng, 3.0),
-            ground,
+    for cx, cy in pick(rng, lit, int(lit.sum() / 25.0)):
+        a = rng.normal(0.0, 0.15)
+        half = rng.uniform(8.0, 18.0)
+        dx, dy = half * math.cos(a), half * math.sin(a)
+        firm = float(np.clip(0.35 + 0.5 * lit[int(cy), int(cx)], 0.0, 0.8))
+        path = [(cx - dx, cy - dy), (cx, cy + rng.normal(0, 0.5)), (cx + dx, cy + dy)]
+        hand.sheet.erase(
+            path, tools.KNEADED, (firm * profile("taper", 7)).tolist(), 5.0
         )
-        if len(pts) > 1:
-            firm = float(np.clip(0.4 + 0.6 * lit[int(cy), int(cx)], 0.0, 0.9))
-            hand.sheet.erase(
-                pts, tools.KNEADED, (firm * profile("taper", len(pts))).tolist(), 8.0
-            )
+
+
+def clump(hand: Hand, cx: float, cy: float) -> None:
+    """One clump of grass: blades fanning up from a root."""
+    rng = hand.rng
+    z = max(float(hand.st.depth[int(cy), int(cx)]), 6.0)
+    tall = FOCAL * 0.35 / z
+    for _ in range(int(rng.integers(5, 12))):
+        heading = -np.pi / 2 + rng.normal(0.0, 0.35)
+        length = tall * rng.lognormal(0.0, 0.4)
+        base = (cx + rng.normal(0.0, 0.2 * tall), cy + rng.normal(0.0, 0.05 * tall))
+        pts = trace(None, *base, heading, length, 0.025, rng, 1.5)
+        draw_line(
+            hand,
+            pts,
+            pencils.B6,
+            rng.uniform(0.55, 0.95) * profile("flick", len(pts)),
+            1.6,
+        )
+
+
+def gap_across(hand: Hand, mask: np.ndarray, y: float) -> None:
+    """A thin light lifted across ``mask`` at row ``y``."""
+    rng = hand.rng
+    xs = np.nonzero(mask[int(y)])[0]
+    if len(xs) < 4:
+        return
+    a, b = xs[0] + rng.uniform(0, 4), xs[-1] - rng.uniform(0, 4)
+    px = np.linspace(a, b, 9)
+    pts = np.stack([px, y + rng.normal(0.0, 0.7, 9)], 1)
+    hand.sheet.erase(
+        pts, tools.KNEADED, (0.55 * profile("taper", 9) ** 0.5).tolist(), 3.0
+    )
 
 
 def drawing(st: Study, world: World) -> Hand:
