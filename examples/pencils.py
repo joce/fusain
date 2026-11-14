@@ -1,5 +1,5 @@
 """Graphite pencils on cartridge paper: what grade, pressure, layering and
-the tilt of the pencil do.
+the tilt of the pencil do, and what the pencil does to the paper.
 
 Run from the repository root: ``python examples/pencils.py``. Writes
 ``examples/output/pencils.png``:
@@ -10,7 +10,15 @@ Run from the repository root: ``python examples/pencils.py``. Writes
   another angle;
 * bottom middle, a 4B held on its side: three broad strokes, light to firm,
   and a patch shaded that way, firmer towards the bottom;
-* bottom right, 2B lines drawn lightly, firmly and hard, and cross-hatching.
+* lower right, 2B lines drawn lightly, firmly and hard, and cross-hatching;
+* bottom left, five lines indented with a stylus, from the lightest touch to
+  the firmest, and a 2B shaded over them, lightly in the left half and hard
+  in the right: the pencil skips a groove unless it reaches its floor;
+* bottom middle, blades of grass indented first and a 4B shaded over them:
+  they stay the white of the paper;
+* bottom right, a 2H pressed hard over the left half, which flattens the
+  tooth, and one light layer of 4B over all of it: grainy on the tooth that
+  was left alone, even on the flattened one.
 """
 
 from __future__ import annotations
@@ -24,8 +32,27 @@ from fusain import Sheet, papers, pencils
 GRADES = ("4H", "2H", "HB", "2B", "4B", "6B", "8B")
 
 
+def surface(sheet: Sheet) -> None:
+    """Grooves that a pencil skips, and a tooth pressed flat."""
+    for k in range(5):
+        y = 626 + 22 * k
+        sheet.indent([(40, y), (280, y - 6)], 0.2 + 0.2 * k)
+    sheet.shade((30, 610, 160, 730), pencils.B2, 0.35, angle=60)
+    sheet.shade((160, 610, 290, 730), pencils.B2, 0.95, angle=60)
+    rng = np.random.default_rng(5)
+    for x in np.linspace(350, 590, 17):
+        lean, tall = rng.uniform(-28, 28), rng.uniform(55, 105)
+        blade = [(x, 728), (x + 0.3 * lean, 728 - 0.6 * tall), (x + lean, 728 - tall)]
+        sheet.indent(blade, (0.9, 0.5), 2.5)
+    for angle in (25, -40):
+        sheet.shade((340, 610, 600, 730), pencils.B4, 0.5, angle=angle)
+    for layer in range(5):
+        sheet.shade((640, 610, 755, 730), pencils.H2, 1.0, angle=30 + 50 * layer)
+    sheet.shade((640, 610, 870, 730), pencils.B4, 0.3, angle=-20)
+
+
 def main() -> None:
-    sheet = Sheet(900, 600, paper=papers.CARTRIDGE, seed=11)
+    sheet = Sheet(900, 750, paper=papers.CARTRIDGE, seed=11)
     for row, name in enumerate(GRADES):
         top = 20 + row * 46
         box = (30, top, 870, top + 36)
@@ -52,6 +79,7 @@ def main() -> None:
         sheet.stroke(wave, pencils.B2, pressure=pressure)
     sheet.shade((630, 480, 870, 575), pencils.HB, 0.6, width=4, angle=45, spacing=9)
     sheet.shade((630, 480, 870, 575), pencils.HB, 0.6, width=4, angle=-45, spacing=9)
+    surface(sheet)
     out = Path(__file__).parent / "output" / "pencils.png"
     sheet.save(str(out))
     print(f"wrote {out}")
