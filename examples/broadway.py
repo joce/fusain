@@ -1234,15 +1234,22 @@ class Blocking(Easel):
     def distance(self) -> None:
         """The far end of the street, rubbed with a finger: haze. And where
         the street bends, a mile on, the spire of the church that closes it,
-        pale over the last roofs. (The finger keeps to the sky and to what
-        is far off, and bears lightly: a finger spreads pastel from grain to
-        grain, and pressed harder, across the fronts, it lays the sky over
-        them in bands.)"""
+        pale over the last roofs. (The finger is pulled down from the sky
+        over what is far off, and wiped before each pull: left as it is, it
+        would bring the colour of the fronts back up into the sky. It keeps
+        to the sky and to what is far off, and bears lightly: a finger
+        spreads pastel from grain to grain, and pressed harder, across the
+        fronts, it lays the sky over them in bands.)"""
         seen = self.scene
         far_off = (seen.depth > 250.0) | (seen.seen == SKY)
-        haze = filters.box_blur(far_off * 1.0, 3)
-        area = (VANISH[0] - 62.0, VANISH[1] - 100.0, VANISH[0] + 52.0, VANISH[1] + 4.0)
-        self.sheet.rub(area, tools.FINGER, sampler(haze, 0.25), 16.0, 80.0)
+        bear = sampler(filters.box_blur(far_off * 1.0, 3), 0.25)
+        down = np.linspace(VANISH[1] - 100.0, VANISH[1] + 4.0, 14)
+        for k, left in enumerate(np.arange(VANISH[0] - 62.0, VANISH[0] + 52.0, 8.0)):
+            lean = left + 2.0 * math.sin(2.4 * k) + 0.17 * (down - down[0])
+            pull = np.stack([lean, down], axis=1)
+            firm = bear(lean, down)
+            if firm.max() > 0.0:
+                self.sheet.smudge(pull, tools.FINGER, firm.tolist(), 16.0)
         z = 1320.0
         stone = mix(HAZE, rgb("#8a90a8"), 0.55)
         for foot, top, wide in ((0.0, 38.0, 8.0), (38.0, 54.0, 5.0), (54.0, 70.0, 3.0)):

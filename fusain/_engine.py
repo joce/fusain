@@ -567,6 +567,7 @@ def rub_stroke(
     lay,
     press,
     smear,
+    carried,
     salt,
 ):
     """Rub one pass of a round tool of ``radius`` pixels through the points
@@ -583,7 +584,11 @@ def rub_stroke(
     fixative has set (``fixed``, its volume in each of the two layers) is
     lifted only as held pigment is, and is neither pressed in nor stirred.
 
-    Returns what the tool carries at the end: [K (N bands), S, volume, sheen].
+    ``carried`` is what the tool carries, three rows packed as dust is
+    ([K (N bands), S, volume, sheen]): what it has lifted, the dust on its
+    face, soon laid back, and the held graphite it is pushing along,
+    likewise. The tool lands with it and it is updated in place, so a tool
+    that is not cleaned between two passes gives back as it takes.
     """
     height, width = cover.shape
     bound = radius + 0.5
@@ -593,9 +598,9 @@ def rub_stroke(
     # on, per pixel moved
     per_pixel = lay / (2.0 * bound * math.pi * bound * bound)
     per_near = SPREAD / (2.0 * bound * math.pi * bound * bound)
-    load = np.zeros(LOOSE)
-    near = np.zeros(LOOSE)  # the dust on the face of the tool, soon laid back
-    slid = np.zeros(LOOSE)  # held graphite it is pushing along, likewise
+    load = carried[0]
+    near = carried[1]  # the dust on the face of the tool, soon laid back
+    slid = carried[2]  # held graphite it is pushing along, likewise
     for i in range(xs.shape[0]):
         pressure = pressures[i]
         step = steps[i]
@@ -675,9 +680,6 @@ def rub_stroke(
                 free -= fixed[iy, ix, 0] + fixed[iy, ix, 1]
                 dusty = max(free, 0.0) / after
                 cover[iy, ix] += (1.0 - cover[iy, ix]) * stirred * dusty
-    for part in range(LOOSE):  # (what is still on its face it carries off)
-        load[part] += near[part] + slid[part]
-    return load
 
 
 @njit(cache=True, error_model="numpy")

@@ -31,7 +31,7 @@ make pre-push                  # what CI runs: tox (black, ruff, pyright, pytest
 - `sheet.py`: the `Sheet`, with the tooth, the pigment it holds and the two layers of dust over it, strokes and rendering.
 - `medium.py`, `pencils.py`, `charcoal.py`, `pastels.py`, `crayons.py`: what a stick is made of; graphite and coloured pencils, charcoals, soft, hard and oil pastels, wax crayons.
 - `stick.py`: a medium in the hand, with a tip that wears. `pens.py`: ballpoint pens, whose ink is a stain in the paper.
-- `tools.py`: stumps, fingers and erasers, which lay nothing of their own.
+- `tools.py`: stumps, fingers and erasers, which lay nothing of their own. `smudger.py`: a tool in the hand, which keeps what it picks up.
 - `hatching.py`: the strokes of a shading, as a hand lays them.
 - `_engine.py`: the numba kernels that lay a medium on the paper, and their constants.
 - `docs/design.md`: the model and the build order. `examples/`: scripts and the images they write to `examples/output/`.

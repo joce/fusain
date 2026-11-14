@@ -129,20 +129,35 @@ Sizes are in pixels, and the paper's `grain` sets the scale: a pencil line is
 two or three grains wide.
 
 ```python
-from fusain import charcoal, tools
+from fusain import Smudger, charcoal, tools
 
 sheet.shade((100, 60, 500, 200), charcoal.VINE, pressure=0.6, width=14)
 sheet.smudge([(120, 130), (560, 130)], tools.STUMP)    # drags the dust along
 sheet.erase([(100, 170), (500, 170)], tools.KNEADED)   # lifts it
 sheet.rub((100, 60, 600, 200), tools.FINGER)           # blends a whole area
+
+stump = Smudger(tools.STUMP)             # a stump in the hand keeps what it picks up
+sheet.rub((100, 60, 300, 200), stump)    # loaded, it gives back as much as it takes
+sheet.smudge([(620, 80), (760, 120)], stump)           # and draws a pale tone on bare paper
+stump.clean()
 ```
+
+A bare tool (`tools.STUMP`) is clean every time it is put to the paper: it
+leaves the tone lighter where it lands and takes away what it lifted. A
+`Smudger` is a tool in the hand, as a `Stick` is a medium in the hand: it
+keeps its load from one pass to the next, so a tone can be worked over and
+over without being worn away, and a stump loaded on a dark patch (of the
+drawing, or of a scrap sheet) draws soft greys of its own. One load fades
+out over twenty or so widths of the tool. `Sheet.rub` carries the load from
+pass to pass either way.
 
 ![Charcoal, a stump and erasers](examples/output/charcoal.png)
 
 Vine charcoal, compressed charcoal and a 4B pencil on Ingres paper. Across all
 three, from the top: untouched; a stump dragged through and out onto the bare
-paper; a finger rubbed to and fro; a kneaded eraser pulled through three
-times; a vinyl eraser pulled through once.
+paper, then loaded in the tone once more and drawn down the bare paper beside
+it; a finger rubbed to and fro; a kneaded eraser pulled through three times;
+a vinyl eraser pulled through once.
 
 ```python
 from fusain import pastels

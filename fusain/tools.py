@@ -1,6 +1,9 @@
 """Tools that lay nothing of their own: stumps and fingers that move what
 is on the paper, and erasers that take it off. Used with
-:meth:`fusain.Sheet.smudge` and :meth:`fusain.Sheet.erase`."""
+:meth:`fusain.Sheet.smudge`, :meth:`fusain.Sheet.erase` and
+:meth:`fusain.Sheet.rub`: bare, a tool is clean each time it is put to the
+paper; a :class:`fusain.Smudger` is one in the hand, which keeps what it
+picks up."""
 
 from __future__ import annotations
 

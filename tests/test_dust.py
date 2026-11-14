@@ -161,7 +161,8 @@ def test_rubbing_a_pencil_tone_again_smooths_it_without_wiping_it_away():
     for angle in (0.0, 90.0):
         sheet.rub(PATCH, tools.STUMP, 0.8, angle=angle)
     assert _luminance(sheet).std() < 0.4 * grain
-    assert abs(_luminance(sheet).mean() - tone) < 0.06
+    # (a little darker: the white specks have greyed over)
+    assert tone - 0.1 < _luminance(sheet).mean() < tone
 
 
 @pytest.mark.parametrize("tool", [tools.STUMP, tools.FINGER, tools.CHAMOIS])

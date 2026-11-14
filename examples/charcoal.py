@@ -3,16 +3,17 @@
 Run from the repository root: ``python examples/charcoal.py``. Writes
 ``examples/output/charcoal.png``. Three columns: vine charcoal, compressed
 charcoal and a 4B pencil, each shaded lighter towards the bottom. Across all
-three, from the top: untouched; a stump dragged through from left to right;
-a finger rubbed over; a kneaded eraser pulled through three times; a vinyl
-eraser pulled through once.
+three, from the top: untouched; a stump dragged through from left to right
+and out onto the bare paper, then rubbed in the tone once more and, loaded,
+drawn down the bare paper beside it; a finger rubbed over; a kneaded eraser
+pulled through three times; a vinyl eraser pulled through once.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from fusain import Sheet, charcoal, papers, pencils, tools
+from fusain import Sheet, Smudger, charcoal, papers, pencils, tools
 
 COLUMNS = ((charcoal.VINE, 14.0), (charcoal.COMPRESSED, 14.0), (pencils.B4, 7.0))
 
@@ -26,16 +27,24 @@ def main() -> None:
             sheet.shade(
                 box, medium, lambda x, y: 0.75 - 0.5 * (y - 30) / 580, width, angle
             )
-        # a stump, dragged out of the tone onto the bare paper
+        # a stump in the hand keeps what it picks up: dragged out of the
+        # tone onto the bare paper
+        stump = Smudger(tools.STUMP)
         for k in range(3):
             sheet.smudge(
-                [(left + 20, 175 + 9 * k), (left + 262, 180 + 9 * k)], tools.STUMP, 0.7
+                [(left + 20, 175 + 9 * k), (left + 262, 180 + 9 * k)], stump, 0.7
             )
+        # loaded in the tone once more, it draws on the bare paper beside it
+        sheet.smudge([(left + 180, 186), (left + 30, 184)], stump, 0.7)
+        sheet.smudge(
+            [(left + 236, 222), (left + 246, 300), (left + 232, 380)], stump, 0.6
+        )
         # a finger, rubbed to and fro
+        finger = Smudger(tools.FINGER)
         for k in range(6):
             y = 290 + 9 * k
             ends = [(left + 15, y), (left + 185, y + 4)]
-            sheet.smudge(ends if k % 2 else ends[::-1], tools.FINGER, 0.6)
+            sheet.smudge(ends if k % 2 else ends[::-1], finger, 0.6)
         for _ in range(3):
             sheet.erase([(left - 10, 425), (left + 210, 435)], tools.KNEADED, 0.7)
         sheet.erase([(left - 10, 530), (left + 210, 540)], tools.ERASER, 0.8)
