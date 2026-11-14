@@ -34,6 +34,64 @@ sheet.stroke([(100, 560), (500, 550)], pencils.B4, tilt=1)             # with th
 sheet.save("drawing.png")
 ```
 
+## Four drawings made with it
+
+Each is a single script where every mark is a `sheet.stroke(...)`, or the
+pass of a stump, a finger or an eraser; numpy only decides where the marks
+go. None is copied from a picture. Each subject is first built in space (a
+tower, a street, a bird, a table of things), lit and looked at through a
+camera, and the medium is then laid along the forms that result.
+
+* `examples/deco.py`: a sketch of an imagined art deco tower, in charcoal on
+  a cream paper. The shadow faces are toned up the wall and rubbed with a
+  stump, the cast shadows hatched the way the light falls, the windows drawn
+  strip by strip between their piers; the sky is vine charcoal rubbed with a
+  finger, and the building is lifted back out of it with a kneaded eraser
+  (about 7,900 strokes and 1,700 rubs, under a minute).
+* `examples/broadway.py`: Broadway in SoHo on an autumn afternoon, in soft
+  pastel on toned paper. Blocked in with the side of the stick, rubbed and
+  fixed; then each cast-iron front in strokes that run with the perspective,
+  the roadway, the trees in broken dabs, the cabs and the people, each a
+  body in a pose drawn in a handful of strokes; the brightest touches last
+  (about 32,500 strokes, under a minute).
+* `examples/macaw.py`: a great green macaw in coloured pencil on white
+  paper. The bird is a solid model (`examples/macaw_model.py`) whose
+  proportions were measured on several photographs of the species, posed and
+  lit; the pencil goes on darks first, each colour hatched lightly and then
+  stroked along the lie of the feathers, with the head carried furthest
+  (about 32,500 strokes, about a minute).
+* `examples/stilllife.py`: a still life in blue, black and red ballpoint. A
+  jug, a bottle, a bowl of cherries, apples and a striped cloth are built as
+  solids and lit; the pen then works patch by patch, laying bundles of
+  strokes that follow each form wherever tone is still wanting. Red is the
+  fruit, blue the shadows on white things, the jug's pattern and the cloth's
+  stripes, black the darkest places (about 11,300 strokes, about a minute).
+
+![An art deco tower in charcoal](examples/output/deco.png)
+
+*An imagined setback skyscraper of the 1930s, in charcoal: vine and
+compressed charcoal, a stump, a finger and a kneaded eraser, on a cream paper
+with an irregular tooth.*
+
+![Broadway in SoHo in pastel](examples/output/broadway.png)
+
+*Broadway in SoHo on an autumn afternoon, in soft pastel on toned paper: the
+sun low behind the left shoulder, so the fronts on the right are lit and the
+left side lays its shadow across the street.*
+
+![A great green macaw in coloured pencil](examples/output/macaw.png)
+
+*A great green macaw in coloured pencil: built from measured proportions,
+then drawn darks first, each colour stroked along the feathers.*
+
+![A still life in three ballpoints](examples/output/stilllife.png)
+
+*A still life in blue, black and red ballpoint, every tone a hatching that
+follows its form: the highlights are bare paper, and the inks mix only where
+their lines cross.*
+
+## The media
+
 ![Graphite pencils on cartridge paper](examples/output/pencils.png)
 
 Top: 4H, 2H, HB, 2B, 4B, 6B and 8B, each shaded with the pressure rising from
