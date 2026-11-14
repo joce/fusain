@@ -107,9 +107,11 @@ BURY = 0.985
 #: film and the paste laid with it are themselves COVERS thick; in proportion
 #: if thinner): the dust is set under a film, and turns to paste under paste.
 BINDS = 0.7
-#: Wax films over the tooth: a film this thick is as slick as it gets, and a
-#: pass of a waxy medium then lays only this much less than on bare paper
-#: (resist).
+#: Wax films over the tooth: a film this thick is as slick as it gets to a
+#: waxy medium, and a pass of one then lays only this much less than on bare
+#: paper (resist). A dry medium needs the tooth to scrape it off, and has
+#: none once the wax covers it: to a dry medium a film of wax is as slick as
+#: it gets when it is COVERS thick, so one firm line of crayon is enough.
 WAX_FULL = 0.35
 RESIST = 0.85
 #: Dust that fixative has set takes only this share of the room in the tooth
@@ -167,7 +169,7 @@ BALL_UNEVEN = 0.2
 BALL_SURGE = 12.0
 #: The ball skids on a film of pigment: it lays less from the first of these
 #: thicknesses (per covered area) and nothing from the second. On wax it
-#: writes as badly as a dry medium does (RESIST_DRY).
+#: writes as badly as a dry medium does (RESIST_DRY, on a film COVERS thick).
 SKID_FROM = 0.25
 SKID_FULL = 1.0
 #: A tool that rubs also spreads the dust under it from grain to grain: what
@@ -422,12 +424,26 @@ def settle_dust(fresh, cover, bonded, under, loose, k, s, sheen, pasty, xs, ys, 
 
 
 @njit(cache=True, error_model="numpy")
+def resist_dry(wax):
+    """How much less of a medium with the share ``wax`` of wax a film of wax
+    takes than bare paper does because the medium is dry: the tooth has to
+    scrape it off."""
+    return RESIST_DRY * (1.0 - min(wax / STICKS, 1.0))
+
+
+@njit(cache=True, error_model="numpy")
+def resist_waxy(softness, wax):
+    """How much less of it the film takes because the medium is waxy: wax
+    slides on wax, unless it is a greasy paste, which sticks."""
+    greasy = min(max((softness - FIRM) / (1.0 - FIRM), 0.0), 1.0)
+    return RESIST * (1.0 - GREASE * greasy) * min(wax / STICKS, 1.0)
+
+
+@njit(cache=True, error_model="numpy")
 def resist_of(softness, wax):
     """How much less of a medium a film of wax as slick as it gets takes than
     bare paper does."""
-    waxy = min(wax / STICKS, 1.0)
-    greasy = min(max((softness - FIRM) / (1.0 - FIRM), 0.0), 1.0)
-    return RESIST_DRY * (1.0 - waxy) + RESIST * (1.0 - GREASE * greasy) * waxy
+    return resist_dry(wax) + resist_waxy(softness, wax)
 
 
 @njit(cache=True, error_model="numpy")
@@ -544,7 +560,7 @@ def lay_stroke(
         * paper[3]
     )
     rounded = RIM + (1.0 - RIM) * TILT_RIM * tilt
-    resist = resist_of(softness, wax)
+    dry, slides = resist_dry(wax), resist_waxy(softness, wax)
     filmy = min(wax / STICKS, 1.0)  # how far what the paper holds is a film
     start = flat**3
     reached = 0.0  # the furthest the tip has been from its path
@@ -600,7 +616,8 @@ def lay_stroke(
                 thick -= (1.0 - FIXED_ROOM) * was_set / covered
                 bearing = min(local, 1.0)
                 passing = per_pass * step * touch
-                waxy = min(held[iy, ix, IW] / covered / WAX_FULL, 1.0)
+                waxed = held[iy, ix, IW] / covered
+                waxy = min(waxed / WAX_FULL, 1.0)
                 if bearing > BURNISH_FROM:
                     firm = (bearing - BURNISH_FROM) / (1.0 - BURNISH_FROM)
                     polish, lay_back = firm * waxy * passing, dragged * step * touch
@@ -614,7 +631,8 @@ def lay_stroke(
                 # (a light pass takes less, but not in proportion: the lead
                 # still slides over all it touches)
                 dv = lay * math.sqrt(bearing * min(above / SPAN, 1.0)) * (room / full)
-                dv *= 1.0 - resist * waxy
+                # (to a dry medium wax is slick as soon as it covers the tooth)
+                dv *= 1.0 - dry * min(waxed / COVERS, 1.0) - slides * waxy
                 dv = min(dv * per_pass * step, room) * touch
                 over = 0.0  # the share of what is held that lies on dust
                 if filmy > 0.0:
@@ -901,7 +919,7 @@ def ball_grip(cover, held, under, loose, iy, ix):
         return 1.0
     thick = (held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]) / covered
     skid = min(max((thick - SKID_FROM) / (SKID_FULL - SKID_FROM), 0.0), 1.0)
-    waxy = min(held[iy, ix, IW] / covered / WAX_FULL, 1.0)
+    waxy = min(held[iy, ix, IW] / covered / COVERS, 1.0)
     # (only the covered share of the pixel is slick)
     return (1.0 - skid * covered) * (1.0 - RESIST_DRY * waxy * covered)
 

@@ -1,5 +1,5 @@
-"""What lies over what: a waxy medium laid over dust and the paste of an oil
-pastel, measured."""
+"""What lies over what: a waxy medium laid over dust, the paste of an oil
+pastel, and dry media over a line of wax, measured."""
 
 import numpy as np
 import pytest
@@ -300,3 +300,54 @@ def test_fixative_sets_paste_and_leaves_a_film_a_film():
     half.fix(0.5)
     assert _sum(half.paste) == pytest.approx(0.5 * paste, rel=1e-5)
     assert _bonded_within_bounds(half)
+
+
+# --------------------------------------------------------------------------
+# dry media over one line of wax (fusain-8nq)
+
+LINE = (slice(73, 77), slice(50, 150))
+AROUND = (slice(40, 60), slice(50, 150))
+
+
+def _line(pressure=0.8) -> Sheet:
+    sheet = _sheet()
+    sheet.stroke([(30, 75), (170, 75)], crayons.wax(YELLOW), pressure, 8)
+    return sheet
+
+
+@pytest.mark.parametrize(
+    "medium, pressure",
+    [(charcoal.VINE, 0.5), (charcoal.COMPRESSED, 0.4), (pencils.B4, 0.5)],
+)
+def test_a_dry_medium_shaded_over_one_firm_crayon_line_skips_it(medium, pressure):
+    line = _line()
+    tone = _luminance(line, LINE)
+    over = line.copy()
+    over.shade(BOX, medium, pressure, WIDTH, angle=60)
+    on_line = float((over.pigment() - line.pigment())[LINE].mean())
+    around = float(over.pigment()[AROUND].mean())
+    # next to none of it takes on the line (four tenths of it used to)
+    assert on_line < 0.12 * around
+    # so the line keeps its tone, and stands out light against the shading
+    # (it used to come out as dark as the paper around it)
+    assert _luminance(over, LINE) > 0.85 * tone
+    assert _luminance(over, LINE) > 1.15 * _luminance(over, AROUND)
+
+
+def test_the_firmer_the_line_the_less_takes_over_it():
+    taken = []
+    for pressure in (0.3, 0.6, 1.0):
+        line = _line(pressure)
+        over = line.copy()
+        over.shade(BOX, charcoal.VINE, 0.5, WIDTH, angle=60)
+        taken.append(float((over.pigment() - line.pigment())[LINE].mean()))
+    assert taken[0] > 2 * taken[1] > 4 * taken[2]
+
+
+def test_a_crayon_still_takes_over_one_line_of_crayon():
+    # (to a waxy medium the film is not yet as slick as it gets)
+    line = _line()
+    over, bare = line.copy(), _sheet()
+    path = [(30, 75), (170, 75)]
+    again = over.stroke(path, crayons.wax(BLUE), 0.8, 8)
+    assert again > 0.3 * bare.stroke(path, crayons.wax(BLUE), 0.8, 8)
