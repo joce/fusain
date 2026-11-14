@@ -27,6 +27,7 @@ from __future__ import annotations
 import itertools
 import math
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -1538,7 +1539,7 @@ class Features:
     crease: list
 
 
-def brow_shape(v, idx):
+def brow_shape(v, idx, tilt=0.0):
     """A young woman's brow: a soft head by the nose, a gentle arch two
     thirds of the way out, a fine tail."""
     lower, upper = v[idx[:5], :2][::-1], v[idx[5:], :2][::-1]
@@ -1548,8 +1549,9 @@ def brow_shape(v, idx):
     line = mid * [1, 0] + [0, 1] * (
         mid[:, 1:].mean() + 0.0 * (mid[:, 1:] - mid[:, 1:].mean())
     )
-    # rising a touch towards the nose, against the tilt of the head
-    return line + [0, 0.08] * arch - [0, 1] * (0.05 * (1 - t)) - [0, 0.28]
+    # ``tilt`` raises the end by the nose, to set the brow level in the
+    # picture against the turn and tilt of the head
+    return line + [0, 0.08] * arch + [0, 1] * (tilt * (1 - t)) - [0, 0.28]
 
 
 def brow_width(t):
@@ -1576,7 +1578,7 @@ def face_features(v) -> Features:
     return Features(
         lips=closed_curve(v[LIP_OUTER, :2]),
         mouth=catmull_rom((up + lo) / 2, 60),
-        brows=[brow_shape(v, BROW_R), brow_shape(v, BROW_L)],
+        brows=[brow_shape(v, BROW_R, 0.08), brow_shape(v, BROW_L, -0.02)],
         upper=[catmull_rom(v[r[0], :2], 60) for r in rims],
         lower=[catmull_rom(v[r[1], :2], 60) for r in rims],
         crease=[lid_crease(v, r[0]) for r in rims],
@@ -2289,11 +2291,19 @@ NOSE_POINTS = {"wing_r": 129, "wing_l": 358, "under": 2, "tip": 4, "bridge": 6}
 
 
 def nose_points(model: Model):
+    """Pixel places of points of the nose, and the creases round its wings
+    as lines (x, y, seen) for the contours."""
     v = model.face[0]
     out = {}
     for k, i in NOSE_POINTS.items():
         out[k] = to_pixels(VIEW, model.pose.of_head(v[[i]]))[0]
-        out[k + "_head"] = v[i].copy()
+    out["stomion_y"] = float(v[[13, 14], 1].mean())
+    for name, i in (("wing_r", 129), ("wing_l", 358)):
+        c = v[i, :2] + [math.copysign(0.12, v[i, 0]), 0.1]
+        side = math.copysign(1, v[i, 0])
+        a = np.radians(np.linspace(-30, 110, 24))
+        arc = c + 0.5 * np.stack([side * np.cos(a), np.sin(a)], 1)
+        out[name + "_crease"] = model.pose.of_head(lift_to_face(model, arc))
     return out
 
 
@@ -2538,8 +2548,13 @@ def spots(local, table):
 
 def skin_value(m: Maps):
     """The value to model the skin by: mostly how the surface turns from the
-    key light, with a little of the soft study's shading."""
-    return np.clip(0.65 * m.form + 0.35 * m.shade, 0, 1)
+    key light, with a little of the soft study's shading.  On the neck it is
+    softened, so that the head's shadow is graded."""
+    v = np.clip(0.65 * m.form + 0.35 * m.shade, 0, 1)
+    neck = m.part == P_NECK
+    soft = filters.box_blur(np.where(neck, v, 0.0), 10)
+    weight = filters.box_blur(neck.astype(float), 10)
+    return np.where(neck, soft / np.maximum(weight, 1e-6), v)
 
 
 def skin_targets(m: Maps):
@@ -2551,9 +2566,13 @@ def skin_targets(m: Maps):
     face = m.part == P_FACE
     skin = face | (m.part == P_NECK)
     light = smoothstep(0.07, 0.14, V - 3.0 * np.clip(m.spec - 0.02, 0, 0.05))
-    light = np.where(m.part == P_NECK, np.maximum(light, 0.6), light)
-    blush = np.where(face, spots(m.local, BLUSH), 0) * smoothstep(0.1, 0.3, V)
-    red = 0.04 * light + 0.06 * smoothstep(0.3, 0.42, V) + 0.09 * smoothstep(0.52, 0.66, V)
+    neck = m.part == P_NECK
+    light = np.where(neck, np.maximum(smoothstep(0.0, 0.08, V), 0.45), light)
+    blush = np.where(face, spots(m.local, BLUSH), 0)
+    mid = np.where(
+        neck, 0.12 + 0.88 * smoothstep(0.1, 0.4, V), smoothstep(0.3, 0.42, V)
+    )
+    red = 0.04 * light + 0.06 * mid + 0.09 * smoothstep(0.52, 0.66, V)
     red = red + blush
     x, y = m.local[..., 0], m.local[..., 1]
     near_mouth = np.exp(-0.5 * (x**2 + (y - MOUTH_ZONE[1]) ** 2) / MOUTH_ZONE[2] ** 2)
@@ -2592,12 +2611,9 @@ def feature_passes():
     lips = {"length": (25, 90), "count": (4, 10), "spacing": (2.2, 6.0), "shortest": 6}
     white = {"length": (14, 40), "count": (3, 6), "spacing": (3.0, 7.0), "shortest": 4}
     return [
-        ("red", Pass(RED, P_LIPS, 0, 0.0, 0.14, 0.3, **lips)),
-        ("red", Pass(RED, P_LIPS, 25, 0.14, 0.14, 0.32, **lips)),
-        ("red", Pass(RED, P_LIPS, -20, 0.28, 0.25, 0.4, **lips)),
-        ("red", Pass(RED, P_LIPS, 10, 0.53, 0.25, 0.45, **lips)),
-        ("blue", Pass(BLUE, P_LIPS, 35, 0.0, 0.12, 0.25, **lips)),
-        ("black", Pass(BLACK, P_LIPS, -10, 0.0, 0.1, 0.25, **lips)),
+        ("red", Pass(RED, P_LIPS, 0, 0.0, 0.16, 0.45, **lips)),
+        ("red", Pass(RED, P_LIPS, 25, 0.16, 0.16, 0.45, **lips)),
+        ("blue", Pass(BLUE, P_LIPS, 35, 0.0, 0.06, 0.25, **lips)),
         ("red", Pass(RED, P_WHITE, 0, 0.0, 0.08, 0.15, **white)),
         ("blue", Pass(BLUE, P_WHITE, 40, 0.0, 0.08, 0.18, **white)),
     ]
@@ -2606,9 +2622,10 @@ def feature_passes():
 def feature_targets(m: Maps):
     S, lips, white = m.shade, m.part == P_LIPS, m.part == P_WHITE
     bare = 1 - smoothstep(0.03, 0.09, m.spec)
-    red = np.where(lips, (0.2 + 0.22 * S) * (0.3 + 0.7 * bare), 0)
+    upper = lips & (m.local[..., 1] > m.nose["stomion_y"])
+    red = np.where(lips, (0.1 + 0.12 * S) * (0.25 + 0.75 * bare), 0) + 0.025 * upper
     red = red + np.where(white, 0.03 + 0.08 * smoothstep(0.15, 0.6, S), 0)
-    blue = np.where(lips, 0.12 * smoothstep(0.35, 0.9, S), 0)
+    blue = np.where(lips, 0.06 * smoothstep(0.45, 0.9, S), 0)
     blue = blue + np.where(white, 0.08 * smoothstep(0.3, 0.8, S), 0)
     black = np.where(lips, 0.06 * smoothstep(0.7, 1.0, S), 0)
     return {"red": red, "blue": blue, "black": black}
@@ -2617,7 +2634,7 @@ def feature_targets(m: Maps):
 def draw_features(h: Hatcher):
     t = feature_targets(h.maps)
     for ink, ps in feature_passes():
-        h.lay(ps, t[ink].astype(np.float32))
+        h.lay(ps, t[ink].astype(np.float32), limit=60 if ps.part == P_LIPS else 400)
 
 
 def seen_runs(line, min_len=3):
@@ -2679,8 +2696,16 @@ def draw_eye_lines(h: Hatcher, side):
         lid_shadow(h, run)
         u = np.linspace(0, 1, len(run))[:, None]
         for lift in (0.0, 1.3, 2.6):  # a thick lid, thickest outwards
-            pen_line(sheet, run - [0, 1] * lift * u, BOLD, swell(0.4, 0.95, 0.75, 0.1),
-                     1 if lift else 2, 0.5, h.rng)  # fmt: skip
+            thick = run - np.array([0, 1]) * lift * u
+            pen_line(
+                sheet,
+                thick,
+                BOLD,
+                swell(0.4, 0.95, 0.75, 0.1),
+                1 + (lift == 0),
+                0.5,
+                h.rng,
+            )
         pen_line(sheet, run - [0, 3.5], RED, swell(0.15, 0.35, 0.4), 1)
         draw_lashes(h, run)
     for run in seen_runs(lines[f"crease_{side}"]):
@@ -2724,16 +2749,24 @@ def draw_iris(h: Hatcher, centre, r, spot):
     inside = (m.part == P_IRIS) & ~glint
     for a in np.arange(0, 2 * np.pi, np.radians(5.0)):
         low = max(math.sin(a), 0.0)  # 1 straight down (y grows downward)
-        rays = [(RED, 0.3, 0.97, 0.4), (RED, 0.35, 0.9, 0.35),
-                (BLACK, 0.62 + 0.15 * low, 0.98, 0.5),
-                (BLACK, 0.3, 0.98 - 0.45 * low, 0.35 - 0.2 * low)]  # fmt: skip
+        rays = [
+            (RED, 0.3, 0.97, 0.35),
+            (BLACK, 0.62 + 0.15 * low, 0.98, 0.55),
+            (BLACK, 0.3, 0.98 - 0.4 * low, 0.5 - 0.2 * low),
+            (BLACK, 0.3, 0.9 - 0.5 * low, 0.4),
+        ]
         for pen, r0, r1, p in rays:
             b = a + rng.normal(0, 0.05)
             d = np.array([math.cos(b), math.sin(b)])
             r0, r1 = r0 + rng.uniform(-0.04, 0.06), r1 - rng.uniform(0, 0.06)
             if r1 > r0:
-                clip_stroke(sheet, centre + np.outer(np.linspace(r0, r1, 8) * r, d),
-                            inside, pen, p)  # fmt: skip
+                clip_stroke(
+                    sheet,
+                    centre + np.outer(np.linspace(r0, r1, 8) * r, d),
+                    inside,
+                    pen,
+                    p,
+                )
     ring = np.linspace(0, 6.3, 60)
     rim = centre + r * 0.94 * np.stack([np.cos(ring), np.sin(ring)], 1)
     clip_stroke(sheet, rim, inside, BOLD, 0.55)
@@ -2746,7 +2779,9 @@ def draw_iris(h: Hatcher, centre, r, spot):
             pts = [centre + q * k + d * t for t in np.linspace(-half, half, 4)]
             clip_stroke(sheet, np.array(pts), inside, BLACK, 0.8)
     fleck = centre - (spot - centre) * 0.8
-    sheet.stroke([tuple(fleck - [1.5, 0]), tuple(fleck + [1.5, 0.5])], RED, 0.3)
+    clip_stroke(
+        sheet, np.array([fleck - [1.5, 0], fleck + [1.5, 0.5]]), inside, RED, 0.3
+    )
 
 
 def lid_shadow(h: Hatcher, run):
@@ -2775,7 +2810,7 @@ def draw_brow(h: Hatcher, line, scale):
     rng = h.rng
     pts = resample(line[:, :2], 1.0)
     n = len(pts)
-    for _ in range(300):
+    for _ in range(420):
         t = rng.uniform(0, 1) ** 0.9
         i = min(int(t * (n - 1)), n - 2)
         along = unit_rows(pts[i + 1] - pts[i])
@@ -2789,7 +2824,7 @@ def draw_brow(h: Hatcher, line, scale):
         start = pts[i] + up * start_side * half
         lean = 0.35 * max(0.0, 1 - t / 0.2) + 0.2
         d = unit_rows(along + up * lean)
-        ln = rng.uniform(8, 15) * (1 - 0.35 * t)
+        ln = rng.uniform(6, 12) * (1 - 0.35 * t)
         k = brow_strength(t)
         pen = BLACK if rng.uniform() < 0.45 else (RED if rng.uniform() < 0.6 else BLUE)
         edge = 1 - abs(start_side) ** 2
@@ -2832,13 +2867,17 @@ class StrandInk:
 
     pen: pens.Pen
     density: float
-    wants: object  # darkness -> how likely a stroke is drawn there (0 to 1)
+    wants: Callable  # darkness -> how likely a stroke is drawn there (0 to 1)
     pressure: tuple  # at darkness 0 and 1
 
 
 STRAND_INKS = [
-    StrandInk(RED, 0.4, lambda d: 0.15 + 0.85 * np.exp(-0.5 * ((d - 0.5) / 0.2) ** 2),
-              (0.25, 0.4)),
+    StrandInk(
+        RED,
+        0.4,
+        lambda d: 0.15 + 0.85 * np.exp(-0.5 * ((d - 0.5) / 0.2) ** 2),
+        (0.25, 0.4),
+    ),
     StrandInk(BLACK, 1.3, lambda d: smoothstep(0.2, 0.9, d) ** 1.2, (0.25, 0.7)),
     StrandInk(BLUE, 0.25, lambda d: smoothstep(0.78, 1.0, d), (0.3, 0.5)),
 ]
@@ -2911,20 +2950,64 @@ def draw_hair(h: Hatcher):
 def garment_targets(m: Maps):
     y = np.arange(m.part.shape[0])[:, None]
     dark = np.clip((0.1 - m.tone) / 0.035, 0, 1)
-    fade = 1 - 0.75 * smoothstep(1050, 1400, y)
-    blue = (0.05 + 0.18 * dark) * fade
+    fade = 1 - smoothstep(1080, 1370, y)
+    blue = (0.05 + 0.15 * dark + folds(m.part.shape)) * fade
     return np.where(m.part == P_GARMENT, blue, 0).astype(np.float32)
+
+
+#: Folds of the top, in the picture: (x0, y0, x1, y1, width), pixels.
+FOLDS = [
+    (230, 1110, 330, 1330, 22),
+    (980, 1090, 900, 1300, 26),
+    (640, 1230, 760, 1390, 18),
+    (420, 1240, 470, 1400, 16),
+]
+
+
+def folds(shape):
+    yy, xx = np.mgrid[0 : shape[0], 0 : shape[1]]
+    q = np.stack([xx.ravel(), yy.ravel(), np.zeros(xx.size)], 1).astype(float)
+    out = np.zeros(xx.size)
+    for x0, y0, x1, y1, w in FOLDS:
+        d = segment_distance(q, np.array([x0, y0, 0.0]), np.array([x1, y1, 0.0]))
+        out = np.maximum(out, np.exp(-0.5 * (d / w) ** 2))
+    return 0.09 * out.reshape(shape)
+
+
+def loose_ends(h: Hatcher, count=36):
+    """The top ends in long loose strokes of blue, falling out of the
+    lattice towards the bottom of the sheet."""
+    m, rng = h.maps, h.rng
+    field = h.field(20)
+    for _ in range(count):
+        x, y = rng.uniform(170, 1090), rng.uniform(1150, 1330)
+        if m.part[int(y), int(x)] != P_GARMENT:
+            continue
+        d = field[int(y), int(x)].astype(float)
+        d = d if d[0] > 0 else -d
+        ln = rng.uniform(160, 380)
+        sag = rng.uniform(-0.15, 0.25)
+        u = np.linspace(0, 1, 10)[:, None]
+        pts = np.array([x, y]) + d * ln * u + np.array([0, 1]) * sag * ln * u**2
+        pts = resample(pts, 3.0)
+        ok = np.isin(sample(m.part, pts), (P_GARMENT, P_PAPER))
+        for run in seen_runs(np.hstack([pts, ok[:, None]]), 8):
+            h.sheet.stroke(
+                [tuple(q) for q in run[::3]], BLUE, swell(0.12, 0.3, 0.4, 0.3)
+            )
 
 
 def draw_garment(h: Hatcher):
     t = garment_targets(h.maps)
-    kw = {"length": (160, 460), "count": (4, 9), "spacing": (6.0, 18.0)}
+    kw = {"length": (260, 620), "count": (4, 9), "spacing": (6.0, 18.0)}
     for a, lo, cap, p in (
         (20, 0.0, 0.05, 0.3),
         (-50, 0.05, 0.06, 0.32),
         (80, 0.11, 0.1, 0.35),
     ):
         h.lay(Pass(BLUE, P_GARMENT, a, lo, cap, p, **kw), t)
+    h.lay(Pass(BLACK, P_GARMENT, 55, 0.2, 0.06, 0.3, **kw), t)
+    loose_ends(h)
 
 
 def sample(a, pts):
@@ -3038,11 +3121,27 @@ def nose_marks(h: Hatcher):
         y += int(sy - 12)
         p = np.array([x, y], float)
         pts = [p + [-5, 1], p + [0, -1.5], p + [5, 0.5]]
-        h.sheet.stroke([tuple(q) for q in pts], BLACK, swell(0.2, 0.55, 0.5, 0.3))
-        h.sheet.stroke([tuple(q + [0, 1]) for q in pts], RED, swell(0.1, 0.3, 0.5, 0.3))
+        for k in range(3):
+            q = [tuple(r + [0, 0.8 * k]) for r in pts]
+            h.sheet.stroke(
+                q, BLACK if k < 2 else RED, swell(0.3, 0.7 - 0.15 * k, 0.5, 0.3)
+            )
 
 
-def hair_strays(h: Hatcher, count=22):
+def nose_wings(h: Hatcher):
+    """The creases round the wings of the nose: a light, broken line."""
+    m = h.maps
+    for name in ("wing_r_crease", "wing_l_crease"):
+        p = m.nose[name]
+        xy = to_pixels(VIEW, p)
+        seen = visible(VIEW, m.depth, p, 0.15)
+        for run in seen_runs(np.hstack([xy, seen[:, None]]), 4):
+            pts = resample(run, 2.0)
+            dark = sample(m.form, pts)
+            draw_contour(h, pts, 0.15 + 0.4 * smoothstep(0.3, 0.8, dark), (BLUE, BLACK))
+
+
+def hair_strays(h: Hatcher, count=9):
     """A few loose hairs leaving the silhouette in long, curling strokes."""
     m, rng = h.maps, h.rng
     hair = m.part == P_HAIR
@@ -3064,11 +3163,17 @@ def hair_strays(h: Hatcher, count=22):
             p0 + f * ln * u + bend * u**2 + n[i] * 4 * np.sin(u * 5 + rng.uniform(0, 6))
         )
         pen = BLACK if rng.uniform() < 0.7 else RED
-        h.sheet.stroke([tuple(q) for q in path], pen, swell(0.1, 0.35, 0.3, 0.25))
+        path = resample(path, 2.0)
+        ok = np.isin(sample(m.part, path), (P_HAIR, P_PAPER))
+        for run in seen_runs(np.hstack([path, ok[:, None]]), 8)[:1]:
+            h.sheet.stroke(
+                [tuple(q) for q in run[::3]], pen, swell(0.1, 0.35, 0.3, 0.25)
+            )
 
 
 def draw_lines(h: Hatcher):
     hair_strays(h)
+    nose_wings(h)
     face_outline(h)
     body_outlines(h)
     nose_marks(h)

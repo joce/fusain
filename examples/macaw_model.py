@@ -576,14 +576,21 @@ BLADES = [(0.05, 1.0, 1.0, 0.25), (-0.07, 0.95, -1.2, 0.25), (0.2, 0.8, 3.5, 0.2
           (-0.34, 0.56, -6.0, 0.23)]  # fmt: skip
 
 
+def blade_half(t, half: float) -> np.ndarray:
+    """How wide a tail feather is (half its width) at ``t`` along it (0 at
+    the root, 1 at the tip): narrowing a little, its end rounded."""
+    t = np.asarray(t, dtype=np.float64)
+    w = half * np.where(
+        t < 0.72, 1.0 - 0.22 * t, 0.84 * np.sqrt(np.clip((1 - t) / 0.28, 0, 1))
+    )
+    return np.maximum(w, 0.004)
+
+
 def blade_outline(length: float, half: float) -> np.ndarray:
     """A long tail feather in its own plane: from its root, narrowing
     a little, its end rounded to a blunt point."""
     t = np.linspace(0.0, 1.0, 60)
-    w = half * np.where(
-        t < 0.72, 1.0 - 0.22 * t, 0.84 * np.sqrt(np.clip((1 - t) / 0.28, 0, 1))
-    )
-    w = np.maximum(w, 0.004)
+    w = blade_half(t, half)
     top = np.stack([t * length, w], 1)
     return np.vstack([top, top[::-1] * np.array([1.0, -1.0])])
 
@@ -1162,9 +1169,11 @@ def draw_face_lines(model: Model, ink: Marks, rng) -> None:
             np.hypot(arc[:, 0], arc[:, 1]) > IRIS + 0.07
         )
         for run in runs(arc, keep):
-            for dash in dashes(rng, run, (0.008, 0.05), (0.006, 0.06)):
-                fade = smoothstep(0.55, 0.2, float(dash[:, 0].mean()))
-                d = rng.uniform(0.3, 0.85) * (0.45 + 0.55 * fade)
+            for dash in dashes(rng, run, (0.008, 0.045), (0.004, 0.04)):
+                crowd = face_crowd(dash.mean(axis=0))
+                if rng.random() < 0.5 * (1.0 - crowd):
+                    continue
+                d = rng.uniform(0.3, 0.85) * (0.6 + 0.4 * crowd)
                 draw3d(
                     ink,
                     model,
@@ -1175,6 +1184,15 @@ def draw_face_lines(model: Model, ink: Marks, rng) -> None:
                     PLUME,
                 )
         radius += rng.uniform(0.055, 0.09)
+
+
+def face_crowd(p) -> float:
+    """How densely the face's tiny feathers crowd at a point of the skull
+    frame, 0..1: most near the bill's base and under the eye."""
+    x, y = float(p[0]), float(p[1])
+    base = float(smoothstep(0.15, 0.4, x))
+    under = math.exp(-((math.hypot(x + 0.02, y + 0.3) / 0.2) ** 2))
+    return max(base, under)
 
 
 def runs(points: np.ndarray, keep: np.ndarray) -> list[np.ndarray]:
