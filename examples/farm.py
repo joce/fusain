@@ -84,6 +84,7 @@ class Part:
     passes: float = 2.0  # passes of colour (a fraction: in some patches)
     flow: Callable | None = None  # the direction of the strokes at x
     drift: float = 10.0  # how far that wanders from patch to patch
+    tint: str | None = None  # a lighter colour laid first in some patches
 
 
 Item = Part | Mark
@@ -372,8 +373,8 @@ def far_hills(hand: Hand):
         (SUN, 65.0),
         (LIME, 0.0),
         (ORANGE, 0.0),
-        (GREEN, 15.0),
-        (LIME, -20.0),
+        (LIME, 15.0),
+        (GREEN, -20.0),
     ]
     patches, edges = fields(hand, height, FAR_CUTS, 800, hill, looks)
     items: list[Item] = [hill, *patches]
@@ -401,7 +402,7 @@ def far_patterns(hand, height, patches) -> list[Item]:
         hand, height, xs[4] - 60, xs[5] + 160, 30, 34, 9, 40, LEAF, 11.0, p[4]
     )
     items += slant_stripes(
-        hand, (xs[5] - 60, 330, xs[6] + 80, 760), -60, 40, GREEN, 9.0, p[5]
+        hand, (xs[5] - 60, 330, xs[6] + 80, 760), -60, 40, LEAF, 9.0, p[5]
     )
     return items
 
@@ -441,6 +442,7 @@ def middle_hill(hand: Hand) -> list[Item]:
     cuts = [(-60, 0.0), (330, 0.45), (1470, 0.0)]
     looks = [(LIME, 10.0), (GREEN, -5.0)]
     patches, edges = fields(hand, height, cuts, 900, hill, looks)
+    patches[1].tint = LIME
     return [hill, *patches, *edges, Mark(top, BLACK, OUTLINE)]
 
 
@@ -449,6 +451,7 @@ def meadow(hand: Hand):
     ctrl = [(-40, 768), (250, 744), (560, 754), (860, 772), (1150, 748), (1440, 738)]
     top, height = silhouette(hand, ctrl)
     part = Part(band(top, HEIGHT + 40), GREEN, 0.0, 0.0, name="meadow", passes=1.0)
+    part.tint = LIME
     part.flow = slope(height)
     return [part, Mark(top, BLACK, OUTLINE)], height
 
@@ -711,25 +714,25 @@ def sunflower(hand: Hand, x, base, h, r) -> list[Item]:
 
 
 def flower(hand: Hand, x, y, colour) -> list[Item]:
-    items: list[Item] = []
+    """A meadow flower: a coloured one is a loop of petals drawn in one go
+    round a dab of yellow; a white one is petals of bare paper."""
     n = int(hand.u(5, 7))
     start = hand.u(0, 2 * np.pi)
     size = hand.u(0.85, 1.15)
-    for k in range(n):
-        a = start + 2 * np.pi * k / n + hand.u(-0.15, 0.15)
-        px, py = x + 10 * size * math.cos(a), y + 10 * size * math.sin(a)
-        items.append(
-            Part(
-                hand.blob(px, py, 7 * size, 7 * size, 5, 0.1),
-                colour,
-                hand.u(0, 180),
-                0.0,
-            )
-        )
     middle = SUN if colour != SUN else ORANGE
-    items.append(
-        Part(hand.blob(x, y, 5.5 * size, 5.5 * size, 5, 0.1), middle, 0.0, 0.0)
-    )
+    items: list[Item] = []
+    if colour is None:
+        for k in range(n):
+            a = start + 2 * np.pi * k / n + hand.u(-0.15, 0.15)
+            px, py = x + 12 * size * math.cos(a), y + 12 * size * math.sin(a)
+            petal = hand.blob(px, py, 8 * size, 6.5 * size, 5, 0.1, math.degrees(a))
+            items.append(Part(petal, None, 0.0, 0.0))
+    else:
+        a = start + np.linspace(0, 2 * np.pi * 1.04, 12 * n)
+        r = 15 * size * (0.45 + 0.55 * np.abs(np.cos(n * (a - start) / 2)))
+        loop = np.stack([x + r * np.cos(a), y + r * np.sin(a)], 1)
+        items.append(Mark(hand.line(loop, 0.4, 0.4), colour, 7.0))
+    items.append(Part(hand.blob(x, y, 6 * size, 6 * size, 5, 0.1), middle, 0.0, 0.0))
     return items
 
 
@@ -991,7 +994,7 @@ def cat(hand: Hand, place: Place) -> list[Item]:
     for side in (-1, 1):
         ear = [(side * 6, -94), (side * 20, -112), (side * 21, -86)]
         items.append(shape(hand, place, ear, BLACK, 0.0, 6.0, False))
-        items.append(dot(hand, place, side * 8, -82, 3.5, SUN))
+        items.append(dot(hand, place, side * 9, -82, 4.5, SUN))
     return items
 
 
@@ -1033,7 +1036,7 @@ def pond(hand: Hand, cx=660.0, cy=905.0) -> list[Item]:
             (cx + x, cy + y - 6),
             (cx + x + w / 2, cy + y),
         ]
-        items.append(Mark(hand.line(ripple, 0.5, 0.4), None, 7.0))
+        items.append(Mark(hand.line(ripple, 0.5, 0.4), None, 10.0))
     for x, n in ((cx - 196, 3), (cx + 166, 2)):
         for k in range(n):
             reed = [
@@ -1377,20 +1380,27 @@ def pieces(hand: Hand, path: np.ndarray, short=70, long=140) -> list[np.ndarray]
     """A long line in the hand's reach: pieces of ``short`` to ``long``
     points, each starting a few points before the last ended."""
     out, i = [], 0
-    while i < len(path) - 1:
+    while True:
         n = int(hand.u(short, long))
         if len(path) - i < n + short // 2:
-            n = len(path) - i
+            out.append(path[i:])
+            return out
         out.append(path[i : i + n])
         i += n - int(hand.u(3, 8))
-    return out
 
 
-def visible_runs(path: np.ndarray, covered: np.ndarray, edge: np.ndarray):
-    """The parts of ``path`` that nothing in front hides, inside the edge."""
+def visible_runs(path, covered, edge, within: Region | None = None):
+    """The parts of ``path`` that nothing in front hides, inside the edge
+    (and inside ``within``)."""
     xi = np.clip(np.round(path[:, 0]).astype(int), 0, WIDTH - 1)
     yi = np.clip(np.round(path[:, 1]).astype(int), 0, HEIGHT - 1)
     on = ~covered[yi, xi] & edge[yi, xi]
+    if within is not None:
+        ly, lx = yi - within.y0, xi - within.x0
+        h, w = within.m.shape
+        ok = (ly >= 0) & (lx >= 0) & (ly < h) & (lx < w)
+        on[ok] &= within.m[ly[ok], lx[ok]]
+        on &= ok
     return [path[a:b] for a, b in runs(on) if b - a >= 4]
 
 
@@ -1404,12 +1414,12 @@ def firm_along(hand: Hand, n: int, base: float) -> list[float]:
 
 
 def line_strokes(
-    hand, path, colour, width, covered, edge, base=0.88, under=False
+    hand, path, colour, width, covered, edge, base=0.88, under=False, within=None
 ) -> list[Line]:
     """A line drawn as a hand draws it: in pieces of its reach, where it
     shows, and the outline traced again in part, a little off."""
     out = []
-    for run in visible_runs(path, covered, edge):
+    for run in visible_runs(path, covered, edge, within):
         for piece in pieces(hand, run):
             pts = piece[:: max(1, len(piece) // 30)]
             if len(pts) < 2:
@@ -1446,7 +1456,7 @@ def plan(items: Sequence[Item], hand: Hand) -> tuple[Plan, np.ndarray]:
         if isinstance(item, Part):
             plan_part(hand, work, item, reg, covered, loose, edge)
         else:
-            plan_mark(hand, work, item, covered, loose)
+            plan_mark(hand, work, item, covered, loose, reg)
         if not getattr(item, "under", False) and reg.m.size:
             covered[reg.box] |= reg.m
     return work, edge
@@ -1463,13 +1473,14 @@ def plan_part(hand, work: Plan, part: Part, reg: Region, covered, loose, edge):
             target += line_strokes(hand, loop, part.ink, part.line, covered, loose)
 
 
-def plan_mark(hand, work: Plan, mark: Mark, covered, loose):
+def plan_mark(hand, work: Plan, mark: Mark, covered, loose, reg: Region):
     if mark.colour is None:
         return
     target = work.ink if mark.colour == BLACK else work.lines
     base = 0.9 if mark.under else 0.85
+    within = reg if mark.clip is not None else None
     target += line_strokes(
-        hand, mark.path, mark.colour, mark.width, covered, loose, base, mark.under
+        hand, mark.path, mark.colour, mark.width, covered, loose, base, mark.under, within
     )
 
 
@@ -1512,7 +1523,7 @@ def scan(m: np.ndarray, angle: float, gap: float, hand: Hand):
         hit = np.zeros(len(p), bool)
         hit[ok] = m[yi[ok], xi[ok]]
         out.append((off, [(s_line[a], s_line[b - 1]) for a, b in runs(hit)]))
-        off += gap * hand.u(0.8, 1.2)
+        off += gap * hand.u(0.75, 1.3)
     return out
 
 
@@ -1560,13 +1571,17 @@ class Touch:
     firm: float = 0.78
     gap: float = FILL_GAP
     loose: float = 1.0
+    skip: float = 0.0  # the share of strokes the hand leaves out
 
 
-def zigzag(run: Run, touch: Touch, origin, hand: Hand, rim) -> np.ndarray:
-    """The path of one back-and-forth stroke through the legs of ``run``."""
+def zigzag(run: Run, touch: Touch, origin, hand: Hand, rim):
+    """The path of one back-and-forth stroke through the legs of ``run``, and
+    how hard the hand bears at each of its points: each leg a little more or
+    less than the last."""
     along, across = axes(touch.angle)
-    pts = []
+    pts, bear = [], []
     for j, (off, s0, s1) in enumerate(run.legs):
+        leg_firm = hand.u(0.84, 1.1)
         a = s0 - end_play(hand, touch)
         b = s1 + end_play(hand, touch)
         if j % 2:
@@ -1575,8 +1590,9 @@ def zigzag(run: Run, touch: Touch, origin, hand: Hand, rim) -> np.ndarray:
         wob = hand.rng.normal(0, 0.7 * touch.loose, n + 2)
         for t, w in zip(np.linspace(0, 1, n + 2), wob, strict=True):
             pts.append(origin + (off + w) * across + (a + (b - a) * t) * along)
-    path = np.array(pts)
-    return stray(path, hand, rim)
+            # (the hand bears on mid-leg, and eases where it turns)
+            bear.append(leg_firm * (EASE if t in (0.0, 1.0) else 1.0))
+    return stray(np.array(pts), hand, rim), np.array(bear)
 
 
 def end_play(hand: Hand, touch: Touch) -> float:
@@ -1600,20 +1616,69 @@ def stray(path: np.ndarray, hand: Hand, rim: np.ndarray) -> np.ndarray:
     return out
 
 
-def scribble(sheet: Sheet, hand: Hand, m, y0, x0, colour, touch: Touch, rim):
-    """Fill the mask (at (y0, x0) on the sheet) with back-and-forth strokes."""
-    centre = erode(m, int(round(touch.width / 2 - 1.5)))
+def grow(m: np.ndarray, r: int, beyond: bool) -> np.ndarray:
+    """``m`` grown by about ``r`` pixels all round (``beyond``: what lies
+    outside the box)."""
+    if r <= 0:
+        return m
+    padded = np.pad(m, r + 1, constant_values=beyond)
+    return (filters.max_filter(padded, r) > 0.5)[r + 1 : -r - 1, r + 1 : -r - 1]
+
+
+def fit_width(m: np.ndarray, widest: float) -> float:
+    """The crayon for the shape: up to ``widest``, and narrower in a narrow
+    shape, so that a few strokes go across it."""
+    for r in range(12, 1, -1):
+        if (m & ~grow(~m, r, True)).any():
+            return min(widest, max(1.2 * r, 5.0))
+    return 5.0
+
+
+#: A stroke stops short of a line by its own half width; where the shape
+#: meets another with no line between them, it runs this much further.
+SOFT = 1
+
+
+def scribble(sheet, hand: Hand, m, hard, y0, x0, colour, touch: Touch, rim, again=1):
+    """Fill the mask (at (y0, x0) on the sheet) with back-and-forth strokes,
+    up to its lines (``hard``) and a little over its other edges; then go
+    back (``again`` times) into what a narrow neck of it left bare."""
+    width = fit_width(m, touch.width)
+    reach = int(round(width / 2 - 1.5))
+    centre = m & ~grow(hard & ~m, reach, True) & ~grow(~m & ~hard, reach - SOFT, False)
     if not centre.any():
         dab(sheet, hand, m, y0, x0, colour, touch)
         return
     medium = crayons.wax(CRAYON[colour])
     origin = np.array([x0, y0], float)
-    for run in link(scan(centre, touch.angle, touch.gap * touch.width, hand), hand):
-        path = zigzag(run, touch, origin, hand, rim)
+    touch = Touch(touch.angle, width, touch.firm, touch.gap, touch.loose)
+    reached = np.zeros_like(m)
+    for run in link(scan(centre, touch.angle, touch.gap * width, hand), hand):
+        if hand.u(0, 1) < touch.skip:
+            continue
+        path, bear = zigzag(run, touch, origin, hand, rim)
         if len(path) < 2:
             continue
-        pressure = firm_along(hand, len(path), touch.firm)
-        sheet.stroke(path, medium, pressure, touch.width * hand.u(0.92, 1.06))
+        cap = 0.9 if colour == BLACK else 0.82
+        pressure = list(np.clip(firm_along(hand, len(path), touch.firm) * bear, 0.1, cap))
+        sheet.stroke(path, medium, pressure, width * hand.u(0.92, 1.06))
+        mark_reached(reached, path - origin, width - 2.0)
+    left = m & ~reached
+    if again > 0 and (left & ~grow(~left, 2, True)).any():
+        narrow = Touch(touch.angle + hand.u(-30, 30), width, touch.firm, touch.gap)
+        scribble(sheet, hand, left, hard, y0, x0, colour, narrow, rim, again - 1)
+
+
+def mark_reached(reached: np.ndarray, path: np.ndarray, width: float) -> None:
+    """Note where a stroke along ``path`` (local) has laid colour."""
+    dense, *_ = CatmullRom(path).sample(2.0)
+    reg = line_region(dense, width)
+    if not reg.m.size:
+        return
+    h, w = reached.shape
+    y1, x1 = min(reg.y0 + reg.m.shape[0], h), min(reg.x0 + reg.m.shape[1], w)
+    if y1 > reg.y0 and x1 > reg.x0:
+        reached[reg.y0 : y1, reg.x0 : x1] |= reg.m[: y1 - reg.y0, : x1 - reg.x0]
 
 
 def dab(sheet: Sheet, hand: Hand, m, y0, x0, colour, touch: Touch):
@@ -1623,12 +1688,12 @@ def dab(sheet: Sheet, hand: Hand, m, y0, x0, colour, touch: Touch):
         return
     size = 2.0 * math.sqrt(len(xs) / math.pi)
     cx, cy = x0 + xs.mean() + 0.5, y0 + ys.mean() + 0.5
+    width = min(max(size * 0.8, 4.0), touch.width)
     along, _ = axes(hand.u(0, 180))
-    reach = max((size - touch.width) / 2, 0.0) * along
-    path = [(cx, cy) - reach, (cx, cy) + reach] if reach.any() else [(cx, cy)]
+    reach = max((size - width) / 2, size * 0.15) * along
+    path = [(cx, cy) - reach, (cx, cy) + reach]
     medium = crayons.wax(CRAYON[colour])
-    width = min(max(size * 0.95, 4.0), touch.width)
-    sheet.stroke(path, medium, min(touch.firm + 0.12, 0.95), width)
+    sheet.stroke(path, medium, 0.66, width)
 
 
 # ----------------------------------------------------------------------
@@ -1678,7 +1743,7 @@ def patch_size(hand: Hand, size: float) -> tuple[float, float, float]:
     return size * hand.u(0.5, 0.68), size * hand.u(0.4, 0.55), hand.u(-0.6, 0.6)
 
 
-def fill(sheet: Sheet, hand: Hand, part: Part, m: np.ndarray, y0, x0, rim):
+def fill(sheet: Sheet, hand: Hand, part: Part, m: np.ndarray, hard, y0, x0, rim):
     """Fill one shape, in one go or patch by patch, with a second, looser
     pass across the first where the shape should be solid."""
     h, w = m.shape
@@ -1688,12 +1753,18 @@ def fill(sheet: Sheet, hand: Hand, part: Part, m: np.ndarray, y0, x0, rim):
         parts = patches(m, hand, 260.0)
     for patch, cx in parts:
         angle = part_angle(part, cx) + hand.u(-part.drift, part.drift)
-        firm = FIRM.get(part.colour or "", 0.78)
-        scribble(sheet, hand, patch, y0, x0, part.colour, Touch(angle, firm=firm), rim)
+        firm = FIRM.get(part.colour or "", 0.76) * hand.u(0.9, 1.06)
+        if part.tint is not None and hand.u(0, 1) < 0.4:
+            under = Touch(angle - hand.u(20, 40), firm=0.6, gap=FILL_GAP * 1.2)
+            scribble(sheet, hand, patch, hard, y0, x0, part.tint, under, rim, 0)
+            firm *= 0.85
+        first = Touch(angle, firm=firm)
+        scribble(sheet, hand, patch, hard, y0, x0, part.colour, first, rim)
         if hand.u(0, 1) < part.passes - 1:
             cross = Touch(angle + hand.u(40, 62) * hand.rng.choice([-1, 1]))
-            cross.firm, cross.gap, cross.loose = firm * 0.78, FILL_GAP * 1.3, 1.8
-            scribble(sheet, hand, patch, y0, x0, part.colour, cross, rim)
+            cross.firm, cross.gap, cross.loose = min(firm * 0.8, 0.58), FILL_GAP * 1.3, 1.8
+            cross.skip = 0.18
+            scribble(sheet, hand, patch, hard, y0, x0, part.colour, cross, rim)
 
 
 def part_angle(part: Part, x: float) -> float:
@@ -1702,8 +1773,13 @@ def part_angle(part: Part, x: float) -> float:
     return part.flow(x) + part.angle
 
 
+#: Where a stroke turns, at a shape's edge, it bears this much as hard as
+#: mid-leg: under the pressure at which wax smears what it passes over.
+EASE = 0.8
+
 #: How firmly each colour is pressed when filling.
-FIRM = {SUN: 0.86, LIME: 0.62, GREEN: 0.66, SKY: 0.8, CREAM: 0.6, PINK: 0.72}
+FIRM = {SUN: 0.8, LIME: 0.66, GREEN: 0.7, SKY: 0.74, CREAM: 0.6, PINK: 0.7}
+FIRM[BLACK] = 0.86
 
 
 def draw(items: Sequence[Item]) -> Sheet:
@@ -1719,9 +1795,13 @@ def draw(items: Sequence[Item]) -> Sheet:
     ink = ink_mask([ln for ln in work.ink + work.lines if not ln.under])
     rim = edge & (erode(edge, 10) == 0)
     rank = {colour: k for k, colour in enumerate(ORDER)}
-    for part, reg in sorted(work.fills, key=lambda f: (not f[0].under, rank[f[0].colour])):
-        m = reg.m & ~ink[reg.box]
-        fill(sheet, hand, part, m, reg.y0, reg.x0, rim)
+    def order(f):
+        """Patterns first, then small dabs, then the light colours."""
+        return (not f[0].under, f[1].m.sum() > 400, rank[f[0].colour])
+
+    for part, reg in sorted(work.fills, key=order):
+        hard = ink[reg.box] | ~edge[reg.box]
+        fill(sheet, hand, part, reg.m & ~ink[reg.box], hard, reg.y0, reg.x0, rim)
     return sheet
 
 
@@ -1746,10 +1826,12 @@ def main() -> None:
 
 
 CROPS = {
+    "sun": (1000, 0, 1400, 330),
     "barn": (620, 300, 1180, 720),
     "house": (0, 160, 620, 760),
     "animals": (0, 720, 560, 1050),
     "pond": (460, 720, 1400, 1050),
+    "flowers": (1080, 480, 1400, 760),
 }
 
 
