@@ -26,6 +26,12 @@ What each lead and tool does, far to near:
   sky, the snow, the far water under the mist), and the darkest is the
   full weight of 8B; the near ground, the bank and the rocks are given
   their planes before any mark is made.
+* Tones: a tone is laid with the side of a lead, pressed just as hard as
+  the darkening wanted asks (harder over a tone than over paper, which a
+  layer darkens more), and rubbed in with a finger or a stump that is held
+  from one layer to the next (a ``Smudger``): loaded, it gives back what
+  it takes, so that rubbing smooths a tone and leaves it as dark as it
+  was laid.
 * Sky: a 4B laid very lightly on its side, darker towards the top, in three
   crossed layers, each rubbed in with the finger until its grain is gone;
   the glow wiped lighter with the chamois, a few low clouds lifted with the
@@ -108,7 +114,7 @@ import numpy as np
 from murex import CatmullRom, filters, noise, write_png
 from numba import njit
 
-from fusain import Medium, Sheet, Stick, papers, pencils, tools
+from fusain import Medium, Sheet, Smudger, Stick, papers, pencils, tools
 
 HERE = Path(__file__).parent
 WIDTH, HEIGHT = 1500, 1000
@@ -1817,6 +1823,25 @@ WHITE, BLACK = 243.0, 68.0
 #: keeps the lights generous while the darks stay deep.
 LIGHTS = 1.15
 PAPER_SHARE = 0.1
+#: How hard the side of a lead is pressed, and how much darker one layer of
+#: it then leaves this paper, as a share of the range from WHITE to BLACK,
+#: for each lead a tone is laid with (measured). Rubbing a layer in does not
+#: change that: a finger or a stump in the hand gives back what it takes.
+PRESSED = (0.0, 0.03, 0.05, 0.08, 0.12, 0.2, 0.3, 0.45, 0.6, 0.9)
+DARKER = {
+    "2B pencil": (0.0, 0.007, 0.011, 0.019, 0.031, 0.063, 0.114, 0.202, 0.291, 0.443),
+    "4B pencil": (0.0, 0.010, 0.016, 0.028, 0.048, 0.099, 0.176, 0.299, 0.412, 0.583),
+    "6B pencil": (0.0, 0.013, 0.023, 0.040, 0.070, 0.146, 0.254, 0.412, 0.541, 0.713),
+    "8B pencil": (0.0, 0.017, 0.031, 0.057, 0.100, 0.205, 0.347, 0.532, 0.667, 0.826),
+}
+#: Half on its side, a lead lays this many times the tone it lays on its
+#: side.
+HALF_TILTED = 1.4
+#: A layer darkens a tone less than it darkens the paper: over a tone this
+#: dark (the same share) it would add nothing, and less in proportion over
+#: a lighter one; never less than SATURATED of what it adds on paper.
+FULL_TONE = 0.65
+SATURATED = 0.25
 
 
 class Hand:
@@ -1847,6 +1872,11 @@ class Hand:
             gap = filters.box_blur(gap, blur)
         return np.clip(gap, 0.0, 1.0) * mask
 
+    def tone(self) -> np.ndarray:
+        """How dark each pixel is, as last seen: 0 for the paper, 1 for
+        the darkest dark."""
+        return np.clip((WHITE - self.seen) / (WHITE - BLACK), 0.0, 1.0)
+
     def excess(self, mask: np.ndarray, blur: int = 3) -> np.ndarray:
         """How much too dark each pixel of ``mask`` is, 0..1."""
         gap = (self.target - self.seen) / (WHITE - BLACK)
@@ -1863,6 +1893,14 @@ def at(field: np.ndarray, x, y):
     y = np.clip(np.asarray(y, float), 0.0, HEIGHT - 1.001)
     x = np.clip(np.asarray(x, float), 0.0, WIDTH - 1.001)
     return filters.bilinear(field, y, x)
+
+
+def pressed_for(lead: Medium, darker, over: float | np.ndarray = 0.0) -> np.ndarray:
+    """How hard to press the side of ``lead`` for one layer of it to come
+    out ``darker`` (a share of the range from WHITE to BLACK), laid over a
+    tone that is already ``over`` as dark as that."""
+    takes = np.clip(1.0 - np.asarray(over) / FULL_TONE, SATURATED, 1.0)
+    return np.interp(darker / takes, DARKER[lead.name], PRESSED)
 
 
 def lookup(field: np.ndarray):
@@ -1889,23 +1927,35 @@ def shrink(mask: np.ndarray, by: int) -> np.ndarray:
     return filters.max_filter((~mask).astype(np.float32), by) < 0.5 if by > 0 else mask
 
 
+def across(mask: np.ndarray) -> float:
+    """About how many pixels across the parts of ``mask`` are: twice its
+    area over the length of its edge."""
+    edge = mask & ~shrink(mask, 1)
+    return 2.0 * float(mask.sum()) / max(float(edge.sum()), 1.0)
+
+
 def lay_tone(
     hand: Hand, mask, lead, pressure, angle, tilt=1.0, width=None, margin=0.15
 ):
     """One layer of strokes side by side over ``mask``, pressed as
-    ``pressure`` (a field) asks: with the side of the lead by default.
-    The strokes keep ``margin`` of their breadth inside the mask's edge,
-    and thin out where the drawing fades at the edges of the sheet."""
-    breadth = (6.0 if width is None else width) * (1.0 + 4.0 * tilt)
+    ``pressure`` (a field) asks: with the side of the lead by default, its
+    mark no broader than the mask is across, so that a narrow passage
+    takes its tone too. The strokes keep ``margin`` of their breadth
+    inside the mask's edge, and thin out where the drawing fades at the
+    edges of the sheet."""
+    if width is None:
+        width = float(np.clip(across(mask) / (1.0 + 4.0 * tilt), 2.0, 6.0))
+    breadth = width * (1.0 + 4.0 * tilt)
     field = pressure * shrink(mask, int(margin * breadth)) * edge_fade()
     if field.max() > 0.0:
         hand.sheet.shade(box_of(mask), lead, lookup(field), width, angle, tilt=tilt)
 
 
 def rub_area(hand: Hand, mask, tool, pressure, angle, width=None) -> None:
-    """Rub over ``mask`` with a tool, passes to and fro, as hard as
-    ``pressure`` (a number or a field) asks, the tool kept inside the
-    mask's edge so that it does not lift what lies next to it."""
+    """Rub over ``mask`` with a tool (bare, and so clean, or in the hand,
+    with what it has picked up), passes to and fro, as hard as ``pressure``
+    (a number or a field) asks, the tool kept inside the mask's edge so
+    that it does not smear what lies next to it."""
     reach = tool.width if width is None else width
     field = pressure * shrink(mask, int(0.2 * reach))
     if np.max(field) > 0.0:
@@ -2056,13 +2106,16 @@ def lay_marks(hand: Hand, marks: Marks, need, cover=1.0, angle=None, keep=None) 
 
 
 def drag(hand: Hand, starts, lengths, tool, pressure, heading=np.pi / 2, width=None):
-    """Pull a stump or a finger from each start, ``lengths`` pixels."""
+    """Pull a stump or a finger from each start, ``lengths`` pixels: one
+    tool, not cleaned between two pulls, so that once it is loaded it
+    leaves the tone as dark as it found it."""
     rng = hand.rng
+    held = Smudger(tool, width)
     for (x, y), length in zip(starts, lengths, strict=True):
         a = heading + rng.normal(0.0, 0.05)
         end = (x + length * math.cos(a), y + length * math.sin(a))
         mid = (0.5 * (x + end[0]) + rng.normal(0, 1.0), 0.5 * (y + end[1]))
-        hand.sheet.smudge([(x, y), mid, end], tool, pressure, width)
+        hand.sheet.smudge([(x, y), mid, end], held, pressure)
 
 
 # ----------------------------------------------------------------------
@@ -2079,13 +2132,15 @@ def draw_sky(hand: Hand) -> None:
     want = pencil_value(np.clip((PAPER - clear) / (PAPER - DARKEST), 0.0, 1.0))
     rows = np.arange(HEIGHT)[:, None] * np.ones((1, WIDTH))
     region = rows <= CY + 6
-    press = (0.065 + 0.9 * want) * filters.smoothstep(0.004, 0.035, want)
+    finger = Smudger(tools.FINGER, 34.0)
     for k, angle in enumerate((15.0, 75.0, -40.0)):
-        lay_tone(hand, region, pencils.B4, press * (1.0 - 0.1 * k), angle)
+        # (a third of the tone in each layer)
+        press = pressed_for(pencils.B4, want / 3.0, k * want / 3.0)
+        lay_tone(hand, region, pencils.B4, press, angle)
         if k:
-            rub_area(hand, region, tools.FINGER, 0.9, 45.0 * k, width=34.0)
+            rub_area(hand, region, finger, 0.9, 45.0 * k)
     for rub in (-45.0, 0.0):
-        rub_area(hand, region, tools.FINGER, 0.9, rub, width=34.0)
+        rub_area(hand, region, finger, 0.9, rub)
     hand.look()
     sky = hand.mask(SKY, CLOUD)
     lift = hand.excess(region & (st.sky > 0), blur=6)
@@ -2131,17 +2186,20 @@ def draw_ridges(hand: Hand) -> None:
         hand.look()
         for ident, lead, tool, _ in RIDGE_HANDS:
             mask = ridge_mask(hand, ident)
-            need = hand.need(mask)
+            need, dark = hand.need(mask), hand.tone()
+            held = Smudger(tool, 24.0)
             for k, angle in enumerate(angles):
-                press = np.clip(0.12 + 6.0 * need, 0.0, 0.9) * (need > 0.006)
-                lay_tone(hand, mask, lead, press * (1 - 0.3 * k), angle)
-                rub_area(hand, mask, tool, 0.9, angle + 90.0, 24.0)
-                rub_area(hand, mask, tool, 0.9, 0.0, 24.0)
+                # (each layer half of what the tone still wants)
+                press = pressed_for(lead, 0.5 * need, dark + 0.5 * k * need)
+                lay_tone(hand, mask, lead, press * (need > 0.006), angle)
+                rub_area(hand, mask, held, 0.9, angle + 90.0)
+                rub_area(hand, mask, held, 0.9, 0.0)
     for ident, _, _, _ in RIDGE_HANDS:
         mask = ridge_mask(hand, ident)
         soft = filters.box_blur(shrink(mask, 4).astype(np.float64), 10)
+        finger = Smudger(tools.FINGER, 30.0)
         for angle in (90.0, 30.0, -30.0):
-            rub_area(hand, mask, tools.FINGER, 0.8 * soft, angle, 30.0)
+            rub_area(hand, mask, finger, 0.8 * soft, angle)
     hand.look()
     for ident, _, _, point in RIDGE_HANDS:
         mask = ridge_mask(hand, ident)
@@ -2255,24 +2313,16 @@ def block_in(hand: Hand) -> None:
     the boat in bundles of strokes."""
     hand.look()
     water, shingle = hand.mask(WATER), hand.mask(SHINGLE)
-    smooth_tone(hand, water, pencils.B2, (-20.0, 25.0), 2.2, 0.75)
+    smooth_tone(hand, water, pencils.B2, (-20.0, 25.0), 0.75)
     rub_area(hand, water, tools.FINGER, 0.9, 5.0)
     bank_tone(hand)
-    smooth_tone(hand, shingle, pencils.B2, (10.0, -40.0), 2.4, 0.85)
+    smooth_tone(hand, shingle, pencils.B2, (10.0, -40.0), 0.85)
     rock = hand.mask(ROCK)
     hand.look()
-    need = hand.need(rock, 2)
-    for angle in (30.0, -35.0):
-        lay_tone(
-            hand,
-            rock,
-            pencils.B4,
-            np.clip(0.15 + 2.5 * need, 0.0, 0.9),
-            angle,
-            0.6,
-            4.0,
-            0.0,
-        )
+    need, dark = hand.need(rock, 2), hand.tone()
+    for k, angle in enumerate((30.0, -35.0)):
+        press = pressed_for(pencils.B4, 0.5 * need / HALF_TILTED, dark + 0.5 * k * need)
+        lay_tone(hand, rock, pencils.B4, press, angle, 0.6, 4.0, 0.0)
     rub_area(hand, rock, tools.TORTILLON, 0.6, 0.0)
     pine = hand.mask(TRUNK, BOUGH)
     mass = Marks(
@@ -2287,20 +2337,20 @@ def grow(mask: np.ndarray, by: int) -> np.ndarray:
     return filters.max_filter(mask.astype(np.float32), by) > 0.5
 
 
-def smooth_tone(
-    hand: Hand, mask, lead, angles, gain, most, tool=tools.FINGER, tilt=1.0
-):
-    """Two layers laid crossing (with the side of the lead unless ``tilt``
-    says otherwise), each rubbed in two directions: a smooth tone. It runs
-    a little under what is next to it, as a hand lays a tone up to an edge
+def smooth_tone(hand: Hand, mask, lead, angles, most, tool=tools.FINGER):
+    """Two layers laid crossing with the side of the lead, each half of
+    what the tone wants (and pressed no harder than ``most``) and each
+    rubbed in two directions with the same tool: a smooth tone. It runs a
+    little under what is next to it, as a hand lays a tone up to an edge
     and over it, so that no paper is left between."""
     mask = grow(mask, 6) & ~hand.mask(SKY, CLOUD, HILLS, FOREST, RIDGE1, RIDGE2, RIDGE3)
-    need = hand.need(mask, 4)
+    need, dark = hand.need(mask, 4), hand.tone()
+    held = Smudger(tool)
     for k, angle in enumerate(angles):
-        press = np.clip(0.1 + gain * need, 0.0, most) * (1.0 - 0.25 * k)
-        lay_tone(hand, mask, lead, press, angle, tilt, None if tilt else 5.0, 0.08)
-        rub_area(hand, mask, tool, 0.9, angle + 90.0)
-        rub_area(hand, mask, tool, 0.9, angle + 45.0)
+        press = pressed_for(lead, 0.5 * need, dark + 0.5 * k * need)
+        lay_tone(hand, mask, lead, np.minimum(press, most), angle, margin=0.08)
+        rub_area(hand, mask, held, 0.9, angle + 90.0)
+        rub_area(hand, mask, held, 0.9, angle + 45.0)
 
 
 def build_up(hand: Hand) -> None:
@@ -2311,9 +2361,7 @@ def build_up(hand: Hand) -> None:
     water = hand.mask(WATER)
     reflections(hand, water)
     top_light(hand)
-    smooth_tone(
-        hand, hand.mask(SHINGLE), pencils.B4, (25.0, -20.0), 2.5, 0.9, tools.STUMP
-    )
+    smooth_tone(hand, hand.mask(SHINGLE), pencils.B4, (25.0, -20.0), 0.9, tools.STUMP)
     shingle = hand.mask(SHINGLE)
     stones = Marks(
         pencils.B4, 2.0, (4.0, 12.0), (0.3, 0.9), (1, 3), 1.6, "taper", 0.4, 0.1, False
@@ -2368,11 +2416,10 @@ def reflections(hand: Hand, water: np.ndarray, final: bool = False) -> None:
     grade softer than the thing's own) laid on its side in two crossing
     layers as hard as the tone wants and rubbed softly together with the
     finger, and the finger dragged gently down through them, so that each
-    is one soft mirror image. The finger takes some graphite away, so the
-    last round lays a light layer where they still want it: across, and
-    rubbed again, under near things; in vertical strokes under the far
-    shore and the trees. Then the gaps of light across them, and the far
-    water rubbed level."""
+    is one soft mirror image. The last round lays a light layer where they
+    still want it: across, and rubbed again, under near things; in vertical
+    strokes under the far shore and the trees. Then the gaps of light
+    across them, and the far water rubbed level."""
     hand.look()
     for ids, lead in WATER_HANDS:
         mask = water & np.isin(hand.st.mirrored, ids)
@@ -2381,15 +2428,16 @@ def reflections(hand: Hand, water: np.ndarray, final: bool = False) -> None:
         if need.max() < 0.03:
             continue
         soft = filters.box_blur((need > 0.03).astype(np.float64), 10)
+        dark = hand.tone()
         if final:
-            press = np.clip(0.1 + 2.5 * need, 0.0, 0.8) * (need > 0.03)
+            press = np.minimum(pressed_for(lead, need, dark), 0.8) * (need > 0.03)
             lay_tone(hand, mask, lead, press, 0.0 if near else 90.0)
             if near:
                 rub_area(hand, mask, tools.FINGER, 0.5 * soft, 0.0, 18.0)
             continue
-        press = np.clip(0.12 + 3.0 * need, 0.0, 0.9) * (need > 0.03)
-        for angle in (60.0, 120.0):
-            lay_tone(hand, mask, lead, press, angle)
+        for k, angle in enumerate((60.0, 120.0)):
+            press = pressed_for(lead, 0.5 * need, dark + 0.5 * k * need)
+            lay_tone(hand, mask, lead, np.minimum(press, 0.9) * (need > 0.03), angle)
         rub_area(hand, mask, tools.FINGER, 0.6 * soft, 0.0, 18.0)
         pull_down(hand, need, 0.3 if near else 0.45)
     if final:
@@ -2890,11 +2938,12 @@ def bank_tone(hand: Hand) -> None:
     far = hand.mask(SKY, CLOUD, HILLS, FOREST, RIDGE1, RIDGE2, RIDGE3)
     bank = grow(ground, 4) & ~grow(rock, 1) & ~far
     hand.look()
-    need = hand.need(bank, 4)
-    press = np.clip(0.08 + 1.6 * need, 0.0, 0.8)
+    need, dark = hand.need(bank, 4), hand.tone()
+    finger = Smudger(tools.FINGER)
     for k, angle in enumerate((10.0, -30.0)):
-        lay_tone(hand, bank, pencils.B4, press * (1.0 - 0.2 * k), angle, 0.5, 5.0, 0.0)
-        rub_area(hand, bank, tools.FINGER, 0.6, angle + 90.0)
+        press = pressed_for(pencils.B4, 0.5 * need / HALF_TILTED, dark + 0.5 * k * need)
+        lay_tone(hand, bank, pencils.B4, press, angle, 0.5, 5.0, 0.0)
+        rub_area(hand, bank, finger, 0.6, angle + 90.0)
     keep = bank & (edge_fade() > 0.5)
     for lead, cover in ((pencils.B4, 1.4), (pencils.B6, 1.0)):
         hand.look()
@@ -2902,7 +2951,7 @@ def bank_tone(hand: Hand) -> None:
             lead, 2.4, (18.0, 46.0), (0.25, 0.9), (2, 4), 1.1, "taper", 0.06, 0.02
         )
         lay_marks(hand, lie, hand.need(bank, 3), cover, keep=keep)
-        rub_area(hand, bank, tools.FINGER, 0.3, 0.0)
+        rub_area(hand, bank, finger, 0.3, 0.0)
     loose_edge(hand)
 
 

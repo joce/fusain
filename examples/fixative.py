@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 from murex import write_png
 
-from fusain import Sheet, charcoal, papers, pastels, tools
+from fusain import Sheet, Smudger, charcoal, papers, pastels, tools
 
 
 def draw(sheet: Sheet) -> None:
@@ -36,17 +36,19 @@ def rub(sheet: Sheet) -> None:
     for y in (90, 120, 150):
         sheet.smudge([(60, y), (310, y + 4)], tools.STUMP, 0.7)
     sheet.erase([(50, 215), (240, 210)], tools.KNEADED, 0.8)
-    for k in range(18):  # a finger, to and fro across the join
+    finger = Smudger(tools.FINGER)  # (in the hand, it keeps what it picks up)
+    for k in range(18):  # to and fro across the join
         y = 100 + 6 * k
         ends = [(415, y), (525, y + 2)]
-        sheet.smudge(ends, tools.FINGER, 0.6)
-        sheet.smudge(ends[::-1], tools.FINGER, 0.6)
+        sheet.smudge(ends, finger, 0.6)
+        sheet.smudge(ends[::-1], finger, 0.6)
     white = pastels.soft("#f4f1ea")
     for y in (80, 125, 170, 215):
         sheet.stroke([(685, y), (765, y - 10), (845, y + 4)], white, 0.8, 14)
+    finger.clean()
     for y in (170, 215):
         for ends in ([(680, y), (850, y)], [(850, y - 2), (680, y - 2)]):
-            sheet.smudge(ends, tools.FINGER, 0.7)
+            sheet.smudge(ends, finger, 0.7)
 
 
 def main() -> None:
