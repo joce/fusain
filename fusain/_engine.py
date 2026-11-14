@@ -61,7 +61,10 @@ JITTER = 0.3
 #: half a pixel) at the rim.
 RIM = 0.35
 #: A pencil held on its side marks with the side of its lead: at full tilt
-#: the mark is this many times wider than the point's, no more.
+#: the mark is as wide as the length of lead that lies on the paper. For the
+#: exposed lead of a sharpened pencil that is this many times its point; a
+#: medium says its own (:attr:`fusain.Medium.side`), and a stick in the hand
+#: can give the length in pixels.
 SIDE = 5.0
 #: Its weight is then spread over more paper: the share of its reach into
 #: the tooth it loses at full tilt, and how much more of the tip (the share
@@ -486,6 +489,268 @@ def deposit(held, fresh, iy, ix, dv, binding, over, k, s, sheen, wax):
 
 
 @njit(cache=True, error_model="numpy")
+def within_ends(px, py, ends):
+    """How much of the pixel centred at (``px``, ``py``) a stroke cut square
+    at its ends leaves: 1 but behind the line across its start or beyond the
+    line across its end, where it is cut. ``ends`` is [x, y, and heading
+    (x, y) where it starts, 1 if it is cut square there, the same where it
+    ends]."""
+    share = 1.0
+    if ends[4] > 0.0:
+        ahead = (px - ends[0]) * ends[2] + (py - ends[1]) * ends[3]
+        share = min(max(ahead + 0.5, 0.0), 1.0)
+    if ends[9] > 0.0:
+        short = (ends[5] - px) * ends[7] + (ends[6] - py) * ends[8]
+        share = min(share, min(max(short + 0.5, 0.0), 1.0))
+    return share if share > 1e-6 else 0.0  # (what rounding leaves past it)
+
+
+@njit(cache=True, error_model="numpy")
+def bear(
+    tooth,
+    press,
+    cover,
+    held,
+    under,
+    loose,
+    fresh,
+    bonded,
+    drag,
+    k,
+    law,
+    now,
+    step,
+    ends,
+    salt,
+):
+    """Lay what a tip leaves as it slides ``step`` pixels over the paper
+    under it. ``now`` is [x, y, heading (x, y), half-widths across and along, the
+    share of it that is rounded, how far down the tooth it reaches at full
+    pressure, its pressure, the share of a pass it lays on a pixel it bears on
+    for each pixel it slides, the share of what it drags it lays back there
+    for each pixel it slides, and, for a tip landing or
+    lifting, the x and y of where it does so (else NaN): it marks then only
+    the paper it covers there]. ``law`` is [what one pass lays, the
+    thickness that fills the tooth, how much less a film of wax takes of it
+    because it is dry and because it is waxy, how far what the paper holds
+    of it is a film, binding, scattering, sheen, wax]. ``ends`` is as for
+    :func:`within_ends`.
+
+    Returns the volume laid and what of it is left to settle on top."""
+    height, width = tooth.shape
+    x, y, tx, ty, wide, long, rounded = (
+        now[0],
+        now[1],
+        now[2],
+        now[3],
+        now[4],
+        now[5],
+        now[6],
+    )
+    reach, pressure, at_x, at_y = now[7], now[8], now[11], now[12]
+    per_pass, dragged = now[9] * step, now[10] * step
+    lay, full, dry, slides, filmy = law[0], law[1], law[2], law[3], law[4]
+    binding, s, sheen, wax = law[5], law[6], law[7], law[8]
+    bound = max(wide, long)
+    x0 = max(int(math.floor(x - bound)), 0)
+    x1 = min(int(math.ceil(x + bound)), width)
+    y0 = max(int(math.floor(y - bound)), 0)
+    y1 = min(int(math.ceil(y + bound)), height)
+    laid = 0.0
+    lying = 0.0
+    for iy in range(y0, y1):
+        for ix in range(x0, x1):
+            dx, dy = ix + 0.5 - x, iy + 0.5 - y
+            share, edge = tip_bearing(dx, dy, tx, ty, wide, long, rounded)
+            if edge <= 0.0:
+                continue
+            if at_x == at_x:  # (landing or lifting: only where it is put)
+                ax, ay = ix + 0.5 - at_x, iy + 0.5 - at_y
+                if tip_bearing(ax, ay, tx, ty, wide, long, rounded)[1] <= 0.0:
+                    continue
+            edge *= within_ends(ix + 0.5, iy + 0.5, ends)
+            if edge <= 0.0:
+                continue
+            local = pressure * share * streak_at(dx, dy, tx, ty, salt)
+            level = 1.0 - reach * local**REACH_POWER
+            level += JITTER * (unit_noise(ix, iy, salt) - 0.5)
+            # (a tooth pressed flat is level with its peaks)
+            ground = tooth[iy, ix] + (1.0 - tooth[iy, ix]) * press[iy, ix]
+            above = ground + MICRO - level
+            touch = min(max(above / (2.0 * MICRO), 0.0), 1.0) * edge
+            if touch <= 0.0:
+                continue
+            covered = max(cover[iy, ix], touch)
+            cover[iy, ix] = covered
+            there = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
+            thick = (there + fresh[iy, ix, 0] + fresh[iy, ix, 1]) / covered
+            was_set = bonded[iy, ix, 0, SET] + bonded[iy, ix, 1, SET]
+            thick -= (1.0 - FIXED_ROOM) * was_set / covered
+            bearing = min(local, 1.0)
+            passing = per_pass * touch
+            waxed = held[iy, ix, IW] / covered
+            waxy = min(waxed / WAX_FULL, 1.0)
+            if bearing > BURNISH_FROM:
+                firm = (bearing - BURNISH_FROM) / (1.0 - BURNISH_FROM)
+                polish, lay_back = firm * waxy * passing, dragged * touch
+                burnish(held, press, drag, iy, ix, polish, lay_back)
+            # the tip presses some of the dust under it into the paper
+            pressed = min(PRESS_IN * bearing, 1.0) * passing
+            press_dust(held, under, loose, bonded, cover, iy, ix, pressed)
+            room = full * (FILL_LIGHT + (1.0 - FILL_LIGHT) * bearing) - thick
+            if room <= 0.0:
+                continue
+            # (a light pass takes less, but not in proportion: the lead
+            # still slides over all it touches)
+            dv = lay * math.sqrt(bearing * min(above / SPAN, 1.0)) * (room / full)
+            # (to a dry medium wax is slick as soon as it covers the tooth)
+            dv *= 1.0 - dry * min(waxed / COVERS, 1.0) - slides * waxy
+            dv = min(dv * per_pass, room) * touch
+            over = 0.0  # the share of what is held that lies on dust
+            if filmy > 0.0:
+                over = filmy * lying_share(under, loose, bonded, covered, iy, ix)
+            lying += deposit(held, fresh, iy, ix, dv, binding, over, k, s, sheen, wax)
+            laid += dv
+    return laid, lying
+
+
+@njit(cache=True, error_model="numpy")
+def tip_at(now, shape, flat, reach, i, xs, ys, pressures):
+    """Fill ``now`` (see :func:`bear`) for a tip ``flat`` wide at sample
+    ``i``, of ``shape`` [its width, tilt, length of its side]. Returns how
+    far from its centre it reaches."""
+    tilt, side = shape[1], shape[2]
+    wide = 0.5 * (flat + max(side - flat, 0.0) * tilt) + 0.5
+    long = 0.5 * flat + 0.5
+    rounded = RIM + (1.0 - RIM) * TILT_RIM * tilt
+    now[0], now[1] = xs[i], ys[i]
+    now[2], now[3] = heading(xs, ys, i)
+    now[4], now[5], now[6] = wide, long, rounded
+    now[7] = reach * (1.0 - TILT_REACH * tilt)
+    now[8] = pressures[i]
+    # a pixel on the path of the tip's centre gets one pass's worth in all;
+    # and of what it drags, the tip lays this share on a pixel it bears on,
+    # per pixel moved
+    now[9] = 1.0 / (2.0 * long - (rounded * long + 0.5))
+    now[10] = BURNISH_LAY / (2.0 * wide * math.pi * wide * long)
+    now[11], now[12] = math.nan, math.nan
+    return max(wide, long)
+
+
+@njit(cache=True, error_model="numpy")
+def put_down(
+    tooth,
+    press,
+    cover,
+    held,
+    under,
+    loose,
+    fresh,
+    bonded,
+    drag,
+    k,
+    law,
+    now,
+    ends,
+    salt,
+    spacing,
+    way,
+):
+    """Where a tip lands (``way`` -1) or lifts (``way`` 1), at ``now`` (see
+    :func:`bear`): lay on the paper it covers there what it would have laid
+    had it slid onto it from behind (off it ahead), so that all of that gets
+    a full pass, as under the middle of a stroke, and not only the paper
+    ahead of the middle of the tip (behind it). It lays it as it lays a
+    stroke, ``spacing`` pixels at a time. Returns the volume laid and what of
+    it is left to settle."""
+    x, y, tx, ty = now[0], now[1], now[2], now[3]
+    count = int(math.ceil(2.0 * now[5] / spacing))
+    now[11], now[12] = x, y
+    laid, lying = 0.0, 0.0
+    for j in range(1, count + 1):
+        now[0], now[1] = x + way * j * spacing * tx, y + way * j * spacing * ty
+        dv, rest = bear(
+            tooth,
+            press,
+            cover,
+            held,
+            under,
+            loose,
+            fresh,
+            bonded,
+            drag,
+            k,
+            law,
+            now,
+            spacing,
+            ends,
+            salt,
+        )
+        laid += dv
+        lying += rest
+    now[0], now[1], now[11], now[12] = x, y, math.nan, math.nan
+    return laid, lying
+
+
+@njit(cache=True, error_model="numpy")
+def law_of(medium, paper):
+    """What :func:`bear` takes as ``law`` for a medium [scattering per unit
+    volume, softness, binding, the share of wax in it, its sheen] on a paper
+    [depth, bite, give, hold]; and how far down the tooth it reaches at full
+    pressure, held upright."""
+    s, softness, binding, wax = medium[0], medium[1], medium[2], medium[3]
+    depth, bite, give = paper[0], paper[1], paper[2]
+    reach = (REACH_HARD + REACH_SOFT * softness) * (GIVE_NONE + GIVE_FULL * give)
+    # (a level paper is touched all over: any pressure reaches all of it)
+    reach = reach / depth if depth > 1e-6 else 1e9
+    shape = FILL_HARD + (1.0 - FILL_HARD) * softness**1.5
+    full = (
+        FILL
+        * shape
+        * (FILL_FLAT + (1.0 - FILL_FLAT) * min(depth, 2.0))
+        * (0.5 + 0.5 * bite)
+        * (1.0 + PILE * (1.0 - binding))
+        * paper[3]
+    )
+    law = np.empty(9)
+    law[0], law[1] = LAY * shape * (0.5 + bite), full
+    law[2], law[3] = resist_dry(wax), resist_waxy(softness, wax)
+    law[4] = min(wax / STICKS, 1.0)  # how far what the paper holds is a film
+    law[5], law[6], law[7], law[8] = binding, s, medium[4], wax
+    return law, reach
+
+
+@njit(cache=True, error_model="numpy")
+def ends_of(xs, ys, square_start, square_end):
+    """What :func:`within_ends` takes for a stroke through the points
+    (``xs``, ``ys``), cut square at its start and at its end or not."""
+    last = xs.shape[0] - 1
+    ends = np.empty(10)
+    ends[0], ends[1] = xs[0], ys[0]
+    ends[2], ends[3] = heading(xs, ys, 0)
+    ends[4] = square_start
+    ends[5], ends[6] = xs[last], ys[last]
+    ends[7], ends[8] = heading(xs, ys, last)
+    ends[9] = square_end
+    return ends
+
+
+@njit(cache=True, error_model="numpy")
+def ends_near(ends, near, after, before, reach):
+    """Fill ``near`` with the square cuts of ``ends`` (see
+    :func:`ends_of`) that apply to a tip ``after`` pixels along the stroke
+    from its start and ``before`` pixels from its end: a cut only where the
+    tip is within ``reach`` of it, so that a stroke that comes back across
+    the line through one of its ends is not cut there."""
+    for part in range(10):
+        near[part] = ends[part]
+    if after > reach:
+        near[4] = 0.0
+    if before > reach:
+        near[9] = 0.0
+
+
+@njit(cache=True, error_model="numpy")
 def lay_stroke(
     tooth,
     press,
@@ -499,6 +764,7 @@ def lay_stroke(
     ys,
     pressures,
     steps,
+    shapes,
     tip,
     k,
     medium,
@@ -508,12 +774,20 @@ def lay_stroke(
     """Draw one pass of a tip through the points (``xs``, ``ys``), bearing
     with ``pressures`` (0..1) and moving ``steps`` pixels at each.
 
-    ``tip`` is [the width of its flat, the full width of the lead (the flat
-    never gets wider), how fast it wears (:data:`WEAR`, or 0 for a tip that
-    keeps its width), the volume it has worn since it was sharpened, how many
-    times wider than its flat it marks (1 for a point, more on its side), its
-    tilt (0..1)]. It is an ellipse, as long along the stroke as its flat is
-    wide.
+    ``shapes`` holds for each point [the width of the tip's flat there,
+    unworn, its tilt (0..1), the length of its side in pixels (what it marks
+    across the stroke held flat)]. ``tip`` is [the full width of the lead
+    (the flat never gets wider), how fast it wears (:data:`WEAR`, or 0 for a
+    tip that keeps its width), the volume it has worn since it was
+    sharpened, the spacing of the points, whether the stroke is cut square
+    at its start (1) or ends there in the round of the tip (0), the same at
+    its end, the spacing a tip this wide is sampled at (where it lands and
+    lifts it goes at that pace, however short the stroke)]. A square cut
+    applies only within the tip's reach of its end. Its mark is an ellipse,
+    as long along the stroke as its flat is wide, and across it as wide as
+    the flat, and the share ``tilt`` of what its side adds to that. Where it
+    lands and where it lifts, all the paper under it gets a full pass
+    (:func:`put_down`).
 
     ``medium`` is [scattering per unit volume, softness, binding, the share
     of wax in it, its sheen] (its absorption per band is ``k``) and ``paper`` is
@@ -533,123 +807,101 @@ def lay_stroke(
     Returns the volume the tip has lost: what it laid, less what it has
     dragged off the sheet.
     """
-    height, width = tooth.shape
-    flat, lead, wear, worn, spread, tilt = (
-        tip[0],
-        tip[1],
-        tip[2],
-        tip[3],
-        tip[4],
-        tip[5],
-    )
-    s, softness, binding, wax = medium[0], medium[1], medium[2], medium[3]
-    sheen = medium[4]
-    depth, bite, give = paper[0], paper[1], paper[2]
-    reach = (REACH_HARD + REACH_SOFT * softness) * (GIVE_NONE + GIVE_FULL * give)
-    reach *= 1.0 - TILT_REACH * tilt
-    # (a level paper is touched all over: any pressure reaches all of it)
-    reach = reach / depth if depth > 1e-6 else 1e9
-    shape = FILL_HARD + (1.0 - FILL_HARD) * softness**1.5
-    lay = LAY * shape * (0.5 + bite)
-    full = (
-        FILL
-        * shape
-        * (FILL_FLAT + (1.0 - FILL_FLAT) * min(depth, 2.0))
-        * (0.5 + 0.5 * bite)
-        * (1.0 + PILE * (1.0 - binding))
-        * paper[3]
-    )
-    rounded = RIM + (1.0 - RIM) * TILT_RIM * tilt
-    dry, slides = resist_dry(wax), resist_waxy(softness, wax)
-    filmy = min(wax / STICKS, 1.0)  # how far what the paper holds is a film
-    start = flat**3
+    lead, wear, worn, spacing = tip[0], tip[1], tip[2], tip[3]
+    # (where it lands and lifts, the tip goes at its own pace, however short
+    # the stroke: a stroke of no length is a dot)
+    landing = spacing if spacing >= 0.5 * tip[6] else tip[6]
+    law, reach = law_of(medium, paper)
+    ends = ends_of(xs, ys, tip[4], tip[5])
+    near = np.empty(10)  # (the cuts that apply where the tip is now)
+    count = xs.shape[0]
     reached = 0.0  # the furthest the tip has been from its path
     # what a tip that polishes drags along
     drag = np.zeros(HELD)
     total = 0.0
     lying = 0.0  # what the pass leaves lying on the sheet, to settle
-    # where the tip last bore, and how wide it was there
-    at_x, at_y, at_tx, at_ty = xs[0], ys[0], 1.0, 0.0
-    wide, long = 0.5 * flat * spread + 0.5, 0.5 * flat + 0.5
-    for i in range(xs.shape[0]):
-        pressure = pressures[i]
+    # where the tip last bore, and how
+    now = np.zeros(13)
+    tip_at(now, shapes[0], shapes[0, 0], reach, 0, xs, ys, pressures)
+    for i in range(count):
         step = steps[i]
-        if pressure <= 0.0 or step <= 0.0:
+        if pressures[i] <= 0.0 or step <= 0.0:
             continue
-        x, y = xs[i], ys[i]
-        tx, ty = heading(xs, ys, i)
-        at_x, at_y, at_tx, at_ty = x, y, tx, ty
+        flat = shapes[i, 0]
         if wear > 0.0:  # the flat grows with what the tip has laid
-            flat = min((start + wear * max(worn + total, 0.0)) ** (1.0 / 3.0), lead)
-        wide, long = 0.5 * flat * spread + 0.5, 0.5 * flat + 0.5
-        bound = max(wide, long)
+            flat = min((flat**3 + wear * max(worn + total, 0.0)) ** (1.0 / 3.0), lead)
+        bound = tip_at(now, shapes[i], flat, reach, i, xs, ys, pressures)
         reached = max(reached, bound)
-        # a pixel on the path of the tip's centre gets one pass's worth in
-        # all; and of what it drags, the tip lays this share on a pixel it
-        # bears on, per pixel moved
-        per_pass = 1.0 / (2.0 * long - (rounded * long + 0.5))
-        dragged = BURNISH_LAY / (2.0 * wide * math.pi * wide * long)
-        x0 = max(int(math.floor(x - bound)), 0)
-        x1 = min(int(math.ceil(x + bound)), width)
-        y0 = max(int(math.floor(y - bound)), 0)
-        y1 = min(int(math.ceil(y + bound)), height)
-        for iy in range(y0, y1):
-            for ix in range(x0, x1):
-                dx, dy = ix + 0.5 - x, iy + 0.5 - y
-                share, edge = tip_bearing(dx, dy, tx, ty, wide, long, rounded)
-                if edge <= 0.0:
-                    continue
-                local = pressure * share * streak_at(dx, dy, tx, ty, salt)
-                level = 1.0 - reach * local**REACH_POWER
-                level += JITTER * (unit_noise(ix, iy, salt) - 0.5)
-                # (a tooth pressed flat is level with its peaks)
-                ground = tooth[iy, ix] + (1.0 - tooth[iy, ix]) * press[iy, ix]
-                above = ground + MICRO - level
-                touch = min(max(above / (2.0 * MICRO), 0.0), 1.0) * edge
-                if touch <= 0.0:
-                    continue
-                covered = max(cover[iy, ix], touch)
-                cover[iy, ix] = covered
-                there = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
-                thick = (there + fresh[iy, ix, 0] + fresh[iy, ix, 1]) / covered
-                was_set = bonded[iy, ix, 0, SET] + bonded[iy, ix, 1, SET]
-                thick -= (1.0 - FIXED_ROOM) * was_set / covered
-                bearing = min(local, 1.0)
-                passing = per_pass * step * touch
-                waxed = held[iy, ix, IW] / covered
-                waxy = min(waxed / WAX_FULL, 1.0)
-                if bearing > BURNISH_FROM:
-                    firm = (bearing - BURNISH_FROM) / (1.0 - BURNISH_FROM)
-                    polish, lay_back = firm * waxy * passing, dragged * step * touch
-                    burnish(held, press, drag, iy, ix, polish, lay_back)
-                # the tip presses some of the dust under it into the paper
-                pressed = min(PRESS_IN * bearing, 1.0) * passing
-                press_dust(held, under, loose, bonded, cover, iy, ix, pressed)
-                room = full * (FILL_LIGHT + (1.0 - FILL_LIGHT) * bearing) - thick
-                if room <= 0.0:
-                    continue
-                # (a light pass takes less, but not in proportion: the lead
-                # still slides over all it touches)
-                dv = lay * math.sqrt(bearing * min(above / SPAN, 1.0)) * (room / full)
-                # (to a dry medium wax is slick as soon as it covers the tooth)
-                dv *= 1.0 - dry * min(waxed / COVERS, 1.0) - slides * waxy
-                dv = min(dv * per_pass * step, room) * touch
-                over = 0.0  # the share of what is held that lies on dust
-                if filmy > 0.0:
-                    over = filmy * lying_share(under, loose, bonded, covered, iy, ix)
-                lying += deposit(
-                    held, fresh, iy, ix, dv, binding, over, k, s, sheen, wax
+        ends_near(ends, near, i * spacing, (count - 1 - i) * spacing, bound + spacing)
+        lands = i == 0 or pressures[i - 1] <= 0.0
+        lifts = i == count - 1 or pressures[i + 1] <= 0.0
+        # (the first and the last point take half a spacing, which is the
+        # half of the tip ahead of them, behind them; what lands or lifts
+        # there takes the other half too)
+        if count > 1 and ((lands and i == 0) or (lifts and i == count - 1)):
+            step += 0.5 * landing
+        for way in (-1.0, 0.0, 1.0):
+            if way == 0.0:
+                dv, rest = bear(
+                    tooth,
+                    press,
+                    cover,
+                    held,
+                    under,
+                    loose,
+                    fresh,
+                    bonded,
+                    drag,
+                    k,
+                    law,
+                    now,
+                    step,
+                    near,
+                    salt,
                 )
-                total += dv
+            elif (way < 0.0 and lands) or (way > 0.0 and lifts):
+                dv, rest = put_down(
+                    tooth,
+                    press,
+                    cover,
+                    held,
+                    under,
+                    loose,
+                    fresh,
+                    bonded,
+                    drag,
+                    k,
+                    law,
+                    now,
+                    near,
+                    salt,
+                    landing,
+                    way,
+                )
+            else:
+                continue
+            total += dv
+            lying += rest
     if lying > 0.0:  # (else the paper holds it all: nothing to settle)
-        pasty = paste_of(softness, wax)
+        pasty = paste_of(medium[1], medium[3])
         settle_dust(
-            fresh, cover, bonded, under, loose, k, s, sheen, pasty, xs, ys, reached
+            fresh,
+            cover,
+            bonded,
+            under,
+            loose,
+            k,
+            medium[0],
+            medium[4],
+            pasty,
+            xs,
+            ys,
+            reached,
         )
     # what the tip still drags it leaves where it lifts off; only off the
     # sheet does it leave the paper with it
     return total - set_down(
-        held, cover, drag, at_x, at_y, at_tx, at_ty, wide, long, rounded
+        held, cover, drag, now[0], now[1], now[2], now[3], now[4], now[5], now[6]
     )
 
 

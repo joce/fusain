@@ -34,6 +34,8 @@ sheet.stroke([(100, 300), (300, 220), (500, 320)], pencils.B2, pressure=0.6)
 sheet.shade((100, 360, 500, 520), pencils.HB, pressure=0.4)             # an even tone
 sheet.shade((100, 360, 500, 520), pencils.HB, pressure=0.4, angle=-40)  # a second layer, across
 sheet.stroke([(100, 560), (500, 550)], pencils.B4, tilt=1)             # with the side of the lead
+sheet.stroke([(560, 300), (760, 200)], pencils.B2, width=lambda u: 8 - 6 * u)  # a stroke that tapers
+sheet.stroke([(560, 400), (760, 400)], pencils.B2, width=6, ends="flat")      # cut square at its ends
 sheet.save("drawing.png")
 ```
 
@@ -245,6 +247,9 @@ pencil = Stick(pencils.B6, width=2)      # a sharp point, which wears as it draw
 sheet.stroke([(100, 400), (700, 420)], pencil)
 print(pencil.width)                       # wider than 2 now
 pencil.sharpen()
+
+vine = Stick(charcoal.VINE, width=6, lead=6, side=90)   # a piece of charcoal 90 pixels long
+sheet.stroke([(100, 500), (700, 500)], vine, tilt=1)    # laid flat: a band 90 pixels wide
 ```
 
 ![A point that wears](examples/output/tips.png)
@@ -252,6 +257,27 @@ pencil.sharpen()
 One line drawn back and forth down the sheet without sharpening, with a 2H, a
 2B and a 6B, each sharp at the top: the softer the lead, the sooner its point
 is a flat and its line a band.
+
+A stroke ends round, in the outline of its tip, or flat, cut square across
+at the ends of its path; either way it is as strong at its ends as in its
+middle, and a short dab as strong as a long stroke. Its width and its tilt
+can change along it, as its pressure can:
+
+```python
+sheet.stroke(path, pastels.hard("#2b2b3a"), 0.8, 14, ends="flat")    # as long as its path
+sheet.stroke(path, pastels.soft("#f1ede2"), 0.7, [16, 3])            # narrows as it goes away
+sheet.stroke(path, pencils.B6, 0.8, lambda u: 15 - 14 * u)           # tapers to a point
+sheet.stroke(path, Stick(charcoal.VINE, 6, 6, side=110), tilt=lambda u: u)  # turned onto its side
+```
+
+![The shape of a stroke](examples/output/strokes.png)
+
+Top: round and flat ends between the same two ticks, and short dabs of a
+broad soft pastel beside a long stroke of it. Middle: strokes that narrow as
+they recede, a fence going away, and a 6B stroke that tapers. Bottom: a
+piece of vine charcoal laid flat, a band as wide as it is long; the same
+turned from its end onto its side as it goes; and a soft pastel laid flat in
+flat-ended blocks.
 
 ```python
 image = sheet.render()                    # under the default lamp, graphite shines a little

@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from fusain import Paper, Sheet, Stick, charcoal, pencils
+from fusain import Medium, Paper, Sheet, Stick, charcoal, pastels, pencils
 
 LEVEL = Paper(depth=0)  # the width of a line shows exactly
 
@@ -104,6 +104,55 @@ def test_shading_with_a_stick_wears_it_and_fills_the_area():
     assert 14 <= int(np.count_nonzero(wide.pigment()[:, 35:55].sum(axis=1))) <= 18
 
 
+def _band(sheet: Sheet) -> int:
+    """How many rows a stroke across the middle of the sheet marks."""
+    middle = sheet.width // 2
+    return int(np.count_nonzero(sheet.pigment()[:, middle - 10 : middle + 10].sum(1)))
+
+
+def _side_stroke(medium, width=None, tilt=1.0) -> Sheet:
+    sheet = Sheet(300, 200, paper=LEVEL, seed=4)
+    sheet.stroke([(60, 100), (240, 100)], medium, 0.6, width, tilt)
+    return sheet
+
+
+def test_the_side_of_a_stick_is_as_long_as_its_medium_says():
+    # a pencil's side is the lead its sharpening bared: five times its point
+    assert pencils.HB.side == 5 and charcoal.VINE.side > pastels.soft("#c0392b").side
+    assert 19 <= _band(_side_stroke(pencils.B2, 4.0)) <= 23
+    # a piece of vine charcoal laid flat marks a band eight times its end
+    assert 31 <= _band(_side_stroke(charcoal.VINE, 4.0)) <= 35
+    # half way over, half of what the side adds
+    assert 18 <= _band(_side_stroke(charcoal.VINE, 4.0, 0.5)) <= 21
+    # a stick in the hand says how long its side is, in pixels
+    stick = Stick(charcoal.VINE, width=6, lead=6, side=120)
+    assert stick.side == 120 and "side=120" in repr(stick)
+    sheet = Sheet(300, 200, paper=LEVEL, seed=4)
+    laid = sheet.stroke([(60, 100), (240, 100)], stick, 0.6, tilt=1.0)
+    assert 119 <= _band(sheet) <= 123
+    assert laid == pytest.approx(sheet.pigment().sum(dtype=np.float64), rel=1e-4)
+    # by default its medium's side times its point, whatever it has worn
+    assert Stick(charcoal.VINE, width=5, lead=5).side == 40
+    worn = Stick(pencils.B8, width=2, lead=40)
+    worn.worn = 20000.0
+    assert worn.width > worn.side == 10
+    assert _band(_side_stroke(worn)) == _band(_side_stroke(worn, tilt=0.0))
+
+
+def test_a_side_is_checked():
+    with pytest.raises(ValueError, match="side must be at least 1"):
+        Medium(pencils.HB.pigment, 0.5, side=0.5)
+    with pytest.raises(ValueError, match="side must be at least 1"):
+        pencils.HB.with_(side=float("nan"))
+    with pytest.raises(ValueError, match="side must be"):
+        Stick(charcoal.VINE, width=6, lead=6, side=-1)
+    with pytest.raises(ValueError, match="at least its point"):
+        Stick(charcoal.VINE, width=6, lead=6, side=4)
+    stick = Stick(charcoal.VINE, width=4, lead=12, side=10)
+    with pytest.raises(ValueError, match="wider than the side"):
+        stick.sharpen(11)
+
+
 def test_a_stick_checks_what_it_is_given():
     with pytest.raises(TypeError, match="medium must be a Medium"):
         wrong: Any = "HB"
@@ -122,4 +171,4 @@ def test_a_stick_checks_what_it_is_given():
         with pytest.raises(TypeError, match="a Stick has its own width"):
             draw()
     assert not sheet.pigment().any() and stick.worn == 0
-    assert repr(stick) == "Stick(HB pencil, width=2.00, lead=12)"
+    assert repr(stick) == "Stick(HB pencil, width=2.00, lead=12, side=10)"

@@ -212,8 +212,9 @@ class Sheet:
         path,
         medium: Medium | Stick | Pen,
         pressure: Profile = 0.5,
-        width: float | None = None,
-        tilt: float = 0.0,
+        width: Profile | None = None,
+        tilt: Profile = 0.0,
+        ends: Ends = "round",
     ) -> float:
         """Draw one pass of ``medium`` along ``path``.
 
@@ -229,13 +230,30 @@ class Sheet:
         ``width`` is the width of the tip in pixels (4 by default; a stick
         has its own, so it takes none). A pencil point is a few times wider
         than the paper's grain; one narrower than the grain draws a dotted
-        line. ``tilt`` (0 to 1) is how far over the stick is held: 0 draws
-        with its point, 1 with its side, which marks a band several times
-        wider than the point, across the stroke: broader, lighter and
-        grainier, with soft edges.
+        line. Like the pressure it can change along the stroke (one value per
+        point of the path, or a function of u), for a stroke that tapers or
+        that recedes in perspective: it is the width of the tip where the tip
+        is, and what it lays per pixel does not change with it. ``tilt`` (0
+        to 1, also a number or a profile) is how far over the stick is held:
+        0 draws with its point, 1 with its side, which marks a band across
+        the stroke as wide as the side is long (the medium's ``side`` times
+        the width of the tip; a stick's own ``side``): broader, lighter and
+        grainier, with soft edges. A stick turned over as it goes widens its
+        mark from its point to its side.
+
+        ``ends`` is how the stroke ends: ``"round"`` (the default), in the
+        outline of the tip, which reaches half its length past the ends of
+        the path; or ``"flat"``, cut square across at the ends of the path,
+        as the end or the side of a stick drawn and lifted cleanly leaves
+        it: a flat stroke is as long as its path. A pair, such as
+        ``("flat", "round")``, says it for the start and for the end. Either
+        way the tip lays as much where it lands and where it lifts as
+        anywhere along the stroke, so a stroke is as strong at its ends as
+        in its middle, and a short one as strong as a long one.
 
         ``medium`` can also be a :class:`fusain.Pen`, a ballpoint: it has its
-        own width and no side (``tilt`` stays 0), its line is nearly as dark
+        own width and no side (``tilt`` stays 0), and its ends are round;
+        its line is nearly as dark
         at a light touch as at a firm one, and its ink is a stain in the
         paper (:attr:`ink`), under everything else, which no tool takes off.
 
@@ -247,29 +265,45 @@ class Sheet:
         Returns the volume of medium laid, which is what the tip lost.
 
         Raises ValueError or TypeError, before anything is drawn, unless
-        ``width`` is a finite number above 0 (and not given for a stick or a
-        pen), the pressures are finite and ``tilt`` is between 0 and 1.
+        ``width`` is finite and above 0 all along (and not given for a stick
+        or a pen), the pressures are finite, ``tilt`` is between 0 and 1 all
+        along and ``ends`` is ``"round"``, ``"flat"`` or a pair of those.
         """
         if isinstance(medium, Pen):
-            return self._roll(path, medium, pressure, width, tilt)
-        stick = medium if isinstance(medium, Stick) else None
-        if stick is not None:
+            return self._roll(path, medium, pressure, width, tilt, ends)
+        if isinstance(medium, Stick):
             if width is not None:
                 raise TypeError("a Stick has its own width: give none with it")
-            medium, tip = stick.medium, (stick.point, stick.lead, eng.WEAR, stick.worn)
-            width = stick.width
+            stick, tip = medium, (medium.lead, eng.WEAR, medium.worn)
+            # (sampled for the tip as it is now; it wears from its point)
+            width, point = medium.width, medium.point
         elif isinstance(medium, Medium):
-            width = 4.0 if width is None else width
-            tip = (width, width, 0.0, 0.0)
+            stick, tip = None, (math.inf, 0.0, 0.0)
+            width = point = 4.0 if width is None else width
         else:
             raise TypeError(
                 "medium must be a Medium, such as pencils.HB, a Stick or a Pen: "
                 f"{medium!r}"
             )
-        if not 0.0 <= tilt <= 1.0:
+        square = _square(ends)
+        known = medium.medium if isinstance(medium, Stick) else medium
+        line, points, u, knot, spacing, pace = _sample(path, width)
+        bearing = _profile("pressure", pressure, line, u, knot)
+        xs, ys, bearing, steps = eng.as_kernel_arrays(
+            points, np.clip(bearing, 0.0, 1.0), spacing
+        )
+        widths = _profile("width", point, line, u, knot)
+        if not (widths > 0.0).all():
+            raise ValueError("width must be a number of pixels above 0 all along")
+        tilts = spline.evaluate_profile(tilt, u, knot, line.n_knots)
+        tilts = np.broadcast_to(np.asarray(tilts, dtype=np.float64), u.shape)
+        if not ((tilts >= 0.0) & (tilts <= 1.0)).all():
             raise ValueError(f"tilt must be between 0 (point) and 1 (side): {tilt!r}")
-        xs, ys, bearing, steps = self._sampled(path, pressure, width)
-        paper, pigment = self.paper, medium.pigment
+        sides = known.side * widths if stick is None else np.full_like(u, stick.side)
+        shapes = np.ascontiguousarray(np.stack([widths, tilts, sides], axis=1))
+        if len(points) == 1:
+            square = (0.0, 0.0)  # (a dot is the outline of the tip)
+        paper, pigment = self.paper, known.pigment
         laid = float(
             eng.lay_stroke(
                 self.tooth,
@@ -284,15 +318,16 @@ class Sheet:
                 ys,
                 bearing,
                 steps,
-                np.array([*tip, _spread(tilt), tilt], dtype=np.float64),
+                shapes,
+                np.array([*tip, spacing, *square, pace], dtype=np.float64),
                 np.ascontiguousarray(pigment.K, dtype=np.float64),
                 np.array(
                     [
                         pigment.S,
-                        medium.softness,
-                        medium.binding,
-                        medium.wax,
-                        medium.sheen,
+                        known.softness,
+                        known.binding,
+                        known.wax,
+                        known.sheen,
                     ],
                     dtype=np.float64,
                 ),
@@ -306,14 +341,16 @@ class Sheet:
             stick.worn = max(stick.worn + laid, 0.0)
         return laid
 
-    def _roll(self, path, pen: Pen, pressure: Profile, width, tilt) -> float:
+    def _roll(self, path, pen: Pen, pressure: Profile, width, tilt, ends) -> float:
         """One pass of a ballpoint pen along ``path``; see :meth:`stroke`."""
         if width is not None:
             raise TypeError("a Pen has its own width: give none with it")
-        if tilt != 0.0:
+        if not (isinstance(tilt, int | float) and tilt == 0.0):
             raise ValueError(
                 f"a pen has no side to draw with: tilt must be 0: {tilt!r}"
             )
+        if _square(ends) != (0.0, 0.0):
+            raise ValueError(f"a ballpoint's line ends round: {ends!r}")
         xs, ys, bearing, steps = self._sampled(path, pressure, pen.width)
         if self.ink is None or self.inked is None:
             self.ink = np.zeros((self.height, self.width, LOOSE), np.float32)
@@ -598,16 +635,8 @@ class Sheet:
     def _sampled(self, path, pressure: Profile, width: float):
         """``path`` sampled for a tip of ``width``: what the kernels take (see
         :func:`fusain._engine.as_kernel_arrays`), or ValueError."""
-        if not (math.isfinite(width) and width > 0):
-            raise ValueError(f"width must be a number of pixels above 0, got {width!r}")
-        line = spline.as_path(path)
-        spacing = max(0.25, width / 8.0)
-        points, _, u, knot = line.sample(spacing)
-        bearing = spline.evaluate_profile(pressure, u, knot, line.n_knots)
-        if not np.isfinite(bearing).all():
-            raise ValueError("pressure must be finite all along the stroke")
-        if len(points) > 1:
-            spacing = line.length / (len(points) - 1)
+        line, points, u, knot, spacing, _ = _sample(path, width)
+        bearing = _profile("pressure", pressure, line, u, knot)
         return eng.as_kernel_arrays(points, np.clip(bearing, 0.0, 1.0), spacing)
 
     def shade(
@@ -620,6 +649,7 @@ class Sheet:
         spacing: float | None = None,
         hand: float = 1.0,
         tilt: float = 0.0,
+        ends: Ends = "round",
     ) -> float:
         """Shade ``area`` with one layer of strokes side by side, as a hand
         does: none quite straight or quite alike, each lighter where the tip
@@ -637,7 +667,8 @@ class Sheet:
         unsteady the hand is: 1 for a natural one, 0 for ruler-straight
         strokes, evenly spaced and all alike. ``tilt`` is as for
         :meth:`stroke`: with the side of the stick the strokes are broader
-        (and fewer), lighter and softer.
+        (and fewer), lighter and softer. ``ends`` is as for :meth:`stroke`:
+        with ``"flat"`` every stroke stops square at the edge of the area.
 
         Shade again at another angle to cross-hatch or to build tone.
         Returns the volume of medium laid.
@@ -662,24 +693,76 @@ class Sheet:
             )
         if not 0.0 <= tilt <= 1.0:
             raise ValueError(f"tilt must be between 0 (point) and 1 (side): {tilt!r}")
+        # (a round end reaches half the tip past the end of its stroke)
+        flat_start, flat_end = _square(ends)
+        inset = (0.5 * (1.0 - flat_start), 0.5 * (1.0 - flat_end))
         outline = hatching.as_outline(area)
-        broad = width * _spread(tilt)  # how wide a stroke's mark is
+        broad = _breadth(medium, width, tilt)  # how wide a stroke's mark is
         apart = PEN_SPACING if isinstance(medium, Pen) else hatching.SPACING
         gap = apart * broad if spacing is None else spacing
         _check_hatching(width, gap, angle, hand)
         laid = 0.0
         for path, firm, tip in hatching.strokes(
-            outline, angle, width, gap, hand, self._rng, broad
+            outline, angle, width, gap, hand, self._rng, broad, inset
         ):
             along = hatching.bearing(pressure, path, firm, hand)
             # (a stick's tip is as wide as it has worn, whatever the hand)
-            laid += self.stroke(path, medium, along, None if own else tip, tilt)
+            laid += self.stroke(path, medium, along, None if own else tip, tilt, ends)
         return laid
 
     def save(self, path: str, **render_options) -> None:
         """Render and save as PNG."""
         img = self.render(**render_options)
         write_png(path, np.round(img * 255).astype(np.uint8))
+
+
+Ends = str | tuple[str, str]
+#: How a stroke ends: in the outline of its tip, or cut square across.
+ENDS = ("round", "flat")
+
+
+def _square(ends: Ends) -> tuple[float, float]:
+    """Whether a stroke is cut square at its start and at its end (1.0) or
+    not (0.0), or ValueError."""
+    pair = (ends, ends) if isinstance(ends, str) else tuple(ends)
+    if len(pair) != 2 or not all(isinstance(e, str) and e in ENDS for e in pair):
+        raise ValueError(
+            f"ends must be 'round', 'flat' or a pair of those, got {ends!r}"
+        )
+    start, end = pair
+    return float(start == "flat"), float(end == "flat")
+
+
+def _sample(path, width: Profile):
+    """``path`` sampled finely enough for a tip of ``width`` (a number, or a
+    profile along it, for which the narrowest counts): the path, the points,
+    where they are along it (u, and as knots), how far apart they are, and
+    how far apart they would be on a path long enough (the pace of the tip
+    where it lands and lifts). ValueError unless the width is a finite
+    number of pixels above 0."""
+    line = spline.as_path(path)
+    if isinstance(width, int | float | np.number):
+        narrowest = float(width)
+    else:  # (look at it every pixel or so, to find the narrowest)
+        _, _, u, knot = line.sample(1.0)
+        narrowest = float(np.min(_profile("width", width, line, u, knot)))
+    if not (math.isfinite(narrowest) and narrowest > 0):
+        raise ValueError(f"width must be a number of pixels above 0, got {width!r}")
+    pace = spacing = max(0.25, narrowest / 8.0)
+    points, _, u, knot = line.sample(spacing)
+    if len(points) > 1:
+        spacing = line.length / (len(points) - 1)
+    return line, points, u, knot, spacing, pace
+
+
+def _profile(name: str, profile: Profile, line, u, knot) -> np.ndarray:
+    """``profile`` evaluated at the points ``u`` (``knot``) of ``line``, or
+    ValueError unless it is finite all along."""
+    values = spline.evaluate_profile(profile, u, knot, line.n_knots)
+    values = np.broadcast_to(np.asarray(values, dtype=np.float64), u.shape)
+    if not np.isfinite(values).all():
+        raise ValueError(f"{name} must be finite all along the stroke")
+    return values
 
 
 def _check_hatching(width: float, gap: float, angle: float, hand: float) -> None:
@@ -707,9 +790,15 @@ def _in_hand(tool: Tool | Smudger, width: float | None) -> Smudger:
     return Smudger(tool, width)
 
 
-def _spread(tilt: float) -> float:
-    """How many times wider than its point a stick marks at this tilt."""
-    return 1.0 + (eng.SIDE - 1.0) * float(tilt)
+def _breadth(medium: Medium | Stick | Pen, width: float, tilt: float) -> float:
+    """How wide a tip ``width`` wide of ``medium`` marks at this tilt."""
+    if isinstance(medium, Stick):
+        side = medium.side
+    elif isinstance(medium, Medium):
+        side = medium.side * width
+    else:
+        return width  # (a pen has no side)
+    return width + max(side - width, 0.0) * float(tilt)
 
 
 def _size(name: str, value) -> int:

@@ -85,9 +85,8 @@ CAST = np.array([-TO_SUN[0], 0.0, -TO_SUN[2]]) / TO_SUN[1]
 #: What is seen at a pixel that no building covers.
 SKY, ROAD, WALK = 0, 1, 2
 GROUND = (ROAD, WALK)
-#: The widest mark of the end of a stick, in pixels, and the narrowest; the
-#: side of a stick marks a band this many times wider than its end.
-STICK, THIN, SIDE = 13.0, 2.2, 5.0
+#: The widest mark of the end of a stick, in pixels, and the narrowest.
+STICK, THIN = 13.0, 2.2
 #: Points lit at a time (bounds the working memory).
 CHUNK = 8000
 
@@ -955,6 +954,25 @@ def reaches(lo: float, hi: float, rng: np.random.Generator) -> list[tuple]:
     return list(pairwise((lo * (hi / lo) ** steps).tolist()))
 
 
+def swell(u):
+    """0 at either end of a stroke (u 0 and 1), 1 in its middle."""
+    return np.sin(np.pi * np.clip(u, 0.0, 1.0))
+
+
+def leafy(firm: float, wide: float):
+    """The pressure and the width along a dab ``wide`` pixels across at
+    its widest, as functions of u: a leaf, from nothing to its middle and
+    back."""
+
+    def press(u):
+        return firm * swell(u) ** 0.35
+
+    def width(u):
+        return wide * (0.5 + 0.5 * swell(u))
+
+    return press, width
+
+
 def sampler(image: np.ndarray, firm: float, left: int = 0, top: int = 0):
     """The pressure a shading takes from ``image``, a patch of the sheet
     whose corner is at (``left``, ``top``): ``firm`` times its value where
@@ -981,8 +999,10 @@ class Easel:
         #: (the people have their own, so that redrawing them leaves the
         #: trees as they were)
         self.crowd = np.random.default_rng(SEED + 1)
-        self.upward = False  # (which way the strokes of a figure run)
         self.tenants = np.random.default_rng(SEED + 2)
+        #: (a car is drawn softly: its pieces end round, inside their ends,
+        #: not cut square as a building's are)
+        self.softly = False
         self.sheet = Sheet(WIDTH, HEIGHT, paper=PAPER, seed=SEED)
         self.buildings = street(self.rng)
         self.trees = avenue(self.rng)
@@ -1015,16 +1035,18 @@ class Easel:
         the things the scene sees), as the eye sees it."""
         return np.isin(self.at(self.scene.seen, path), face) * inside(path)
 
-    def mark(self, path, colour, press, width, tilt=0.0, hard=False) -> None:
-        """One stroke along a path of the sheet, ``width`` pixels wide,
-        pressed as ``press`` says at each of its points; nothing if it would
-        hardly touch."""
+    def mark(self, path, colour, press, width, tilt=0.0, hard=False, ends="round"):
+        """One stroke along a path of the sheet, ``width`` pixels wide (or
+        as wide as that says at each of its points), pressed as ``press``
+        says at each of its points; nothing if it would hardly touch."""
         press = np.broadcast_to(np.asarray(press, dtype=np.float64), (len(path),))
         if press.max() < 0.06:
             return
-        tip = float(max(width, THIN) / (1.0 + (SIDE - 1.0) * tilt))
         chalk = stick(colour, hard)
-        self.sheet.stroke(Polyline(path), chalk, press.tolist(), tip, tilt)
+        wide = np.maximum(np.asarray(width, dtype=np.float64), THIN)
+        tip = wide / (1.0 + (chalk.side - 1.0) * tilt)
+        tips = float(tip) if tip.ndim == 0 else tip.tolist()
+        self.sheet.stroke(Polyline(path), chalk, press.tolist(), tips, tilt, ends)
 
     def rail(
         self,
@@ -1038,31 +1060,44 @@ class Easel:
         hard: bool = False,
         worn: float = 0.0,
         square: bool = False,
+        inside: bool = False,
+        leaf: bool = False,
     ) -> None:
-        """One straight stroke between two points of the street. ``colours``
+        """One straight stroke between two points of the street, ``width``
+        pixels wide halfway along it (as the eye sees it: narrower where it
+        is farther off). ``colours``
         is one colour, or two: the one for where the sun falls and the one
         for the shade (either may be None, to leave that part alone). With a
         ``face``, the stroke is only laid where the eye sees that face, and
         takes its light from the scene; without, it is a thing standing in
         the street, lit unless a building shades it. ``worn`` breaks it up;
-        ``square`` stops its round ends short, at the two points."""
+        ``square`` cuts it square at the two points; ``inside`` keeps its
+        round ends inside them; ``leaf`` draws it as a
+        fallen leaf, narrower toward its tips."""
         ends = np.array(ends, dtype=np.float64)
         long = float(np.hypot(*np.diff(project(ends), axis=0)[0]))
-        inset = min(0.5 * width / max(long, 1e-6), 0.4) if square else 0.0
+        inset = min(0.5 * width / max(long, 1e-6), 0.4) if inside else 0.0
         u = np.linspace(0.0, 1.0, int(np.clip(long / 4.0, 2, 60)) + 1)
         share = inset + (1.0 - 2.0 * inset) * u
         points = ends[0] + (ends[1] - ends[0]) * share[:, None]
         path = project(points)
+        # (as far off as each point is)
+        z = np.maximum(points[:, 2], 0.5)
+        widths = width * math.sqrt(float(z[0] * z[-1])) / z
         # (lighter where the stick lands and where it lifts)
-        landing = 0.15 if square else 0.4
+        landing = 0.15 if square or inside else 0.4
         ease = np.sqrt(np.sin(np.pi * np.clip(u, 0.05, 0.95)))
         press = firm * (1.0 - landing * (1.0 - ease))
+        if leaf:
+            # (a fleck: narrower toward its tips)
+            widths = widths * (0.7 + 0.3 * swell(u))
         if worn:
             press = press * (1.0 - worn * self.rng.random(len(u)))
         if face is not None:
             press = press * self.on(path, face)
+        how = (widths, tilt, hard, "flat" if square else "round")
         if not isinstance(colours, tuple):
-            self.mark(path, colours, press, width, tilt, hard)
+            self.mark(path, colours, press, *how)
             return
         if face is None:
             lit = sunlit(self.scene.boxes, points)
@@ -1070,19 +1105,21 @@ class Easel:
             lit = self.at(self.scene.lit, path)
         for colour, part in zip(colours, (lit, 1.0 - lit), strict=True):
             if colour is not None:
-                self.mark(path, colour, press * part, width, tilt, hard)
+                self.mark(path, colour, press * part, *how)
 
     def panel(self, low, high, colours, firm: float, face=None) -> None:
         """A flat piece of something between two of its edges, each given by
         its two ends: strokes that run with the edges and stop square at the
-        sides, as many side by side as the piece asks for."""
+        sides (softly, for a car), as many side by side as the piece asks for."""
         low = np.asarray(low, dtype=np.float64)
         high = np.asarray(high, dtype=np.float64)
         tall = float(np.hypot(*(project(high) - project(low)).T).mean())
         rows = max(math.ceil(tall / STICK), 1)
         for r in range(rows):
             ends = low + (r + 0.5) / rows * (high - low)
-            self.rail(ends, colours, firm, 1.12 * tall / rows, face, square=True)
+            width = 1.12 * tall / rows
+            soft = self.softly
+            self.rail(ends, colours, firm, width, face, square=not soft, inside=soft)
 
     def slab(self, x, y, z: float, colours, firm: float) -> None:
         """An upright piece of something that faces the eye, ``z`` away:
@@ -1704,7 +1741,7 @@ class Ground(Fronts):
         width = 1.1 * wide * rise(middle) / count
         for k in range(count):
             ends = lengthwise(across[0] + (k + 0.5) / count * wide, 0.0, *along)
-            self.rail(ends, colours, firm, width, GROUND, worn=worn)
+            self.rail(ends, colours, firm, width, GROUND, worn=worn, square=True)
 
     def cross_patch(self, across, along, pair, firm) -> None:
         """A patch of the ground in strokes that run across the street."""
@@ -1715,7 +1752,8 @@ class Ground(Fronts):
         for k in range(count):
             z = 1.0 / (near + (k + 0.5) / count * (away - near))
             ends = level(across[0], across[1], 0.0, z)
-            self.rail(ends, colours, firm, 1.1 * tall / count, GROUND, worn=0.4)
+            width = 1.1 * tall / count
+            self.rail(ends, colours, firm, width, GROUND, worn=0.4, square=True)
 
     def ironwork(self) -> None:
         """Tar seams down the roadway, and the covers of manholes: rings of
@@ -1769,7 +1807,7 @@ class Ground(Fronts):
             width = float(np.clip(0.055 * rise(spot[2]), THIN, 7.0))
             firm = float(self.rng.uniform(0.5, 0.8))
             ends = (spot - reach, spot + reach)
-            self.rail(ends, distant(colours, spot[2]), firm, width, GROUND)
+            self.rail(ends, distant(colours, spot[2]), firm, width, GROUND, leaf=True)
 
 
 class Life(Ground):
@@ -1846,7 +1884,10 @@ class Life(Ground):
             reach = 0.5 * dab * rng.uniform(0.6, 1.6)
             reach = reach * np.array([math.cos(turn), math.sin(turn)])
             path = [places[k] - reach, places[k] + reach]
-            self.sheet.stroke(path, stick(colour), float(rng.uniform(0.5, 0.85)), dab)
+            firm = float(rng.uniform(0.5, 0.85))
+            # (a dab swells from nothing where the stick lands and lifts)
+            press, shape = leafy(firm, dab)
+            self.sheet.stroke(path, stick(colour), press, shape)
 
     def car(self, car: Car) -> None:
         """A car, nose toward the eye: its shadow, the flank the eye sees,
@@ -1854,12 +1895,14 @@ class Life(Ground):
         pair = distant(PAINTS[car.paint], car.z)
         sides = (car.x - 0.5 * car.wide, car.x + 0.5 * car.wide)
         self.car_shadow(car, sides)
+        self.softly = True
         if car.x > EYE[0]:
             self.flank(car, sides[0], pair)
         else:  # (its other flank is turned from the sun)
             self.flank(car, sides[1], (pair[1], pair[1]))
         self.nose(car, pair, sides)
         self.cabin(car, pair, sides)
+        self.softly = False
 
     def car_shadow(self, car: Car, sides) -> None:
         """The shadow a car lays on the sunlit roadway, beside it and beyond
@@ -1964,12 +2007,8 @@ class Life(Ground):
             self.speck(fig, body, dress)
             return
         near = size >= 26.0
-        # (a second layer over the first, fixed, covers it; laid the other
-        # way, it is firm at the ends where the first lifted)
-        for self.upward in (False, True):
-            self.masses(fig, body, dress, near)
-            self.sheet.fix()
-        self.upward = False
+        self.masses(fig, body, dress, near)
+        self.sheet.fix()
         self.carried(fig, body, dress)
         self.modelled(fig, body, dress, near)
         self.head(fig, body, dress, near)
@@ -1993,7 +2032,7 @@ class Life(Ground):
         if fig.scarf:
             scarf = distant(COATS[fig.scarf], fig.z)
             ends = ((face - 0.08, body.neck), (face + 0.08, body.neck))
-            self.part(fig, ends, scarf, 0.85, 0.07, square=False)
+            self.part(fig, ends, scarf, 0.85, 0.07, inside=False)
             ends = ((face + 0.05, body.neck), (face + 0.06, body.neck - 0.2))
             self.part(fig, ends, scarf, 0.8, 0.06)
 
@@ -2018,11 +2057,9 @@ class Life(Ground):
     def part(self, fig, ends, colours, firm: float, wide: float, **how) -> None:
         """One stroke of a figure between two points of the plane it stands
         in (see :class:`Frame`), ``wide`` metres wide, its round ends kept
-        inside them."""
+        inside them unless ``inside=False``."""
         points = [(fig.x + u, y, fig.z) for u, y in ends]
-        if self.upward:
-            points.reverse()
-        how.setdefault("square", True)
+        how.setdefault("inside", True)
         self.rail(points, colours, firm, wide * rise(fig.z), **how)
 
     def figure_shadow(self, fig: Figure, body: Frame) -> None:
@@ -2058,7 +2095,7 @@ class Life(Ground):
         way = fig.across
         toe = (foot[0] + 0.1 * way, foot[1] - 0.02) if way else (foot[0], 0.02)
         heel = (foot[0] - 0.03 * way, foot[1]) if way else (foot[0], 0.05)
-        self.part(fig, (heel, toe), dress["shoe"], 0.85, 0.075, square=False)
+        self.part(fig, (heel, toe), dress["shoe"], 0.85, 0.075, inside=False)
 
     def coat(self, fig: Figure, body: Frame, dress, near: bool) -> None:
         """The coat: a block of colour from the collar to the hem, broadest
@@ -2097,7 +2134,7 @@ class Life(Ground):
         self.part(fig, (elbow, hand), dress["sleeve"], 0.8, 0.9 * wide)
         if fig.hands != "pockets":
             end = (hand[0], hand[1] - 0.03)
-            self.part(fig, (hand, end), dress["skin"], 0.8, 0.075, square=False)
+            self.part(fig, (hand, end), dress["skin"], 0.8, 0.075, inside=False)
 
     def carried(self, fig: Figure, body: Frame, dress) -> None:
         """What someone carries: a bag on a strap across the body, a canvas
@@ -2106,7 +2143,7 @@ class Life(Ground):
         if fig.hands == "bag":
             bag = (side * (body.chest + 0.01), 0.55 * t)
             strap = ((-side * 0.6 * body.chest, body.neck - 0.03), bag)
-            self.part(fig, strap, both(LEATHER, INK, 0.2), 0.75, 0.035, square=False)
+            self.part(fig, strap, both(LEATHER, INK, 0.2), 0.75, 0.035, inside=False)
             low = (bag[0], 0.45 * t)
             self.part(fig, (bag, low), distant(LEATHER, fig.z), 0.85, 0.2)
         elif fig.hands == "tote":
@@ -2142,7 +2179,6 @@ class Life(Ground):
         oval = ((face, top), (face, top - head))
         tone = hair if fig.facing == "away" else skin
         self.part(fig, oval, tone, 0.9, 0.66 * head)
-        self.part(fig, oval[::-1], tone, 0.8, 0.6 * head)
         if near or rise(fig.z) > 18.0:
             self.hair(fig, body, hair)
         if near and fig.facing != "away":
@@ -2163,13 +2199,13 @@ class Life(Ground):
             (face - 0.04 - 0.03 * way, top - 0.03),
             (face + 0.04 - 0.03 * way, top - 0.03),
         )
-        self.part(fig, cap, hair, 0.85, 0.3 * head, square=False)
+        self.part(fig, cap, hair, 0.85, 0.3 * head, inside=False)
         if way:
             back = (
                 (face - 0.04 * way, top - 0.05),
                 (face - 0.05 * way, top - 0.6 * head),
             )
-            self.part(fig, back, hair, 0.85, 0.1, square=False)
+            self.part(fig, back, hair, 0.85, 0.1, inside=False)
         if fig.cut != "long":
             return
         for side in (-1.0, 1.0) if not way else (-way,):

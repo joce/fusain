@@ -526,10 +526,14 @@ class Scene:
                 if box.part in parts and mine.sum() >= 12:
                     yield Face(ident(index, axis), axis, box), mine
 
-    def stroke(self, start, end, touch: Touch, image=None, wobble: float = 0.5):
+    def stroke(
+        self, start, end, touch: Touch, image=None, wobble: float = 0.5, ends="round"
+    ):
         """One stroke from ``start`` to ``end`` on the sheet, pressed as
         firmly as ``touch`` says times what ``image`` holds along it, and
-        lifted where that is nothing."""
+        lifted where that is nothing; ``ends`` as for :meth:`Sheet.stroke`.
+        Where ``image`` cuts it short (the edge of a face), it stops square,
+        so that its round end does not lie over the face next to it."""
         start, end = np.asarray(start, dtype=float), np.asarray(end, dtype=float)
         rubs = isinstance(touch.what, tools.Tool)
         for a, b in runs(image, start, end):
@@ -539,8 +543,12 @@ class Scene:
             path = wavering(a, b, self.rng, wobble)
             if isinstance(touch.what, tools.Tool):
                 self.sheet.smudge(path, touch.what, bearing, touch.width)
-            else:
-                self.sheet.stroke(path, touch.what, bearing, touch.width)
+                continue
+            cut = (
+                "flat" if np.hypot(*(a - start)) > 0.5 else ends,
+                "flat" if np.hypot(*(b - end)) > 0.5 else ends,
+            )
+            self.sheet.stroke(path, touch.what, bearing, touch.width, ends=cut)
 
     def strokes(self, lines, touch: Touch, image, reach: float, wobble: float):
         """A stroke along each of ``lines``, in pieces no longer than about
@@ -727,8 +735,9 @@ def draw_strip(scene: Scene, face: Face, mine: np.ndarray, strip) -> None:
             0.4 if rng.random() < 0.1 else 1.0
         )  # (a blind drawn, a pane that glints)
         firm = 0.8 * clear * rng.uniform(0.75, 1.1) * blind
+        # (a pane is square: the stick stops square at its sill and head)
         ends = face.point(at, floor + 1.3), face.point(at, floor + 2.8)
-        scene.stroke(*ends, stick(firm, 0.85 * tip), mine, wobble=0.0)
+        scene.stroke(*ends, stick(firm, 0.85 * tip), mine, wobble=0.0, ends="flat")
 
 
 def draw_windows(scene: Scene) -> None:

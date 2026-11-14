@@ -139,9 +139,15 @@ spectra.
 A tool is a tip plus, usually, a medium.
 
 - **Tilt** (built). A stick held on its side marks with the side of its lead:
-  an ellipse across the stroke, up to five times wider than the point, whose
-  weight is spread over more paper, so the mark is lighter, grainier and soft
-  at the edges.
+  an ellipse across the stroke, as wide as the length of the side that lies
+  on the paper, whose weight is spread over more paper, so the mark is
+  lighter, grainier and soft at the edges. How long the side is depends on
+  the stick: the lead a pencil's sharpening bared is about five times its
+  point, a piece of vine charcoal laid flat eight times its end. A medium
+  says it as a multiple of the point (`Medium.side`), and a `Stick` can give
+  it in pixels (`Stick(charcoal.VINE, width=6, lead=6, side=90)`), for a
+  band as wide as the stick is long. Part way over, the mark is the point
+  and that share of what the side adds.
 - **Wear** (built). A `Stick` is a medium in the hand, with the state of its
   tip. A point is a cone, which loses volume as the cube of where it is cut:
   the cube of the flat's width grows with the volume the tip has laid, up to
@@ -176,9 +182,33 @@ A tool is a tip plus, usually, a medium.
 
 ## One step of a stroke
 
-A stroke is sampled along its path as in oilpaint; pressure can vary along it
-(tilt and speed are still to come). At each step, for each pixel under the
-tip:
+A stroke is sampled along its path as in oilpaint; pressure, the width of
+the tip and its tilt can vary along it (speed is still to come). A width
+that changes draws a stroke that tapers or recedes in perspective; a tilt
+that changes turns a stick from its point onto its side as it goes.
+
+The tip lays as it slides, so a pixel gets a pass's worth from all the
+places of the tip that cover it. Under the middle of a stroke that is the
+whole tip going over it; where the tip lands, the paper under its back half
+would get less, from nothing at its back edge, and the same where it lifts.
+That is not how a stick behaves: it is put down with all of its face
+bearing and lifted the same way, and the end of a stroke is the outline of
+its tip at the full tone of the stroke (the hand makes it lighter there by
+bearing less, and a shading does). So where the tip lands and where it
+lifts, the paper it covers is laid as though the tip had slid onto it from
+behind and off it ahead, and a stroke is as strong at its ends as in its
+middle, a short one (a head, a hand) as a long one, and a dot is one pass of
+the tip. The first build left this out: the ends of a stroke faded out over
+a whole width of the tip, and a short stroke of a broad tip reached a third
+of the tone of a long one.
+
+A stroke ends round, in the outline of its tip, which reaches half the tip
+past the ends of its path; or flat, cut square across at the ends of its
+path, as the end or the side of a stick drawn and lifted cleanly leaves it,
+so that a flat stroke is exactly as long as its path. A shading's strokes
+end round half a tip short of the edge of the area, or flat at it.
+
+At each step, for each pixel under the tip:
 
 1. **Reach.** Pressure, the softness of the medium and the give of the paper
    set how far down the tooth the tip gets. A tip is flat across with a
@@ -336,7 +366,9 @@ sheet = Sheet(1200, 800, paper=papers.CARTRIDGE, seed=1)
 sheet.stroke([(100, 300), (300, 220), (500, 320)], pencils.HB, pressure=0.4)
 sheet.shade((100, 360, 500, 520), pencils.HB, pressure=0.4, angle=30)
 sheet.stroke([(100, 560), (500, 550)], pencils.B4, tilt=1)   # the side of the lead
-sheet.stroke(path, pastels.soft("#c0392b"), pressure=(0.2, 0.8), side=True)
+sheet.stroke(path, pastels.soft("#c0392b"), pressure=(0.2, 0.8), tilt=1)
+sheet.stroke(path, pencils.B2, width=lambda u: 8 - 6 * u)  # tapers
+sheet.stroke(path, pastels.hard("#2c3e50"), width=6, ends="flat")  # cut square
 sheet.smudge(path, tools.STUMP)
 sheet.erase(path, tools.KNEADED)
 sheet.rub(area, tools.FINGER)        # a whole area, to and fro

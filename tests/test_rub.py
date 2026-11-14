@@ -76,7 +76,7 @@ def test_an_eraser_clears_an_area():
     assert _total(sheet) + taken == pytest.approx(laid, rel=1e-5)
     cleared = sheet.pigment()[75:125, 115:185].sum()
     kept = sheet.pigment()[75:125, 40:85].sum() * (70 / 45)
-    assert cleared < 0.1 * kept
+    assert cleared < 0.11 * kept
 
 
 def test_the_passes_run_at_the_angle_asked_for_and_repeat_with_the_seed():

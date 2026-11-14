@@ -6,8 +6,71 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- The side of a stick is as long as the stick. A `Medium` says how many
+  times its point the side of a stick of it marks held flat (`side`: 5 for
+  pencils, as before, and for soft pastel; 6 for compressed charcoal and
+  hard pastel; 8 for vine charcoal), and a `Stick` can give the length of
+  its side in pixels (`Stick(charcoal.VINE, width=6, lead=6, side=90)` lays
+  a band 90 pixels wide at `tilt=1`). By default a stick's side is its
+  medium's `side` times its sharp point, and no longer grows as the point
+  wears; part way over, a stick marks its tip and that share of what the
+  side adds. `repr(Stick)` shows the side.
+- A stroke's width and tilt can change along it, as its pressure can: one
+  value per point of the path, or a function of u
+  (`sheet.stroke(path, pencils.B2, width=lambda u: 8 - 6 * u)`), for a
+  stroke that tapers or recedes in perspective, or a stick turned onto its
+  side as it goes. What the tip lays on the paper under it does not change
+  with its width.
+- `Sheet.stroke(ends=...)` and `Sheet.shade(ends=...)`: `"round"` (the
+  default), in the outline of the tip, or `"flat"`, cut square across at
+  the ends of the path, so that a stroke is as long as its path; or a pair,
+  one for each end. A cut applies only within the tip's reach of its end,
+  so a path that comes back across the line through one of its ends is not
+  cut there.
+
+### Fixed
+
+- A stroke is as strong at its ends as in its middle. The tip laid only as
+  it slid on, so where it landed the paper under the back half of it got
+  less, from nothing at its edge, and the same where it lifted: the ends of
+  a stroke faded out over a whole width of the tip, the end of its path got
+  half the tone of its middle, and a short stroke of a broad tip (a head, a
+  hand) reached a third of it and a dot a fifth. Now the paper the tip
+  covers where it lands and where it lifts is laid as though it had slid
+  onto it and off it, and the ends of a stroke are the outline of its tip at
+  the tone of the stroke. Where it lands and lifts the tip goes at the pace a tip
+  of its width is sampled at, however short the stroke, so a stroke of
+  almost no length costs and lays what a dot does. The strokes of `Sheet.shade` end half a tip short
+  of the edge of the area when their ends are round, so that a shading stays
+  inside it (it used to spill out by half a tip, faintly).
+
+### Examples
+
+- `examples/strokes.py` (`strokes.png`): round and flat ends, short dabs,
+  strokes that recede and taper, and the side of a stick of charcoal and of
+  pastel.
+- Every image is regenerated. Shadings end crisply at the edge of their
+  area. `broadway.py` cuts its fronts, awnings and the bars of the crossing
+  square at their ends instead of insetting round ends by half a width
+  (a car's pieces keep round ends inside them, so that it does not come out
+  in blocks), narrows every stroke that runs into the distance as it goes,
+  and draws its figures in one layer (two, laid opposite ways with a fix
+  between, made up for the weak ends of short strokes). Its leaves are
+  shaped by profiles: each dab of foliage swells from nothing where the
+  stick lands to its middle and back (pressure and width), and a fallen
+  leaf narrows toward its tips, so that the trees stay soft now that a
+  stroke is full to its ends. `deco.py` stops its windows square, and a
+  stroke that the edge of a face cuts short stops square at the edge, so
+  that its round end no longer greys the lit face next to it.
+  `stilllife.png` (ballpoint) and `papers.png` are unchanged.
+
 ### Changed
 
+- `lay_stroke` (in `fusain._engine`) takes the width, tilt and side of the
+  tip at each point, and the spacing of the points and how the stroke ends.
+  Every picture changes where strokes end; see the examples.
 - `Sheet.rub` carries what the tool picks up from one pass to the next, and
   over the stretches where the pressure is nothing and the tool is lifted.
   Each pass used to start clean and take its load away, which lifted a pale
