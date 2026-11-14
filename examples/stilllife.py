@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from murex import filters, write_png
+from murex import filters, noise, write_png
 from numba import njit
 
 from fusain import Sheet, papers, pens
@@ -62,27 +62,10 @@ def smoothstep(a, b, x):
     return t * t * (3 - 2 * t)
 
 
-def value_noise(x, seed):
-    table = np.random.default_rng(seed).random(4096)
-    i = np.floor(x).astype(np.int64)
-    t = x - i
-    t = t * t * (3 - 2 * t)
-    return table[i % 4096] * (1 - t) + table[(i + 1) % 4096] * t
-
-
 def noise2(x, y, seed):
     """Smooth value noise in two dimensions (0 to 1)."""
     rng = np.random.default_rng(seed)
-    table = rng.random((256, 256))
-    xi, yi = np.floor(x).astype(np.int64), np.floor(y).astype(np.int64)
-    tx, ty = smoothstep(0, 1, x - xi), smoothstep(0, 1, y - yi)
-
-    def at(i, j):
-        return table[(yi + j) % 256, (xi + i) % 256]
-
-    top = at(0, 0) * (1 - tx) + at(1, 0) * tx
-    bottom = at(0, 1) * (1 - tx) + at(1, 1) * tx
-    return top * (1 - ty) + bottom * ty
+    return noise.lattice_noise(np.asarray(x, float), np.asarray(y, float), rng)
 
 
 def catmull_rom(pts, n):
@@ -688,9 +671,9 @@ def cloth_point(u, v):
     left = np.interp(z_top, [CLOTH_BACK, TABLE_FRONT], CLOTH_LEFT)
     x = left + u * (CLOTH_RIGHT - left)
     lift, _ = folds_at(x, z_top)
-    noise = 0.3 * (noise2(x / 9, z_top / 9, 3) - 0.5)
-    noise += 0.12 * (noise2(x / 2.5 + 40, z_top / 4.0, 6) - 0.5)
-    y_top = CLOTH_Y + (lift + noise) * flat_under(x, z_top)
+    ripple = 0.3 * (noise2(x / 9, z_top / 9, 3) - 0.5)
+    ripple += 0.12 * (noise2(x / 2.5 + 40, z_top / 4.0, 6) - 0.5)
+    y_top = CLOTH_Y + (lift + ripple) * flat_under(x, z_top)
     past = np.clip(CLOTH_BACK + v - TABLE_FRONT, 0, None)
     arc = np.minimum(past, EDGE_R * np.pi / 2) / EDGE_R
     drop = np.clip(past - EDGE_R * np.pi / 2, 0, None)
@@ -2440,8 +2423,8 @@ def draw_contour(h: Hatcher, line, weight, pens_):
         n = len(run)
         u = np.linspace(0, 1, n)
         taper = np.clip(np.minimum(u, 1 - u) * n / 8, 0, 1) ** 0.7
-        noise = 0.8 + 0.4 * value_noise(np.arange(n) / 9.0 + h.rng.uniform(0, 99), 4)
-        press = w * taper * noise
+        waver = 0.8 + 0.4 * noise.value_noise_1d(n, 9.0, h.rng)
+        press = w * taper * waver
         for k, pen in enumerate(pens_):
             if k and press.max() < 0.3:
                 break
