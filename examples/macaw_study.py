@@ -48,6 +48,7 @@ WIDTH, HEIGHT = 1100, 1540
 UNIT = 124.0
 #: Where the eye lands on the sheet.
 EYE_AT = (300.0, 215.0)
+SEED = 11
 #: Toward the light (x right, y up, z toward the viewer): above, front-left.
 LIGHT = np.array([-0.5, 0.62, 0.6]) / np.linalg.norm([-0.5, 0.62, 0.6])
 
@@ -56,7 +57,7 @@ LIGHT = np.array([-0.5, 0.62, 0.6]) / np.linalg.norm([-0.5, 0.62, 0.6])
 
 #: The bill's chord: from the culmen's base, 1.38 long, turned 102 degrees
 #: down from the line eye-to-base.
-CHORD, HINGE = 1.38, 102.0
+CHORD, HINGE = 1.26, 102.0
 #: The culmen, in the bill's own frame (along the chord, across it: negative
 #: is forward of it), averaged over seven photographs.
 CULMEN = [
@@ -197,6 +198,27 @@ class Patch:
     normals: np.ndarray
     flow: np.ndarray
     part: str
+    #: The height grid it was made from: (x0, y0, step, heights), in the
+    #: plane of ``basis`` (origin, x, y, z directions).
+    grid: tuple | None = None
+    basis: tuple | None = None
+
+    def lift(self, xy) -> np.ndarray:
+        """Points (N, 2) of its plane, lifted onto its near surface (N, 3),
+        in the frame it was made in."""
+        x0, y0, step, h = self.grid
+        xy = np.asarray(xy, dtype=np.float64)
+        fx = np.clip((xy[:, 0] - x0) / step, 0, h.shape[1] - 1.001)
+        fy = np.clip((xy[:, 1] - y0) / step, 0, h.shape[0] - 1.001)
+        ix, iy = fx.astype(int), fy.astype(int)
+        ax, ay = fx - ix, fy - iy
+        z = (h[iy, ix] * (1 - ax) * (1 - ay) + h[iy, ix + 1] * ax * (1 - ay)
+             + h[iy + 1, ix] * (1 - ax) * ay + h[iy + 1, ix + 1] * ax * ay)
+        o, ex, ey, ez = (np.asarray(v, dtype=np.float64) for v in self.basis)
+        return o + np.outer(xy[:, 0], ex) + np.outer(xy[:, 1], ey) + np.outer(z, ez)
+
+
+IDENTITY = ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
 
 
 def inside(poly: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -260,17 +282,26 @@ def mirror_z(points: np.ndarray, normals: np.ndarray):
     return np.concatenate([points, points * flip]), np.concatenate([normals, normals * flip])
 
 
-def mandible(outline, ridge, widths, part, round_ridge, round_edge, step=0.004):
+def mandible(outline, free, ridge, widths, part, rounding, step=0.004):
     """A mandible of horn from its outline in profile (skull frame): as
     thick as ``widths`` (from its root to its point, along its chord),
-    rounded over ``ridge`` (the culmen or the chin) and thin at its edge."""
+    rounded over ``ridge`` (the culmen or the chin) and thin at its ``free``
+    edges (``rounding`` = how broadly at the ridge and at the edge), its
+    base set square into the face."""
+    round_ridge, round_edge = rounding
     ring = smooth_curve(np.concatenate([outline, outline[:1]]), 500)
     gx, gy, keep = grid_inside(ring, step)
-    edge = distance_to(ring, gx, gy)
+    edge = distance_to(smooth_curve(free, 300), gx, gy)
     crest = distance_to(smooth_curve(ridge, 200), gx, gy)
     b0, tip = np.array([1.0, 0.0]), bill_point([(1.0, 0.0)])[0]
     chord = tip - b0
-    t = np.clip(((gx - b0[0]) * chord[0] + (gy - b0[1]) * chord[1]) / (chord @ chord), 0, 1)
+    # (how far from its base toward its point: it is as wide all along its
+    # base, which sweeps back from the forehead to the gape)
+    base = np.asarray(outline)[np.linalg.norm(np.asarray(outline) - tip, axis=1) > 0]
+    d_base = distance_to(base_of(outline), gx, gy)
+    d_tip = np.hypot(gx - point_of(outline)[0], gy - point_of(outline)[1])
+    t = d_base / np.maximum(d_base + d_tip, 1e-9)
+    del base
     w = smooth_interp(t, widths)
     near_ridge = np.clip(crest / np.maximum(edge + crest, 1e-9), 0, 1)
     radius = round_ridge * (1 - near_ridge) + round_edge * near_ridge
@@ -278,7 +309,7 @@ def mandible(outline, ridge, widths, part, round_ridge, round_edge, step=0.004):
     pts, nrm = relief(height, gx, gy, keep, step)
     pts, nrm = mirror_z(pts, nrm)
     flow = np.tile(np.append(chord / np.linalg.norm(chord), 0.0), (len(pts), 1))
-    return Patch(pts, nrm, flow, part)
+    return Patch(pts, nrm, flow, part, (gx[0, 0], gy[0, 0], step, height), IDENTITY)
 
 
 def section_cuts(outline: np.ndarray, spine: np.ndarray):
@@ -330,11 +361,11 @@ def head_blobs() -> list[Blob]:
     cheeks and nape; the eye; the two mandibles."""
     back = (-1.0, 0.0, 0.0)
     plume = [
-        blob((-0.14, 0.02, 0.0), (0.72, 0.42, 0.46), "plumage", flow=back),
-        blob((0.5, 0.1, 0.0), (0.56, 0.27, 0.31), "plumage", flow=back),
-        blob((0.12, -0.4, 0.0), (0.56, 0.52, 0.43), "plumage", flow=(-0.3, -1.0, 0)),
+        blob((-0.16, -0.02, 0.0), (0.72, 0.38, 0.46), "plumage", flow=back),
+        blob((0.4, 0.14, 0.0), (0.55, 0.24, 0.26), "plumage", flow=back),
+        blob((0.0, -0.42, 0.0), (0.55, 0.52, 0.4), "plumage", flow=(-0.3, -1.0, 0)),
         blob((-0.5, -0.32, 0.0), (0.6, 0.68, 0.45), "plumage", flow=(-0.5, -1.0, 0)),
-        blob((0.62, -0.08, 0.0), (0.42, 0.3, 0.3), "plumage", flow=back),
+        blob((0.36, -0.3, 0.0), (0.28, 0.28, 0.24), "plumage", flow=back),
     ]
     upper = np.concatenate([bill_point(CULMEN), bill_point(TOMIUM[::-1][1:]),
                             bill_point(BILL_BASE[::-1][1:-1])])
@@ -348,16 +379,36 @@ def head_blobs() -> list[Blob]:
     return plume + eye
 
 
+def base_of(outline) -> np.ndarray:
+    """The base of a mandible's outline: where it is set into the face (the
+    upper's from the forehead to the gape, the lower's from the gape back)."""
+    o = np.asarray(outline)
+    if np.allclose(o[0], bill_point(LOWER[:1])[0]):
+        return np.vstack([o[-1], o[0]])
+    return bill_point(BILL_BASE)
+
+
+def point_of(outline) -> np.ndarray:
+    """The point of a mandible: the hook's tip, or the front of the chin."""
+    o = np.asarray(outline)
+    if np.allclose(o[0], bill_point(LOWER[:1])[0]):
+        return bill_point([(1.06, 0.3)])[0]
+    return bill_point([(1.0, 0.0)])[0]
+
+
 def bill_patches() -> list[Patch]:
     """The two mandibles, as horn."""
     upper = np.concatenate([bill_point(CULMEN), bill_point(TOMIUM[::-1][1:]),
                             bill_point(BILL_BASE[::-1][1:-1])])
     lower = bill_point(LOWER)
     chin = bill_point(LOWER[4:10])
+    upper_free = np.concatenate([bill_point(CULMEN), bill_point(TOMIUM[::-1][1:])])
+    lower_free = bill_point(LOWER[:-1])
     return [
-        mandible(upper, bill_point(CULMEN), [0.27, 0.26, 0.22, 0.15, 0.08, 0.03],
-                 "upper", 0.3, 0.1),
-        mandible(lower, chin, [0.3, 0.3, 0.3, 0.3, 0.29, 0.2, 0.06], "lower", 0.3, 0.08),
+        mandible(upper, upper_free, bill_point(CULMEN), [0.28, 0.27, 0.23, 0.16, 0.08, 0.025],
+                 "upper", (0.3, 0.1)),
+        mandible(lower, lower_free, chin, [0.3, 0.3, 0.28, 0.24, 0.16, 0.08], "lower",
+                 (0.3, 0.08)),
     ]
 
 
@@ -373,7 +424,7 @@ SHOULDER, WING_TIP = (-1.5, -0.86), (-4.42, -6.85)
 #: backward), how long its middle feathers are, how far its plane is rolled
 #: to show its upper side to the viewer: it hangs steeper than the wing,
 #: so that the wing's tips lie on it.
-TAIL_ROOT, TAIL_HANG, TAIL_LENGTH, TAIL_ROLL = (-3.5, -4.75), 17.0, 7.6, 22.0
+TAIL_ROOT, TAIL_HANG, TAIL_LENGTH, TAIL_ROLL = (-3.5, -4.75), 17.0, 7.6, 62.0
 #: The branch: a point on its axis under the feet, its direction (it runs
 #: along the bird, as macaws often stand), its radius; where along it from
 #: that point each foot grips.
@@ -384,7 +435,7 @@ FEET = (-0.42, 0.34)
 #: the direction (degrees) its long axis runs, down from the neck: the
 #: neck, the breast, the belly, the rump and vent, the back.
 TORSO = [
-    ((-0.5, -0.85), (0.95, 0.9, 0.68), -112.0),
+    ((-0.62, -1.0), (0.95, 0.85, 0.54), -112.0),
     ((-1.6, -1.85), (1.4, 1.25, 1.08), -128.0),
     ((-2.25, -3.25), (1.3, 1.05, 1.0), -130.0),
     ((-3.2, -4.35), (1.0, 0.65, 0.68), -130.0),
@@ -411,11 +462,10 @@ def soft_extent(blobs: list[Blob], x, y, k: float = 0.08) -> np.ndarray:
     (x, y) of the bird's middle plane (-inf where it does not)."""
     x, y = np.asarray(x, dtype=np.float64), np.asarray(y, dtype=np.float64)
     origin = np.stack([x, y, np.zeros_like(x)], -1)
-    zs = [ray_hit(b, origin, np.array([0.0, 0.0, 1.0])) for b in blobs]
-    top = np.max(zs, axis=0)
-    ref = np.where(np.isfinite(top), top, 0.0)
-    acc = sum(np.where(np.isfinite(z), np.exp((z - ref) / k), 0.0) for z in zs)
-    return np.where(acc > 0, ref + k * np.log(np.maximum(acc, 1e-300)), -np.inf)
+    top = np.full(x.shape, -np.inf)
+    for b in blobs:
+        top, _ = smooth_max(top, ray_hit(b, origin, np.array([0.0, 0.0, 1.0])), k)
+    return top
 
 
 def ray_hit(b: Blob, origin: np.ndarray, d: np.ndarray) -> np.ndarray:
@@ -445,7 +495,7 @@ def plate(outline, height_of, basis, part, step=0.004, both=True) -> Patch:
     o, ex, ey, ez = (np.asarray(v, dtype=np.float64) for v in basis)
     m = np.stack([ex, ey, ez], axis=1)
     flow = np.tile(ex, (len(pts), 1))
-    return Patch(o + pts @ m.T, nrm @ m.T, flow, part)
+    return Patch(o + pts @ m.T, nrm @ m.T, flow, part, (gx[0, 0], gy[0, 0], step, height), basis)
 
 
 def wing_frame():
@@ -463,8 +513,8 @@ def wing_frame():
 WING_OUTLINE = [
     (-1.5, -0.86), (-1.95, -0.93), (-2.45, -1.38), (-2.95, -2.18), (-3.4, -3.08),
     (-3.75, -3.98), (-4.05, -4.88), (-4.25, -5.78), (-4.38, -6.48), (-4.42, -6.85),
-    (-4.3, -6.7), (-4.0, -5.95), (-3.6, -5.05), (-3.05, -4.15), (-2.45, -3.45),
-    (-1.85, -2.85), (-1.4, -2.25), (-1.18, -1.65), (-1.2, -1.2), (-1.33, -0.95),
+    (-4.28, -6.62), (-3.95, -5.85), (-3.45, -5.02), (-2.82, -4.25), (-2.15, -3.62),
+    (-1.6, -3.0), (-1.25, -2.35), (-1.08, -1.7), (-1.12, -1.2), (-1.3, -0.93),
 ]  # fmt: skip
 
 
@@ -517,8 +567,8 @@ def tail_axes():
 #: The tail feathers seen, from the uppermost (the middle pair) down: how
 #: far sideways each lies, how long it is (of TAIL_LENGTH), how far it fans
 #: (degrees) and how wide it is.
-BLADES = [(0.04, 1.0, 0.6, 0.27), (-0.06, 0.96, -0.8, 0.27), (0.16, 0.82, 2.5, 0.26),
-          (-0.17, 0.78, -2.5, 0.26), (0.27, 0.64, 4.5, 0.25), (-0.28, 0.6, -4.5, 0.25)]  # fmt: skip
+BLADES = [(0.05, 1.0, 1.0, 0.25), (-0.07, 0.95, -1.2, 0.25), (0.2, 0.8, 3.5, 0.24),
+          (-0.21, 0.76, -3.5, 0.24), (0.33, 0.6, 6.0, 0.23), (-0.34, 0.56, -6.0, 0.23)]  # fmt: skip
 
 
 def blade_outline(length: float, half: float) -> np.ndarray:
@@ -531,22 +581,27 @@ def blade_outline(length: float, half: float) -> np.ndarray:
     return np.vstack([top, top[::-1] * np.array([1.0, -1.0])])
 
 
+def blade_basis(k: int) -> tuple:
+    """Tail feather ``k``'s plane: its root, its direction, across it and
+    its upper side's normal."""
+    d, n, lateral = tail_axes()
+    off, _, fan, _ = BLADES[k]
+    f = math.radians(fan)
+    dk = math.cos(f) * d + math.sin(f) * lateral
+    origin = np.array([*TAIL_ROOT, 0.1]) + lateral * off - n * (0.045 * k)
+    return origin, dk, np.cross(n, dk), n
+
+
 def tail_patches() -> list[Patch]:
     """The long tail feathers: thin blades from the root, stacked."""
-    d, n, lateral = tail_axes()
-    root = np.array([*TAIL_ROOT, 0.1])
     out = []
-    for k, (off, frac, fan, half) in enumerate(BLADES):
-        f = math.radians(fan)
-        dk = math.cos(f) * d + math.sin(f) * lateral
-        origin = root + lateral * off - n * (0.045 * k)
+    for k, (_, frac, _, half) in enumerate(BLADES):
         outline = blade_outline(TAIL_LENGTH * frac, half)
 
         def height(gx, gy, edge):
             return 0.022 * rounded(edge, 0.03) + 0.012 * (1 - np.abs(gy) / 0.3)
 
-        out.append(plate(outline, height, (origin, dk, np.cross(n, dk), n), f"tail{k}",
-                         step=0.006))
+        out.append(plate(outline, height, blade_basis(k), f"tail{k}", step=0.006))
     return out
 
 
@@ -626,8 +681,8 @@ def bird_patches() -> tuple[list[Patch], list[Patch]]:
 
 #: How far the bird turns its front toward the viewer (degrees); how its
 #: head turns further, cocks (rolls) and nods, about the top of the neck.
-TURN = -18.0
-HEAD_TURN, HEAD_COCK, HEAD_NOD = -32.0, 8.0, -3.0
+TURN = 14.0
+HEAD_TURN, HEAD_COCK, HEAD_NOD = -16.0, 6.0, -4.0
 NECK_PIVOT = np.array([-0.6, -0.8, 0.0])
 
 
@@ -708,7 +763,7 @@ def place_patch(pose: Pose, patch: Patch, head: bool) -> Patch:
     """A surface on the sheet."""
     m = pose.linear(head)
     return Patch(pose.to_sheet(patch.points, head), patch.normals @ m.T, patch.flow @ m.T,
-                 patch.part)
+                 patch.part, patch.grid, patch.basis)
 
 
 def posed(pose: Pose) -> Scene:
@@ -781,11 +836,23 @@ def box_of(b: Blob, shape) -> tuple[int, int, int, int] | None:
     return (x0, y0, x1, y1) if x1 > x0 and y1 > y0 else None
 
 
+def smooth_max(old, new, k):
+    """The smooth maximum of two depths (-inf where absent) and how much of
+    the new one is in it (0..1): equal to the larger far from where they
+    meet, rounded over ``k`` where they do."""
+    have_old, have_new = np.isfinite(old), np.isfinite(new)
+    o = np.where(have_old, old, 0.0)
+    n = np.where(have_new, new, 0.0)
+    h = np.clip(0.5 + 0.5 * (n - o) / k, 0.0, 1.0)
+    h = np.where(have_old & have_new, h, np.where(have_new, 1.0, 0.0))
+    z = o * (1 - h) + n * h + k * h * (1 - h) * (have_old & have_new)
+    return np.where(have_old | have_new, z, -np.inf), h
+
+
 def render_part(blobs: list[Blob], shape, k: float):
-    """One part: its solids melted together (a soft maximum of their depths,
-    their normals and flows weighted alike)."""
+    """One part: its solids melted together (a smooth maximum of their
+    depths), their normals and flows mixed where they meet."""
     top = np.full(shape, -np.inf)
-    acc = np.zeros(shape)
     nrm = np.zeros((*shape, 3))
     flo = np.zeros((*shape, 3))
     for b in blobs:
@@ -794,21 +861,16 @@ def render_part(blobs: list[Blob], shape, k: float):
             continue
         z, n, thick = ellipsoid(b, box)
         sl = (slice(box[1], box[3]), slice(box[0], box[2]))
-        hit = np.isfinite(z)
-        # (a solid weighs less toward its own silhouette, so that the
-        # surfaces it melts into take over smoothly there)
-        cover = np.clip(thick / (3.0 * k), 0.0, 1.0) ** 2
-        old = top[sl]
-        new = np.where(hit, np.maximum(old, z), old)
-        keep = np.where(np.isfinite(old), np.exp((old - np.where(np.isfinite(new), new, 0)) / k), 0.0)
-        w = np.where(hit, np.maximum(cover, 1e-6) * np.exp((z - np.where(np.isfinite(new), new, 0)) / k), 0.0)
-        acc[sl] = acc[sl] * keep + w
-        nrm[sl] = nrm[sl] * keep[..., None] + w[..., None] * n
-        flo[sl] = flo[sl] * keep[..., None] + w[..., None] * b.flow
+        new, h = smooth_max(top[sl], z, k)
+        # (a solid counts for less toward its own silhouette, so that the
+        # surface it melts into turns smoothly there)
+        cover = np.clip(thick / (2.0 * k), 0.0, 1.0)
+        hn = np.where(np.isfinite(top[sl]), h * cover, h)[..., None]
+        nrm[sl] = nrm[sl] * (1 - hn) + n * hn
+        flo[sl] = flo[sl] * (1 - hn) + b.flow * hn
         top[sl] = new
-    z = np.where(acc > 0, top + k * np.log(np.maximum(acc, 1e-300)), -np.inf)
     nrm /= np.maximum(np.linalg.norm(nrm, axis=-1, keepdims=True), 1e-12)
-    return z, nrm, flo
+    return top, nrm, flo
 
 
 def splat(patches: list[Patch], shape):
@@ -876,7 +938,8 @@ def shadowed(scene: Scene, seen: Render, bias: float = 3.0) -> np.ndarray:
         z, _, _ = render_any(turned, name, shape)
         np.maximum(depth, z, out=depth)
     ys, xs = np.nonzero(np.isfinite(seen.z))
-    p = np.stack([xs + 0.5, ys + 0.5, seen.z[ys, xs]], -1) @ m.T - shift
+    p = np.stack([xs + 0.5, ys + 0.5, seen.z[ys, xs]], -1) + 2.5 * seen.normal[ys, xs]
+    p = p @ m.T - shift
     ix = np.clip(p[:, 0].astype(int), 0, shape[1] - 1)
     iy = np.clip(p[:, 1].astype(int), 0, shape[0] - 1)
     out = np.zeros(seen.z.shape)
@@ -884,32 +947,506 @@ def shadowed(scene: Scene, seen: Render, bias: float = 3.0) -> np.ndarray:
     return out
 
 
-def light_on(seen: Render, shadow: np.ndarray) -> np.ndarray:
-    """How much light each seen surface takes, 0..1."""
-    l = LIGHT * np.array([1.0, -1.0, 1.0])
-    lam = np.clip(seen.normal @ l, 0.0, 1.0)
-    return lam * (1.0 - shadow)
+# ----------------------------------------------------------------------
+# where each seen pixel lies on the bird
+
+
+@dataclass
+class Model:
+    """The bird as seen: the render, the cast shadow, and for each pixel
+    where it lies in the skull's frame and in the bird's."""
+
+    pose: Pose
+    scene: Scene
+    seen: Render
+    shadow: np.ndarray
+    skull: np.ndarray
+    bird: np.ndarray
+    headness: np.ndarray
+    #: The normals with the feathers' relief on them (H, W, 3); and the
+    #: relief itself, in pixels.
+    normal: np.ndarray = None
+    relief: np.ndarray = None
+
+    def part(self, *names: str) -> np.ndarray:
+        """Where any of these parts is seen."""
+        return self.seen.mask(*names)
+
+
+def implicit(blobs: list[Blob], p: np.ndarray) -> np.ndarray:
+    """How far inside the nearest of ``blobs`` each point (N, 3) is: below 1
+    inside one."""
+    best = np.full(len(p), np.inf)
+    for b in blobs:
+        q = (p - b.centre) @ b.frame / b.radii
+        np.minimum(best, np.sqrt(np.sum(q * q, axis=1)), out=best)
+    return best
+
+
+def build_model() -> Model:
+    """The bird modelled, posed, seen and lit."""
+    pose = Pose()
+    scene = posed(pose)
+    seen = render(scene)
+    shadow = box_blur(box_blur(shadowed(scene, seen).astype(np.float32), 2), 1)
+    ys, xs = np.nonzero(np.isfinite(seen.z))
+    p = np.stack([xs + 0.5, ys + 0.5, seen.z[ys, xs]], -1)
+    skull = np.full((*seen.z.shape, 3), np.nan)
+    bird = np.full((*seen.z.shape, 3), np.nan)
+    skull[ys, xs] = pose.from_sheet(p, head=True)
+    bird[ys, xs] = pose.from_sheet(p, head=False)
+    head, rest = bird_blobs()
+    near_head = implicit(head[:5], skull[ys, xs])
+    near_body = implicit(rest[: len(TORSO) + len(THIGHS)], bird[ys, xs])
+    headness = np.zeros(seen.z.shape)
+    headness[ys, xs] = smoothstep(0.25, -0.25, near_head - near_body)
+    headness = np.where(seen.mask("upper", "lower", "eye"), 1.0, headness)
+    model = Model(pose, scene, seen, shadow, skull, bird, headness)
+    model.relief = np.zeros(seen.z.shape)
+    model.normal = seen.normal.copy()
+    return model
+
+
+def emboss(model: Model, height: np.ndarray, where: np.ndarray) -> None:
+    """Raise the relief ``height`` (pixels) over ``where`` on the model's
+    surfaces: its slopes tilt their normals."""
+    h = np.where(where, height, 0.0)
+    model.relief += h
+    gy, gx = np.gradient(h)
+    gx, gy = gx * where, gy * where
+    n = model.normal - np.stack([gx, gy, np.zeros_like(gx)], -1)
+    model.normal = n / np.maximum(np.linalg.norm(n, axis=-1, keepdims=True), 1e-9)
+
+
+# ----------------------------------------------------------------------
+# light
+
+#: Toward the light, on the sheet (x right, y down, z toward the viewer).
+SUN = LIGHT * np.array([1.0, -1.0, 1.0])
+
+
+def occlusion(model: Model) -> np.ndarray:
+    """How much each surface is shut in by those near it, 0..1: crevices,
+    the slot under the wing, the neck under the head."""
+    z = np.where(np.isfinite(model.seen.z), model.seen.z, np.nan)
+    near = np.nan_to_num(z, nan=np.nanmin(z) - 80.0).astype(np.float32)
+    out = np.zeros(z.shape)
+    for r, w in ((4, 0.5), (12, 0.35), (30, 0.25)):
+        around = box_blur(box_blur(near, r), r)
+        out += w * np.clip((around - near) / (1.6 * r), 0.0, 1.0)
+    return np.where(np.isfinite(model.seen.z), np.clip(out, 0.0, 1.0), 0.0)
+
+
+def illumination(model: Model) -> np.ndarray:
+    """How brightly each seen surface is lit, about 0..1.1: the sun (wrapped
+    a little on the soft plumage), cast shadows, the light thrown back up
+    from below into the shadows, and occlusion."""
+    n = model.normal
+    soft_parts = model.part("plumage", "wing")
+    wrap = np.where(soft_parts, 0.3, 0.08)
+    sun = np.clip((n @ SUN + wrap) / (1.0 + wrap), 0.0, 1.0) ** 1.15
+    sun *= 1.0 - 0.92 * model.shadow
+    bounce = np.clip(n @ np.array([0.15, 0.85, 0.5]), 0.0, 1.0) * 0.16
+    sky = 0.16 + 0.08 * np.clip(-n[..., 1], 0.0, 1.0)
+    occ = occlusion(model)
+    return (sky + bounce + 0.9 * sun) * (1.0 - 0.7 * occ)
+
+
+def specular(model: Model, power: float) -> np.ndarray:
+    """The sheen of a hard surface (horn, claw, eye), 0..1."""
+    h = SUN + np.array([0.0, 0.0, 1.0])
+    h /= np.linalg.norm(h)
+    return np.clip(model.normal @ h, 0.0, 1.0) ** power * (1.0 - model.shadow)
+
+
+# ----------------------------------------------------------------------
+# the wing's feathers
+
+#: The covert rows' coordinate: how far back along the wing (units) the
+#: rows' tips lie, a row being tilted back toward the lower edge and bowed
+#: toward the tip in the middle.
+ROW_SLANT, ROW_BOW = 0.35, 0.25
+#: Where the greater coverts' tips lie (units back from the wrist): 42% of
+#: the way to the wing's tip, as measured.
+GREATER = 0.42
+
+
+def covert_rows(rng: np.random.Generator) -> list[dict]:
+    """The rows of coverts, from the wrist back: each row's tip position
+    (units, in the row coordinate), its feathers (where across the wing
+    each begins, so each one's width), and how deep their rounded tips are.
+    The feathers grow down the wing, the greater coverts largest."""
+    _, _, _, length = wing_frame()
+    rows, d, w = [], 0.32, 0.12
+    end = GREATER * length - 0.95
+    while d < end:
+        rows.append(row_of(rng, d, w, 0.42))
+        d += 0.68 * w * rng.uniform(0.9, 1.1)
+        w = min(w * 1.17, 0.36)
+    rows.append(row_of(rng, GREATER * length, 0.38, 0.55))
+    return rows
+
+
+def row_of(rng: np.random.Generator, d: float, w: float, depth: float) -> dict:
+    """One row of coverts: tips about ``d`` back, feathers about ``w`` wide,
+    neither all of one width nor evenly set."""
+    edges = [-0.6 + rng.uniform(0.0, w)]
+    while edges[-1] < 2.0:
+        edges.append(edges[-1] + w * rng.uniform(0.8, 1.2))
+    jitter = rng.normal(0.0, 0.08 * w, len(edges))
+    return {"d": d, "edges": np.array(edges), "jitter": jitter, "depth": depth, "w": w}
+
+
+def row_coordinate(u, v):
+    """The covert rows' coordinate at wing coordinates (u, v)."""
+    _, _, _, length = wing_frame()
+    return u * length - ROW_SLANT * (v - 0.6) + ROW_BOW * (v - 0.6) ** 2
+
+
+def row_tip(row: dict, v) -> np.ndarray:
+    """Where the tips of a row lie (row coordinate) at each ``v`` across the
+    wing: rounded tips, one per feather, a little uneven."""
+    e = row["edges"]
+    j = np.clip(np.searchsorted(e, v) - 1, 0, len(e) - 2)
+    a, b = e[j], e[j + 1]
+    half = 0.58 * (b - a)
+    theta = np.clip((v - 0.5 * (a + b)) / half, -1.0, 1.0)
+    return row["d"] + row["jitter"][j] - row["depth"] * (b - a) * (1 - np.sqrt(1 - theta**2))
+
+
+def covert_relief(u, v, rows):
+    """Over the coverts: which row each place lies in (-1 past them), how
+    far from the row above's tips to its own (0..1), and where across its
+    own feather (-1..1)."""
+    d = row_coordinate(u, v)
+    which = np.full(u.shape, -1)
+    q = np.zeros(u.shape)
+    prev = np.full(u.shape, -1.0)
+    for k, row in enumerate(rows):
+        tip = row_tip(row, v)
+        here = (which < 0) & (d <= tip)
+        which = np.where(here, k, which)
+        q = np.where(here, np.clip((d - prev) / np.maximum(tip - prev, 1e-6), 0, 1), q)
+        prev = tip
+    return which, q
+
+
+#: The flight feathers seen below the greater coverts, from the top (the
+#: tertials, over the back) down to the primaries at the lower edge: where
+#: each one's free lower edge lies across the wing (0 at its upper edge, 1
+#: at its lower) and how far along the wing it reaches.
+FLIGHT = [(0.16, 0.6), (0.3, 0.63), (0.42, 0.66), (0.53, 0.69), (0.63, 0.72),
+          (0.72, 0.76), (0.8, 0.86), (0.87, 0.93), (0.935, 0.97), (1.0, 1.0)]  # fmt: skip
+
+
+def wing_edges(u):
+    """Where the wing's upper and lower edges lie across it (v) at ``u``."""
+    a, along, across, length = wing_frame()
+    ring = smooth_curve(np.vstack([WING_OUTLINE, WING_OUTLINE[:1]]), 400)
+    ru, rv = wing_uv(ring[:, 0], ring[:, 1])
+    tip = int(np.argmax(ru))
+    top, bottom = slice(0, tip + 1), slice(tip, None)
+    order_t, order_b = np.argsort(ru[top]), np.argsort(ru[bottom])
+    up = np.interp(u, ru[top][order_t], rv[top][order_t])
+    low = np.interp(u, ru[bottom][order_b], rv[bottom][order_b])
+    del a, along, across, length
+    return np.minimum(up, low), np.maximum(up, low)
+
+
+def flight_relief(u, v):
+    """Over the flight feathers: which one is seen at each place (the
+    uppermost that reaches it), and how far across from the edge of the
+    one above to its own free edge (0..1)."""
+    up, low = wing_edges(u)
+    f = (v - up) / np.maximum(low - up, 1e-6)
+    which = np.full(u.shape, -1)
+    q = np.zeros(u.shape)
+    prev = 0.0
+    for j, (edge, reach) in enumerate(FLIGHT):
+        top = edge - 0.24
+        theta = np.clip((f - (edge - 0.12)) / 0.12, -1, 1)
+        end = reach - 0.05 * (1 - np.sqrt(1 - theta**2))
+        here = (which < 0) & (f <= edge) & (f >= top) & (u <= end)
+        which = np.where(here, j, which)
+        q = np.where(here, np.clip((f - max(prev, top)) / max(edge - max(prev, top), 1e-6), 0, 1), q)
+        prev = edge
+    return which, q
+
+
+def feather_wing(model: Model, rng: np.random.Generator) -> dict:
+    """The wing's feathers on the model: its relief (each feather rising to
+    its free edge, then a step down to the next), and for each place which
+    feather it is on."""
+    wing = model.part("wing")
+    b = np.nan_to_num(model.bird)
+    u, v = wing_uv(b[..., 0], b[..., 1])
+    rows = covert_rows(rng)
+    row, q = covert_relief(u, v, rows)
+    blade, qf = flight_relief(u, v)
+    covert = wing & (row >= 0)
+    flight = wing & (row < 0)
+    lift = np.where(covert, 2.2 + 0.5 * np.minimum(row, 8), 2.6)
+    height = np.where(covert, q**0.6, np.clip(qf, 0, 1) ** 0.8) * lift
+    emboss(model, box_blur(height.astype(np.float32), 1), wing)
+    return {"u": u, "v": v, "rows": rows, "row": np.where(wing, row, -2), "q": q,
+            "blade": np.where(flight, blade, -2), "qf": qf}
+
+
+# ----------------------------------------------------------------------
+# local colour
+
+#: The local colours (sRGB 0..1).
+COLOURS = {
+    "green": (0.36, 0.56, 0.15), "lime": (0.6, 0.71, 0.17), "olive": (0.42, 0.5, 0.16),
+    "teal": (0.16, 0.5, 0.48), "blue": (0.16, 0.38, 0.66), "deep_blue": (0.13, 0.25, 0.52),
+    "sky": (0.55, 0.76, 0.86), "rust": (0.76, 0.3, 0.14), "red": (0.8, 0.1, 0.12),
+    "skin": (0.94, 0.8, 0.8), "horn": (0.24, 0.25, 0.28), "horn_tip": (0.36, 0.36, 0.38),
+    "jaw": (0.17, 0.17, 0.2), "foot": (0.4, 0.4, 0.42), "claw": (0.13, 0.13, 0.15),
+    "bark": (0.56, 0.5, 0.43), "eye": (0.9, 0.86, 0.66),
+}  # fmt: skip
+
+
+def paint(where, colour, amount=1.0):
+    """A layer of local colour: where (0..1, (H, W)) and what."""
+    return np.asarray(where, dtype=np.float64) * amount, np.array(COLOURS[colour])
+
+
+def face_mask(model: Model) -> np.ndarray:
+    """Where the bare skin of the face is seen (0..1): inside its border on
+    either side of the head, behind the bill."""
+    sk = model.skull
+    x, y, z = sk[..., 0], sk[..., 1], sk[..., 2]
+    ring = smooth_curve(np.vstack([face_ring(), face_ring()[:1]]), 300)
+    ok = np.isfinite(x)
+    out = np.zeros(x.shape)
+    inner = inside(ring, np.where(ok, x, 9.0), np.where(ok, y, 9.0))
+    out[inner & (np.abs(np.nan_to_num(z)) > 0.1)] = 1.0
+    return out * model.part("plumage") * (model.headness > 0.15)
+
+
+def face_ring() -> np.ndarray:
+    """The border of the bare face (skull frame), its front edge a little
+    under the bill's base."""
+    front = bill_point(BILL_BASE[::-1]) + np.array([0.08, 0.0])
+    return np.vstack([FACE_EDGE, bill_point(LOWER[-1:])[0] + [0.05, 0.0], front])
+
+
+def brow_mask(model: Model) -> np.ndarray:
+    """Where the red feathers of the forehead are seen."""
+    sk = model.skull
+    ring = smooth_curve(np.vstack([BROW_EDGE, BROW_EDGE[:1]]), 300)
+    ok = np.isfinite(sk[..., 0])
+    inner = inside(ring, np.where(ok, sk[..., 0], 9.0), np.where(ok, sk[..., 1], 9.0))
+    return inner * model.part("plumage") * (model.headness > 0.5) * 1.0
+
+
+def wing_colours(model: Model, wing: dict):
+    """The wing's colours: green coverts, yellower toward the shoulder and
+    on the greater coverts' tips; the tertials and secondaries green going
+    to blue down the wing; the primaries' blue along the lower edge; blue
+    toward the tips."""
+    seen = model.part("wing")
+    u, row, blade, qf = wing["u"], wing["row"], wing["blade"], wing["qf"]
+    rows = len(wing["rows"])
+    covert = seen & (row >= 0)
+    flight = seen & (row < 0) & (blade >= 0)
+    lime = covert * (0.45 + 0.4 * smoothstep(rows - 2.5, rows - 1, row) * wing["q"])
+    teal = flight * smoothstep(1.5, 3.5, blade) * smoothstep(0.4, 0.62, u)
+    blue = flight * np.clip(smoothstep(4.5, 6.5, blade) + smoothstep(0.62, 0.8, u)
+                            + 0.4 * smoothstep(0.6, 1.0, qf) * (blade >= 3), 0, 1)
+    deep = seen * smoothstep(0.85, 1.0, u)
+    return [paint(seen, "green"), paint(lime, "lime"), paint(teal, "teal", 0.7),
+            paint(blue, "blue"), paint(deep, "deep_blue", 0.5)]
+
+
+def local_colour(model: Model, wing: dict) -> np.ndarray:
+    """The local colour of everything seen (H, W, 3), before the light."""
+    h, w = model.seen.z.shape
+    out = np.ones((h, w, 3))
+    b = model.bird
+    plume = model.part("plumage")
+    crown = smoothstep(0.2, 0.9, model.headness) * smoothstep(-0.6, 0.3, np.nan_to_num(model.skull[..., 1]))
+    rump = smoothstep(-3.2, -3.6, np.nan_to_num(b[..., 0])) * smoothstep(-4.3, -4.7, np.nan_to_num(b[..., 1]))
+    layers = [
+        paint(plume, "green"),
+        paint(plume * crown, "lime", 0.55),
+        paint(plume * rump, "sky", 0.8),
+        *wing_colours(model, wing),
+        paint(face_mask(model), "skin"),
+        paint(brow_mask(model), "red"),
+        paint(model.part("upper"), "horn"),
+        paint(model.part("lower"), "jaw"),
+        paint(model.part("toes"), "foot"),
+        paint(model.part("claws"), "claw"),
+        paint(model.part("branch"), "bark"),
+        paint(model.part("eye"), "eye"),
+    ]
+    layers += tail_colours(model)
+    for amount, colour in layers:
+        a = np.clip(amount, 0.0, 1.0)[..., None]
+        out = out * (1 - a) + colour * a
+    return out
+
+
+def tail_colours(model: Model):
+    """The tail feathers: rust down the middle pair, going to blue toward the
+    tips and along the outer webs, the outer feathers bluer, the tips pale."""
+    out = []
+    for k in range(len(BLADES)):
+        seen = model.part(f"tail{k}")
+        if not seen.any():
+            continue
+        t, across = blade_coords(model, k)
+        blue = np.clip(smoothstep(0.55, 0.85, t) + 0.6 * smoothstep(0.45, 0.95, np.abs(across))
+                       + 0.25 * (k >= 4), 0.0, 1.0)
+        out += [paint(seen, "rust"), paint(seen * blue, "blue"),
+                paint(seen * smoothstep(0.88, 0.99, t), "sky", 0.7)]
+    return out
+
+
+def blade_coords(model: Model, k: int):
+    """How far along tail feather ``k`` (0..1) and across it (-1..1) each
+    pixel lies."""
+    origin, dk, side, _ = blade_basis(k)
+    _, frac, _, half = BLADES[k]
+    rel = np.nan_to_num(model.bird) - origin
+    return (rel @ dk) / (TAIL_LENGTH * frac), (rel @ side) / half
+
+
+def lit(colour: np.ndarray, light: np.ndarray) -> np.ndarray:
+    """Local colour under the light (in linear light, back to sRGB)."""
+    return np.clip(np.clip(colour, 0, 1) ** 2.2 * light[..., None], 0.0, 1.0) ** (1 / 2.2)
+
+
+def grey(colour: np.ndarray) -> np.ndarray:
+    """How light a colour is, 0..1."""
+    return colour @ np.array([0.3, 0.59, 0.11])
+
+
+# ----------------------------------------------------------------------
+# the hand: lines on the sheet
+
+
+class Ink:
+    """Marks laid on the sheet: how dark (0..1) each pixel is made."""
+
+    def __init__(self, shape):
+        self.dark = np.zeros(shape)
+
+    def line(self, pts, width, dark) -> None:
+        """A line through ``pts`` (N, 2) on the sheet, ``width`` and ``dark``
+        (each a number or one per point) along it, its edges soft."""
+        pts = np.asarray(pts, dtype=np.float64)
+        if len(pts) < 2:
+            return
+        seg = np.linalg.norm(np.diff(pts, axis=0), axis=1)
+        s = np.concatenate([[0.0], np.cumsum(seg)])
+        if s[-1] < 0.3:
+            return
+        n = max(int(s[-1] / 0.45) + 1, 2)
+        t = np.linspace(0.0, s[-1], n)
+        x, y = np.interp(t, s, pts[:, 0]), np.interp(t, s, pts[:, 1])
+        w = np.interp(t, s, np.broadcast_to(np.asarray(width, float), len(pts)))
+        d = np.interp(t, s, np.broadcast_to(np.asarray(dark, float), len(pts)))
+        for k in range(0, n, 40):
+            self.dab(x[k : k + 41], y[k : k + 41], w[k : k + 41], d[k : k + 41])
+
+    def dab(self, x, y, w, d) -> None:
+        """Part of a line: discs along it, the darkest of them at each pixel."""
+        if not (d > 0.003).any():
+            return
+        h, wd = self.dark.shape
+        r = float(w.max()) / 2 + 1.5
+        x0, x1 = int(max(math.floor(x.min() - r), 0)), int(min(math.ceil(x.max() + r) + 1, wd))
+        y0, y1 = int(max(math.floor(y.min() - r), 0)), int(min(math.ceil(y.max() + r) + 1, h))
+        if x1 <= x0 or y1 <= y0:
+            return
+        gy, gx = np.mgrid[y0:y1, x0:x1] + 0.5
+        dist = np.hypot(gx[..., None] - x, gy[..., None] - y) - w / 2
+        cover = (np.clip(0.5 - dist, 0.0, 1.0) * d).max(axis=-1)
+        region = self.dark[y0:y1, x0:x1]
+        region[:] = 1.0 - (1.0 - region) * (1.0 - cover)
+
+
+def visible(model: Model, pts: np.ndarray, tol: float = 3.0) -> np.ndarray:
+    """Which of the points (N, 3) on the sheet are not hidden behind a
+    nearer surface."""
+    h, w = model.seen.z.shape
+    ix = np.clip(pts[:, 0].astype(int), 0, w - 1)
+    iy = np.clip(pts[:, 1].astype(int), 0, h - 1)
+    z = model.seen.z[iy, ix]
+    on = (pts[:, 0] >= 0) & (pts[:, 0] < w) & (pts[:, 1] >= 0) & (pts[:, 1] < h)
+    return on & (pts[:, 2] >= z - tol)
+
+
+def draw3d(ink: Ink, model: Model, pts3, width, dark, tol=3.0) -> None:
+    """A line through points (N, 3) on the sheet, lifted where hidden."""
+    pts3 = np.asarray(pts3, dtype=np.float64)
+    seen = visible(model, pts3, tol)
+    d = np.broadcast_to(np.asarray(dark, float), len(pts3)) * seen
+    ink.line(pts3[:, :2], width, d)
+
+
+def contours(model: Model, ink: Ink, outline: np.ndarray) -> None:
+    """The edges where one surface passes in front of another or of the
+    paper: firm on the side away from the light and where the form turns
+    under, lost where the light takes the edge."""
+    z = np.where(np.isfinite(model.seen.z), model.seen.z, -1e4)
+    jump = np.zeros(z.shape)
+    for dy, dx in ((0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)):
+        nb = np.roll(np.roll(z, dy, 0), dx, 1)
+        jump = np.maximum(jump, np.clip((z - nb - 6.0) / 10.0, 0.0, 1.0))
+    jump *= np.isfinite(model.seen.z)
+    n = model.seen.normal
+    away = np.clip(0.55 - (n @ SUN), 0.0, 1.0) / 0.55
+    weight = jump * (0.35 + 0.65 * away) * outline
+    soft = box_blur(weight.astype(np.float32), 1)
+    ink.dark = 1.0 - (1.0 - ink.dark) * (1.0 - np.clip(1.4 * soft, 0.0, 0.85))
+
+
+def finish(model: Model, ink: Ink, colour: np.ndarray, light: np.ndarray, spec: np.ndarray):
+    """The study in grey and in colour, as images (H, W, 3) 0..1."""
+    seen = np.isfinite(model.seen.z)
+    value = grey(colour)
+    tone = np.clip(value ** 2.2 * light, 0.0, 1.0) ** (1 / 2.2) + spec
+    tone = np.where(seen, np.clip(tone, 0.0, 1.0), 1.0)
+    paper = np.array([0.985, 0.98, 0.965])
+    grey_img = (tone * (1.0 - ink.dark))[..., None] * paper
+    col = np.where(seen[..., None], np.clip(lit(colour, light) + spec[..., None], 0, 1), paper)
+    col = col * (1.0 - ink.dark)[..., None]
+    return grey_img, col
+
+
+def save(path: Path, img: np.ndarray) -> None:
+    """Write an image (H, W, 3) 0..1."""
+    write_png(str(path), np.round(np.clip(img, 0.0, 1.0) * 255).astype(np.uint8))
+
+
+def enlarge(img: np.ndarray, box, factor: int) -> np.ndarray:
+    """A part of an image (x0, y0, x1, y1), enlarged ``factor`` times."""
+    x0, y0, x1, y1 = box
+    return np.kron(img[y0:y1, x0:x1], np.ones((factor, factor, 1)))
 
 
 def main() -> None:
     out = Path(sys.argv[1] if len(sys.argv) > 1 else ".")
     out.mkdir(parents=True, exist_ok=True)
-    pose = Pose()
-    scene = posed(pose)
-    seen = render(scene)
-    shadow = box_blur(box_blur(shadowed(scene, seen).astype(np.float32), 2), 2)
-    light = light_on(seen, shadow)
-    tone = np.where(np.isfinite(seen.z), 0.25 + 0.7 * light, 1.0)
-    write_png(str(out / "shadow.png"), np.round(np.repeat((1 - shadow)[..., None], 3, -1) * 255).astype(np.uint8))
-    rgb = np.repeat(tone[..., None], 3, -1)
-    write_png(str(out / "preview.png"), np.round(rgb * 255).astype(np.uint8))
-    rng = np.random.default_rng(1)
-    pal = rng.uniform(0.3, 1.0, (len(seen.names), 3))
-    parts = np.where(seen.part[..., None] >= 0, pal[seen.part] * (0.4 + 0.6 * light[..., None]), 1.0)
-    write_png(str(out / "parts.png"), np.round(parts * 255).astype(np.uint8))
+    model = build_model()
+    rng = np.random.default_rng(SEED)
+    wing = feather_wing(model, rng)
+    light = illumination(model)
+    colour = local_colour(model, wing)
+    hard = model.part("upper", "lower", "claws", "eye")
+    spec = 0.35 * specular(model, 18.0) * hard
+    ink = Ink(model.seen.z.shape)
+    contours(model, ink, np.ones(model.seen.z.shape))
+    grey_img, col = finish(model, ink, colour, light, spec)
+    save(out / "study_grey.png", grey_img)
+    save(out / "study_colour.png", col)
     x, y = int(EYE_AT[0]), int(EYE_AT[1])
-    crop = rgb[max(y - 200, 0) : y + 260, max(x - 220, 0) : x + 300]
-    write_png(str(out / "preview_head.png"), np.round(np.kron(crop, np.ones((2, 2, 1))) * 255).astype(np.uint8))
+    box = (max(x - 200, 0), max(y - 130, 0), x + 220, y + 250)
+    save(out / "head.png", enlarge(grey_img, box, 2))
+    save(out / "head_colour.png", enlarge(col, box, 2))
 
 
 if __name__ == "__main__":
