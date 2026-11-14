@@ -954,6 +954,25 @@ def reaches(lo: float, hi: float, rng: np.random.Generator) -> list[tuple]:
     return list(pairwise((lo * (hi / lo) ** steps).tolist()))
 
 
+def swell(u):
+    """0 at either end of a stroke (u 0 and 1), 1 in its middle."""
+    return np.sin(np.pi * np.clip(u, 0.0, 1.0))
+
+
+def leafy(firm: float, wide: float):
+    """The pressure and the width along a dab ``wide`` pixels across at
+    its widest, as functions of u: a leaf, from nothing to its middle and
+    back."""
+
+    def press(u):
+        return firm * swell(u) ** 0.35
+
+    def width(u):
+        return wide * (0.5 + 0.5 * swell(u))
+
+    return press, width
+
+
 def sampler(image: np.ndarray, firm: float, left: int = 0, top: int = 0):
     """The pressure a shading takes from ``image``, a patch of the sheet
     whose corner is at (``left``, ``top``): ``firm`` times its value where
@@ -981,6 +1000,9 @@ class Easel:
         #: trees as they were)
         self.crowd = np.random.default_rng(SEED + 1)
         self.tenants = np.random.default_rng(SEED + 2)
+        #: (a car is drawn softly: its pieces end round, inside their ends,
+        #: not cut square as a building's are)
+        self.softly = False
         self.sheet = Sheet(WIDTH, HEIGHT, paper=PAPER, seed=SEED)
         self.buildings = street(self.rng)
         self.trees = avenue(self.rng)
@@ -1039,6 +1061,7 @@ class Easel:
         worn: float = 0.0,
         square: bool = False,
         inside: bool = False,
+        leaf: bool = False,
     ) -> None:
         """One straight stroke between two points of the street, ``width``
         pixels wide halfway along it (as the eye sees it: narrower where it
@@ -1049,7 +1072,8 @@ class Easel:
         takes its light from the scene; without, it is a thing standing in
         the street, lit unless a building shades it. ``worn`` breaks it up;
         ``square`` cuts it square at the two points; ``inside`` keeps its
-        round ends inside them."""
+        round ends inside them; ``leaf`` draws it as a
+        fallen leaf, narrower toward its tips."""
         ends = np.array(ends, dtype=np.float64)
         long = float(np.hypot(*np.diff(project(ends), axis=0)[0]))
         inset = min(0.5 * width / max(long, 1e-6), 0.4) if inside else 0.0
@@ -1064,6 +1088,9 @@ class Easel:
         landing = 0.15 if square or inside else 0.4
         ease = np.sqrt(np.sin(np.pi * np.clip(u, 0.05, 0.95)))
         press = firm * (1.0 - landing * (1.0 - ease))
+        if leaf:
+            # (a fleck: narrower toward its tips)
+            widths = widths * (0.7 + 0.3 * swell(u))
         if worn:
             press = press * (1.0 - worn * self.rng.random(len(u)))
         if face is not None:
@@ -1083,14 +1110,16 @@ class Easel:
     def panel(self, low, high, colours, firm: float, face=None) -> None:
         """A flat piece of something between two of its edges, each given by
         its two ends: strokes that run with the edges and stop square at the
-        sides, as many side by side as the piece asks for."""
+        sides (softly, for a car), as many side by side as the piece asks for."""
         low = np.asarray(low, dtype=np.float64)
         high = np.asarray(high, dtype=np.float64)
         tall = float(np.hypot(*(project(high) - project(low)).T).mean())
         rows = max(math.ceil(tall / STICK), 1)
         for r in range(rows):
             ends = low + (r + 0.5) / rows * (high - low)
-            self.rail(ends, colours, firm, 1.12 * tall / rows, face, square=True)
+            width = 1.12 * tall / rows
+            soft = self.softly
+            self.rail(ends, colours, firm, width, face, square=not soft, inside=soft)
 
     def slab(self, x, y, z: float, colours, firm: float) -> None:
         """An upright piece of something that faces the eye, ``z`` away:
@@ -1778,7 +1807,7 @@ class Ground(Fronts):
             width = float(np.clip(0.055 * rise(spot[2]), THIN, 7.0))
             firm = float(self.rng.uniform(0.5, 0.8))
             ends = (spot - reach, spot + reach)
-            self.rail(ends, distant(colours, spot[2]), firm, width, GROUND)
+            self.rail(ends, distant(colours, spot[2]), firm, width, GROUND, leaf=True)
 
 
 class Life(Ground):
@@ -1837,7 +1866,7 @@ class Life(Ground):
         dab = float(np.clip(0.42 * size, 3.0, STICK))
         spots, tone = [], []
         for x, y, z, radius in masses:
-            count = int(np.clip(0.95 * math.pi * (radius * size / dab) ** 2, 3, 240))
+            count = int(np.clip(1.25 * math.pi * (radius * size / dab) ** 2, 3, 320))
             facing = rng.normal(0.0, 1.0, (count, 3))
             facing /= np.linalg.norm(facing, axis=1)[:, None]
             facing[:, 2] = -np.abs(facing[:, 2])  # (the side the eye sees)
@@ -1855,7 +1884,10 @@ class Life(Ground):
             reach = 0.5 * dab * rng.uniform(0.6, 1.6)
             reach = reach * np.array([math.cos(turn), math.sin(turn)])
             path = [places[k] - reach, places[k] + reach]
-            self.sheet.stroke(path, stick(colour), float(rng.uniform(0.45, 0.8)), dab)
+            firm = float(rng.uniform(0.5, 0.85))
+            # (a dab swells from nothing where the stick lands and lifts)
+            press, shape = leafy(firm, dab)
+            self.sheet.stroke(path, stick(colour), press, shape)
 
     def car(self, car: Car) -> None:
         """A car, nose toward the eye: its shadow, the flank the eye sees,
@@ -1863,12 +1895,14 @@ class Life(Ground):
         pair = distant(PAINTS[car.paint], car.z)
         sides = (car.x - 0.5 * car.wide, car.x + 0.5 * car.wide)
         self.car_shadow(car, sides)
+        self.softly = True
         if car.x > EYE[0]:
             self.flank(car, sides[0], pair)
         else:  # (its other flank is turned from the sun)
             self.flank(car, sides[1], (pair[1], pair[1]))
         self.nose(car, pair, sides)
         self.cabin(car, pair, sides)
+        self.softly = False
 
     def car_shadow(self, car: Car, sides) -> None:
         """The shadow a car lays on the sunlit roadway, beside it and beyond

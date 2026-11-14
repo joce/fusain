@@ -48,12 +48,18 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   strokes that recede and taper, and the side of a stick of charcoal and of
   pastel.
 - Every image is regenerated. Shadings end crisply at the edge of their
-  area. `broadway.py` cuts its fronts, awnings, cars and the bars of the
-  crossing square at their ends instead of insetting round ends by half a
-  width, narrows every stroke that runs into the distance as it goes,
-  draws its figures in one layer (two, laid opposite ways with a fix
-  between, made up for the weak ends of short strokes) and lays fewer and
-  lighter leaves, each now a whole dab. `deco.py` stops its windows square.
+  area. `broadway.py` cuts its fronts, awnings and the bars of the crossing
+  square at their ends instead of insetting round ends by half a width
+  (a car's pieces keep round ends inside them, so that it does not come out
+  in blocks), narrows every stroke that runs into the distance as it goes,
+  and draws its figures in one layer (two, laid opposite ways with a fix
+  between, made up for the weak ends of short strokes). Its leaves are
+  shaped by profiles: each dab of foliage swells from nothing where the
+  stick lands to its middle and back (pressure and width), and a fallen
+  leaf narrows toward its tips, so that the trees stay soft now that a
+  stroke is full to its ends. `deco.py` stops its windows square, and a
+  stroke that the edge of a face cuts short stops square at the edge, so
+  that its round end no longer greys the lit face next to it.
   `stilllife.png` (ballpoint) and `papers.png` are unchanged.
 
 ### Changed

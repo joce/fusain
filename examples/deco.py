@@ -531,7 +531,9 @@ class Scene:
     ):
         """One stroke from ``start`` to ``end`` on the sheet, pressed as
         firmly as ``touch`` says times what ``image`` holds along it, and
-        lifted where that is nothing; ``ends`` as for :meth:`Sheet.stroke`."""
+        lifted where that is nothing; ``ends`` as for :meth:`Sheet.stroke`.
+        Where ``image`` cuts it short (the edge of a face), it stops square,
+        so that its round end does not lie over the face next to it."""
         start, end = np.asarray(start, dtype=float), np.asarray(end, dtype=float)
         rubs = isinstance(touch.what, tools.Tool)
         for a, b in runs(image, start, end):
@@ -541,8 +543,12 @@ class Scene:
             path = wavering(a, b, self.rng, wobble)
             if isinstance(touch.what, tools.Tool):
                 self.sheet.smudge(path, touch.what, bearing, touch.width)
-            else:
-                self.sheet.stroke(path, touch.what, bearing, touch.width, ends=ends)
+                continue
+            cut = (
+                "flat" if np.hypot(*(a - start)) > 0.5 else ends,
+                "flat" if np.hypot(*(b - end)) > 0.5 else ends,
+            )
+            self.sheet.stroke(path, touch.what, bearing, touch.width, ends=cut)
 
     def strokes(self, lines, touch: Touch, image, reach: float, wobble: float):
         """A stroke along each of ``lines``, in pieces no longer than about
