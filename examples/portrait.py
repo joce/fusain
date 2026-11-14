@@ -10,11 +10,12 @@ shoulders and hair are built round it.  Everything is rendered from one
 camera, with a soft key light and a weak fill, into a grey study, a study in
 flat colours and the maps the pen work will follow.
 
-    uv run python examples/portrait.py [output folder]
+    uv run python examples/portrait.py OUTPUT_FOLDER
 """
 
 from __future__ import annotations
 
+import itertools
 import math
 import sys
 from dataclasses import dataclass, field
@@ -30,27 +31,108 @@ WIDTH, HEIGHT = 1100, 1400
 
 # Regions of the picture, as stored in the region map.
 BACKGROUND, SKIN, LIPS, EYE_WHITE, IRIS, PUPIL, BROW, HAIR, GARMENT = range(9)
-REGION_NAMES = (
-    "background skin lips eye_white iris pupil brow hair garment".split()
-)
+REGION_NAMES = [
+    "background",
+    "skin",
+    "lips",
+    "eye_white",
+    "iris",
+    "pupil",
+    "brow",
+    "hair",
+    "garment",
+]
 
 # Kinds of surface in the scene, one per triangle.
 K_FACE, K_MOUTH, K_HOLE, K_BALL, K_BODY, K_SKULL, K_HAIR, K_LID = range(8)
 
 # Landmarks of the face mesh (vertex indices).
-LIP_OUTER = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291,
-             409, 270, 269, 267, 0, 37, 39, 40, 185]  # fmt: skip
-LIP_INNER = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308,
-             415, 310, 311, 312, 13, 82, 81, 80, 191]  # fmt: skip
-EYE_R = [33, 7, 163, 144, 145, 153, 154, 155, 133,
-         173, 157, 158, 159, 160, 161, 246]  # fmt: skip
-EYE_L = [263, 249, 390, 373, 374, 380, 381, 382, 362,
-         398, 384, 385, 386, 387, 388, 466]  # fmt: skip
+LIP_OUTER = [
+    61,
+    146,
+    91,
+    181,
+    84,
+    17,
+    314,
+    405,
+    321,
+    375,
+    291,
+    409,
+    270,
+    269,
+    267,
+    0,
+    37,
+    39,
+    40,
+    185,
+]
+LIP_INNER = [
+    78,
+    95,
+    88,
+    178,
+    87,
+    14,
+    317,
+    402,
+    318,
+    324,
+    308,
+    415,
+    310,
+    311,
+    312,
+    13,
+    82,
+    81,
+    80,
+    191,
+]
+EYE_R = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246]
+EYE_L = [263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466]
 BROW_R = [46, 53, 52, 65, 55, 70, 63, 105, 66, 107]
 BROW_L = [276, 283, 282, 295, 285, 300, 293, 334, 296, 336]
-OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365,
-        379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93,
-        234, 127, 162, 21, 54, 103, 67, 109]  # fmt: skip
+OVAL = [
+    10,
+    338,
+    297,
+    332,
+    284,
+    251,
+    389,
+    356,
+    454,
+    323,
+    361,
+    288,
+    397,
+    365,
+    379,
+    378,
+    400,
+    377,
+    152,
+    148,
+    176,
+    149,
+    150,
+    136,
+    172,
+    58,
+    132,
+    93,
+    234,
+    127,
+    162,
+    21,
+    54,
+    103,
+    67,
+    109,
+]
 NOSE_TIP, NOSE_BRIDGE, CHIN = 1, 168, 152
 
 
@@ -58,7 +140,10 @@ NOSE_TIP, NOSE_BRIDGE, CHIN = 1, 168, 152
 
 
 def load_obj(path: Path) -> tuple[np.ndarray, np.ndarray]:
-    """Vertices and triangles of a Wavefront file (polygons are fanned)."""
+    """Vertices and triangles of a Wavefront file (polygons are fanned).
+
+    Used for the face mesh: MediaPipe's canonical face model, under the
+    Apache License 2.0."""
     vs, fs = [], []
     for line in path.read_text().splitlines():
         p = line.split()
@@ -77,11 +162,14 @@ def subdivide(v, f, kind):
     e = np.concatenate([f[:, [0, 1]], f[:, [1, 2]], f[:, [2, 0]]])
     e.sort(axis=1)
     uniq, inv = np.unique(e, axis=0, return_inverse=True)
-    ab, bc, ca = (len(v) + inv.reshape(3, m))
+    ab, bc, ca = len(v) + inv.reshape(3, m)
     a, b, c = f.T
     v2 = np.vstack([v, (v[uniq[:, 0]] + v[uniq[:, 1]]) / 2])
     f2 = np.concatenate(
-        [np.stack(t, axis=1) for t in ((a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca))]
+        [
+            np.stack(t, axis=1)
+            for t in ((a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca))
+        ]
     )
     return v2, f2, np.tile(kind, 4)
 
@@ -119,9 +207,15 @@ def rotation(yaw: float, pitch: float, roll: float) -> np.ndarray:
     """Turn by ``yaw`` (about y), nod by ``pitch`` (about x, positive lifts
     the chin), tilt by ``roll`` (about z); degrees."""
     a, b, c = (math.radians(x) for x in (yaw, pitch, roll))
-    ry = np.array([[math.cos(a), 0, math.sin(a)], [0, 1, 0], [-math.sin(a), 0, math.cos(a)]])
-    rx = np.array([[1, 0, 0], [0, math.cos(b), -math.sin(b)], [0, math.sin(b), math.cos(b)]])
-    rz = np.array([[math.cos(c), -math.sin(c), 0], [math.sin(c), math.cos(c), 0], [0, 0, 1]])
+    ry = np.array(
+        [[math.cos(a), 0, math.sin(a)], [0, 1, 0], [-math.sin(a), 0, math.cos(a)]]
+    )
+    rx = np.array(
+        [[1, 0, 0], [0, math.cos(b), -math.sin(b)], [0, math.sin(b), math.cos(b)]]
+    )
+    rz = np.array(
+        [[math.cos(c), -math.sin(c), 0], [math.sin(c), math.cos(c), 0], [0, 0, 1]]
+    )
     return rz @ rx @ ry
 
 
@@ -130,7 +224,7 @@ def polygon_inside(px, py, poly):
     inside = np.zeros(np.shape(px), dtype=bool)
     x0, y0 = poly[:, 0], poly[:, 1]
     x1, y1 = np.roll(x0, -1), np.roll(y0, -1)
-    for a, b, c, d in zip(x0, y0, x1, y1):
+    for a, b, c, d in zip(x0, y0, x1, y1, strict=True):
         cross = (b > py) != (d > py)
         t = (py - b) / np.where(d == b, 1e-12, d - b)
         inside ^= cross & (px < a + t * (c - a))
@@ -169,32 +263,36 @@ def taper_jaw(v):
     s = np.clip((-0.5 - y) / 7.5, 0, 1)
     s = s * s * (3 - 2 * s)
     out = v.copy()
-    out[:, 0] *= 0.965 - 0.10 * s
+    out[:, 0] *= 0.965 - 0.15 * s
     return out
 
 
 FACE_BUMPS = [
     # jaw: the angle softened, raised and drawn in; the chin smaller
-    Bump((5.9, -6.2, -0.6), 2.2, (-0.25, 0.35, 0.0)),
+    Bump((5.9, -6.2, -0.6), 2.4, (-0.4, 0.6, 0.0)),
     Bump((3.2, -8.3, 2.8), 1.6, (-0.15, 0.2, -0.1)),
-    Bump((0.0, -9.3, 4.2), 1.5, (0.0, 0.3, 0.05)),
+    Bump((0.0, -9.3, 4.2), 2.2, (0.0, 0.55, 0.1)),
     # forehead: no brow ridge, a gently rounded brow
     Bump((0.0, 4.6, 5.6), 1.3, (0.0, 0.0, -0.25)),
     Bump((2.6, 5.1, 5.0), 1.3, (0.0, 0.0, -0.18)),
     Bump((0.0, 7.3, 4.8), 2.2, (0.0, 0.0, 0.18)),
-    # nose: slimmer, shorter, slightly turned up, narrow wings
-    Bump((0.0, -0.7, 7.4), 0.9, (0.0, 0.22, -0.4)),
+    # nose: slimmer, shorter, slightly turned up, narrow wings, a low root
+    Bump((0.0, -0.7, 7.4), 1.0, (0.0, 0.38, -0.45)),
+    Bump((0.0, 2.7, 5.7), 0.9, (0.0, 0.0, -0.22)),
     Bump((0.0, -1.9, 6.1), 0.7, (0.0, 0.15, -0.1)),
-    Bump((1.75, -1.0, 4.9), 0.8, (-0.28, 0.08, -0.05)),
+    Bump((1.75, -1.0, 4.9), 0.8, (-0.32, 0.1, -0.08)),
     Bump((0.0, 1.2, 6.5), 0.9, (0.0, 0.0, -0.12)),
     # cheekbones higher and fuller, the cheeks below them smooth
     Bump((4.6, 1.0, 4.0), 1.5, (0.08, 0.15, 0.12)),
     Bump((4.2, -3.0, 3.8), 1.6, (-0.12, 0.0, -0.05)),
+    Bump((3.3, -0.6, 5.0), 1.3, (0.0, 0.05, 0.2)),
+    Bump((1.4, -8.4, 4.0), 1.0, (-0.22, 0.05, 0.0)),
     # lips: fuller, a defined bow, the corners lifted a touch
-    Bump((0.0, -3.7, 5.8), 0.7, (0.0, 0.05, 0.22)),
-    Bump((0.65, -3.35, 5.8), 0.35, (0.0, 0.14, 0.05)),
-    Bump((0.0, -5.1, 5.5), 0.8, (0.0, -0.12, 0.18)),
-    Bump((2.45, -4.35, 4.3), 0.5, (-0.05, 0.12, 0.0)),
+    Bump((0.0, -3.7, 5.8), 0.7, (0.0, -0.06, -0.03)),
+    Bump((0.0, -3.4, 5.9), 0.3, (0.0, -0.06, 0.0)),
+    Bump((0.65, -3.35, 5.8), 0.35, (0.0, 0.05, 0.04)),
+    Bump((0.0, -5.1, 5.5), 0.9, (0.0, -0.2, 0.1)),
+    Bump((2.45, -4.35, 4.3), 0.5, (-0.05, 0.2, -0.08)),
 ]
 
 
@@ -206,15 +304,14 @@ def open_eyes(v):
     """Make the eye openings larger: the upper lid higher, the corners
     further apart, a smooth falloff round them."""
     out = v.copy()
-    for ring, side in ((EYE_R, -1), (EYE_L, 1)):
+    for ring in (EYE_R, EYE_L):
         c = eye_centre(v, ring)
         d = v - c
         w = np.exp(-(d[:, 0] ** 2 / (2 * 1.6**2) + d[:, 1] ** 2 / (2 * 0.55**2)))
         w *= np.exp(-np.clip(np.abs(d[:, 2]) - 1.0, 0, None) ** 2)
         up = d[:, 1] > 0
-        out[:, 1] += w * np.where(up, 0.32, 0.12) * np.tanh(d[:, 1] / 0.25)
-        out[:, 0] += w * 0.09 * np.tanh(d[:, 0] / 0.6)
-        del side
+        out[:, 1] += w * np.where(up, 0.52, 0.22) * np.tanh(d[:, 1] / 0.25)
+        out[:, 0] += w * 0.24 * np.tanh(d[:, 0] / 0.6)
     return out
 
 
@@ -229,7 +326,7 @@ def close_mouth(v):
     mid = (up + lo) / 2
     out = v.copy()
     for c, half in ((up, mid - up), (lo, mid - lo)):
-        for p, d in zip(c, half):
+        for p, d in zip(c, half, strict=True):
             w = np.exp(-np.sum((v[:, :2] - p[:2]) ** 2, axis=1) / (2 * 0.32**2))
             out += w[:, None] * d * [1, 0.97, 1]
     return out
@@ -240,7 +337,29 @@ def slim_nose(v):
     x, y, z = v.T
     band = np.exp(-(((y - 0.8) / 2.6) ** 2)) * np.clip((z - 4.3) / 1.2, 0, 1)
     out = v.copy()
-    out[:, 0] -= 0.2 * x * np.exp(-(x**2) / (2 * 1.1**2)) * band
+    out[:, 0] -= 0.3 * x * np.exp(-(x**2) / (2 * 1.1**2)) * band
+    return out
+
+
+#: Heights in the face moved, to bring the eyes, nose and mouth closer
+#: together: (height, shift), from the top down.
+FACE_HEIGHTS = np.array(
+    [
+        (9.5, 0.0),
+        (5.5, -0.25),
+        (2.6, -0.4),
+        (-1.9, 0.05),
+        (-4.3, 0.3),
+        (-8.6, 0.42),
+        (-12.0, 0.42),
+    ]
+)
+
+
+def compact(v):
+    out = v.copy()
+    ys, dy = FACE_HEIGHTS[::-1, 0], FACE_HEIGHTS[::-1, 1]
+    out[:, 1] += np.interp(v[:, 1], ys, dy)
     return out
 
 
@@ -249,7 +368,7 @@ def feminise(v):
     v = taper_jaw(v)
     v = slim_nose(v)
     v = apply_bumps(v, FACE_BUMPS)
-    return open_eyes(v)
+    return compact(open_eyes(v))
 
 
 def face_kinds(v, f):
@@ -265,6 +384,45 @@ def face_kinds(v, f):
     return kind
 
 
+def outer_rim(f):
+    """The mask's boundary, in the order of its triangles' edges."""
+    e = np.concatenate([f[:, [0, 1]], f[:, [1, 2]], f[:, [2, 0]]])
+    key = np.sort(e, axis=1)
+    _, inv, cnt = np.unique(key, axis=0, return_inverse=True, return_counts=True)
+    nxt = dict(e[cnt[inv] == 1].tolist())
+    loop = [next(iter(nxt))]
+    while nxt[loop[-1]] != loop[0]:
+        loop.append(nxt[loop[-1]])
+    return np.array(loop)
+
+
+def roll_under(v, f, kind, r=0.35, steps=8, deep=0.9):
+    """Turn the mask's edge under, so that the jaw and the sides of the face
+    end in a rounded edge rather than a cut."""
+    rim = outer_rim(f)
+    n = vertex_normals(v, f)[rim]
+    t = np.roll(v[rim], -1, axis=0) - np.roll(v[rim], 1, axis=0)
+    out = unit_rows(np.cross(t, n))
+    out *= np.sign(np.sum(out * (v[rim] - v.mean(axis=0)), axis=1))[:, None]
+    rings = [rim]
+    pts = [v]
+    count = len(v)
+    for k in range(1, steps + 1):
+        th = np.radians(115) * k / steps
+        p = v[rim] + r * np.sin(th) * out - deep * (1 - np.cos(th)) * n
+        if k == steps:
+            p = p - 0.8 * n + 0.3 * out
+        pts.append(p)
+        rings.append(np.arange(count, count + len(rim)))
+        count += len(rim)
+    tris = [f]
+    for a, b in itertools.pairwise(rings):
+        a1, b1 = np.roll(a, -1), np.roll(b, -1)
+        tris += [np.stack([a1, a, b], 1), np.stack([a1, b, b1], 1)]
+    new = sum(len(t) for t in tris[1:])
+    return np.vstack(pts), np.vstack(tris), np.concatenate([kind, np.full(new, K_FACE)])
+
+
 def build_face(levels=3):
     v, f = load_obj(MESH)
     v = feminise(v)
@@ -273,7 +431,7 @@ def build_face(levels=3):
         v, f, kind = subdivide(v, f, kind)
         v = smooth(v, f, 1, 0.5)
     v = smooth(v, f, 3, 0.5, -0.53)
-    return v, f, kind
+    return roll_under(v, f, kind)
 
 
 # ----------------------------------------------------------- rasterising
@@ -355,8 +513,8 @@ def interpolate(attr, f, frame: Frame):
 # ------------------------------------------------------------------ the eyes
 
 EYE_RADIUS = 1.2
-IRIS_RADIUS = 0.56
-PUPIL_RADIUS = 0.2
+IRIS_RADIUS = 0.58
+PUPIL_RADIUS = 0.17
 #: Upper and lower lid points in the middle of each opening.
 LID_MID = {"r": (159, 145), "l": (386, 374)}
 
@@ -399,12 +557,20 @@ def hole_loop(f, kind):
     face, as a mapping from each vertex to the next one round the loop."""
     hole = f[kind == K_HOLE]
     face = f[kind != K_HOLE]
-    fe = {tuple(sorted(e)) for t in face for e in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0]))}
+    fe = {
+        tuple(sorted(e))
+        for t in face
+        for e in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0]))
+    }
     nxt = {}
     for t in hole:
-        for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])):
-            if tuple(sorted((a, b))) in fe:
-                nxt[b] = a  # reversed: the face's orientation
+        nxt.update(
+            {
+                b: a
+                for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0]))
+                if tuple(sorted((a, b))) in fe
+            }
+        )  # reversed: the face's orientation
     return nxt
 
 
@@ -454,7 +620,10 @@ def uv_sphere(c, r, nu=96, nv=48):
     a = i * nu + j
     b = i * nu + (j + 1) % nu
     f = np.concatenate(
-        [np.stack([a, a + nu, b], -1).reshape(-1, 3), np.stack([b, a + nu, b + nu], -1).reshape(-1, 3)]
+        [
+            np.stack([a, a + nu, b], -1).reshape(-1, 3),
+            np.stack([b, a + nu, b + nu], -1).reshape(-1, 3),
+        ]
     )
     return v, f
 
@@ -475,7 +644,7 @@ class Pose:
         return ((p - self.pivot) @ self.head.T + self.pivot) @ self.body.T
 
     def of_body(self, p):
-        return p @ self.body.T
+        return (p + [0.0, BODY_LIFT, 0.0]) @ self.body.T
 
     def head_dir(self, d):
         return d @ self.head.T @ self.body.T
@@ -491,15 +660,29 @@ class Scene:
     kind: list = field(default_factory=list)
     n: list = field(default_factory=list)
     local: list = field(default_factory=list)
+    attrs: list = field(default_factory=list)
     count: int = 0
 
-    def add(self, local, posed, f, kind):
+    def add(self, local, posed, f, kind, attrs=None, soften=0):
         self.v.append(posed)
         self.local.append(local)
-        self.n.append(vertex_normals(posed, f))
+        n = vertex_normals(posed, f)
+        for _ in range(soften):
+            n = unit_rows(neighbour_mean(n, f) + n)
+        self.n.append(n)
         self.f.append(f + self.count)
         self.kind.append(np.broadcast_to(kind, (len(f),)).astype(np.int64))
+        self.attrs.append(attrs or {})
         self.count += len(posed)
+
+    def attr(self, name, width):
+        """One per-vertex attribute over all parts, zero where a part has none."""
+        return np.vstack(
+            [
+                a.get(name, np.zeros((len(v), width)))
+                for a, v in zip(self.attrs, self.v, strict=True)
+            ]
+        )
 
     def merged(self):
         return (
@@ -516,7 +699,8 @@ def add_face(scene, pose, face):
     keep = kind != K_HOLE
     eyes = [place_eye(v, EYE_R, LID_MID["r"]), place_eye(v, EYE_L, LID_MID["l"])]
     v = wrap_lids(v, f, eyes)
-    scene.add(v, pose.of_head(v), f[keep], kind[keep])
+    face[0][:] = v
+    scene.add(v, pose.of_head(v), f[keep], kind[keep], soften=3)
     for loop in loops(hole_loop(f, kind)):
         c = v[loop].mean(axis=0)
         eye = min(eyes, key=lambda e: np.linalg.norm(e.centre[:2] - c[:2]))
@@ -541,29 +725,45 @@ def catmull_rom(pts, n):
         p0, p1, p2, p3 = p[i - 1], p[i], p[i + 1], p[i + 2]
         seg.append(
             0.5
-            * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t**2
-               + (3 * p1 - p0 - 3 * p2 + p3) * t**3)  # fmt: skip
+            * (
+                2 * p1
+                + (p2 - p0) * t
+                + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t**2
+                + (3 * p1 - p0 - 3 * p2 + p3) * t**3
+            )
         )
     seg.append(pts[-1:])
     dense = np.vstack(seg)
     s = np.concatenate([[0], np.cumsum(np.linalg.norm(np.diff(dense, axis=0), axis=1))])
     u = np.linspace(0, s[-1], n)
-    return np.stack([np.interp(u, s, dense[:, k]) for k in range(dense.shape[1])], axis=1)
+    return np.stack(
+        [np.interp(u, s, dense[:, k]) for k in range(dense.shape[1])], axis=1
+    )
 
 
 #: Half the width of the body against height, from inside the head down the
 #: neck, over the shoulders and down the arms: (half width, height, half depth).
-BODY_PROFILE = np.array([
-    (4.9, -1.0, 5.1), (4.95, -8.0, 5.2), (5.2, -12.6, 5.35), (6.0, -14.6, 5.6),
-    (8.3, -15.9, 5.9), (12.4, -17.3, 6.3), (15.6, -18.6, 6.6), (17.6, -20.2, 7.0),
-    (18.4, -22.8, 7.6), (18.5, -27.0, 8.2), (18.2, -46.0, 8.6),
-])  # fmt: skip
+BODY_PROFILE = np.array(
+    [
+        (4.9, -1.0, 5.1),
+        (4.95, -8.0, 5.2),
+        (5.2, -12.6, 5.35),
+        (6.0, -14.6, 5.6),
+        (8.3, -15.9, 5.9),
+        (12.4, -17.3, 6.3),
+        (15.6, -18.6, 6.6),
+        (17.6, -20.2, 7.0),
+        (18.5, -22.8, 7.6),
+        (18.9, -27.0, 8.2),
+        (19.8, -46.0, 8.6),
+    ]
+)
 
 
 def body_axis_z(y):
     """The neck leans forward: its axis comes forward as it rises."""
     t = np.clip((y + 15.0) / 12.0, 0, 1)
-    return -6.6 + 2.6 * t * t * (3 - 2 * t) + 0.0 * y
+    return -6.6 + 2.6 * t * t * (3 - 2 * t)
 
 
 def body_surface(n_rows=260, n_cols=200):
@@ -579,8 +779,10 @@ def body_surface(n_rows=260, n_cols=200):
     a = i * n_cols + j
     b = i * n_cols + (j + 1) % n_cols
     f = np.concatenate(
-        [np.stack([a, b, a + n_cols], -1).reshape(-1, 3),
-         np.stack([b, b + n_cols, a + n_cols], -1).reshape(-1, 3)]  # fmt: skip
+        [
+            np.stack([a, b, a + n_cols], -1).reshape(-1, 3),
+            np.stack([b, b + n_cols, a + n_cols], -1).reshape(-1, 3),
+        ]
     )
     return v, f
 
@@ -619,57 +821,76 @@ def shape_body(v, f):
 
 
 SKULL_CENTRE = np.array([0.0, 3.6, -4.3])
-SKULL_RADII = np.array([7.2, 10.0, 9.2])
+SKULL_RADII = np.array([7.1, 9.0, 9.2])
 
 
 def skull():
+    """The back and top of the head; its front is left to the face."""
     v, f = uv_sphere(np.zeros(3), 1.0, 96, 64)
-    return v * SKULL_RADII + SKULL_CENTRE, f
+    v = v * SKULL_RADII + SKULL_CENTRE
+    c = v[f].mean(axis=1)
+    return v, f[(c[:, 2] < -0.5) | (c[:, 1] > 9.0)]
 
 
 # ------------------------------------------------------------------ the hair
 
 #: The shell the hair lies on: centre and radii (x, y, z) at its widest.
-HAIR_CENTRE = np.array([0.0, 3.4, -4.3])
-HAIR_RADII = np.array([8.55, 11.2, 10.5])
+HAIR_CENTRE = np.array([0.0, 3.2, -4.4])
+HAIR_RADII = np.array([8.7, 10.7, 10.3])
 #: Where the side curtains begin, either side of the face (radians from the
 #: front; the sitter's left, the near side, first).
-CURTAIN_EDGE = (0.86, -1.12)
+CURTAIN_EDGE = (0.76, -1.12)
 PARTING = -0.2  # azimuth of the parting, a little to the sitter's right
-FRINGE_END = 5.55  # height of the fringe's ends over the brows
+FRINGE_END = 4.55  # height of the fringe's ends over the brows
 CURTAIN_END = -12.6
 
 
 def lock_tips(phi, width, seed):
-    """Uneven ends: a lock every ``width`` radians, each with its own length
-    and a rounded point; returns 0 at a tip, rising to 1 between locks."""
+    """Uneven ends: locks of irregular width round the head, each with its
+    own length and a soft point.  Returns, at each azimuth, 0 at a lock's
+    tip rising to 1 between locks, and the lock's length (0 to 1)."""
     rng = np.random.default_rng(seed)
-    k = np.floor(phi / width)
-    jitter = rng.uniform(-0.5, 0.5, 4096)
-    idx = (k.astype(np.int64) + 2048) % 4096
-    frac = phi / width - k - 0.5 - 0.3 * jitter[idx]
-    length = rng.uniform(0, 1, 4096)[idx]
-    return np.clip(np.abs(frac) * 2, 0, 1) ** 1.6, length
+    edges = np.cumsum(rng.uniform(0.55, 1.45, 200) * width) - np.pi - 1.0
+    k = np.clip(np.searchsorted(edges, phi) - 1, 0, len(edges) - 2)
+    frac = (phi - edges[k]) / (edges[k + 1] - edges[k])
+    centre = rng.uniform(0.35, 0.65, 200)[k]
+    side = np.where(frac < centre, frac / centre, (1 - frac) / (1 - centre))
+    return (1 - side) ** 1.4, rng.uniform(0, 1, 200)[k]
 
 
 def hair_ends(phi):
     """Height where the hair ends at each azimuth: the fringe in front, the
     curtains at the sides and back, a little uneven."""
-    tip, ln = lock_tips(phi, 0.16, 3)
-    fringe = FRINGE_END + 0.32 * tip + 0.28 * ln + 0.18 * np.tanh(phi / 0.5) + 0.25 * (phi / 0.9) ** 2
-    tip2, ln2 = lock_tips(phi + 0.05, 0.22, 7)
-    curtain = CURTAIN_END + 0.9 * tip2 + 0.6 * ln2 + 0.7 * (np.abs(phi) - 1.0).clip(0) / 2.1
+    tip, ln = lock_tips(phi, 0.13, 3)
+    fringe = (
+        FRINGE_END
+        + 0.25 * tip**1.5
+        + 0.25 * ln
+        + 0.15 * np.tanh(phi / 0.5)
+        + 0.3 * (phi / 0.9) ** 2
+    )
+    tip2, ln2 = lock_tips(phi + 0.05, 0.2, 7)
+    curtain = (
+        CURTAIN_END
+        + 0.35 * tip2**2
+        + 0.45 * ln2
+        + 0.9 * (np.abs(phi) - 1.0).clip(0) / 2.1
+    )
     edge = np.where(phi > 0, CURTAIN_EDGE[0], -CURTAIN_EDGE[1])
     t = np.clip((np.abs(phi) - edge) / 0.07 + 0.5, 0, 1)
     t = t * t * (3 - 2 * t)
-    return fringe * (1 - t) + curtain * t, t
+    # single strands stop short of their lock's end: the ends are frayed
+    fray = np.random.default_rng(5).random(len(phi)) ** 3
+    return fringe * (1 - t) + curtain * t + fray * (0.35 + 0.35 * t), t
 
 
 def profile_length(y_end):
     b = HAIR_RADII[1]
     c = HAIR_CENTRE[1]
     return np.where(
-        y_end >= c, np.arccos(np.clip((y_end - c) / b, -1, 1)), np.pi / 2 + (c - y_end) / b
+        y_end >= c,
+        np.arccos(np.clip((y_end - c) / b, -1, 1)),
+        np.pi / 2 + (c - y_end) / b,
     )
 
 
@@ -694,7 +915,10 @@ def hair_grid(rows=240, cols=900):
     s = u * s_end[None, :]
     shape = (rows, cols)
     return HairGrid(
-        np.broadcast_to(phi, shape), s, np.broadcast_to(u, shape), np.broadcast_to(side, shape)
+        np.broadcast_to(phi, shape),
+        s,
+        np.broadcast_to(u, shape),
+        np.broadcast_to(side, shape),
     )
 
 
@@ -704,12 +928,927 @@ def hair_profile(g: HairGrid):
     a = shell_radius(g.phi)
     cap = g.s <= np.pi / 2
     alpha = np.minimum(g.s, np.pi / 2)
-    rho = a * np.sin(alpha)
-    crown = 1 + 0.05 * np.cos(alpha) ** 2
-    y = np.where(cap, yc + b * np.cos(alpha) * crown, yc - (g.s - np.pi / 2) * b)
-    # The curtains turn in at their ends and come a little forward.
+    rho = a * np.sin(alpha) ** 0.8
+    y = np.where(cap, yc + b * np.cos(alpha) ** 0.9, yc - (g.s - np.pi / 2) * b)
+    # The curtains swell a little by the cheeks, narrow towards the neck
+    # and turn in at their ends.
     fall = np.clip((g.s - np.pi / 2) * b, 0, None)
+    rho = rho - 0.35 * np.exp(-0.5 * ((alpha - 1.2) / 0.25) ** 2) * g.side
+    rho = rho + 0.45 * np.exp(-0.5 * ((fall - 4.0) / 3.0) ** 2) - 0.07 * fall
     end_len = (1 - g.u) * (g.s / np.maximum(g.u, 1e-6)) * b
     turn = np.exp(-np.clip(end_len, 0, None) / 2.2) * np.clip(fall / 4, 0, 1)
     rho = rho - 0.9 * turn * g.side
     return rho, y, fall
+
+
+#: The map of how far the face stands from the hair's axis, by azimuth and
+#: height: (pixels per radian, pixels per centimetre, top height).
+CYL = (120.0, 12.0, 16.0)
+
+
+def face_clearance(v, f):
+    """Distance of the face from the hair's axis at each azimuth and height
+    (a cylindrical z-buffer), spread a little so that the hair clears it
+    smoothly."""
+    zc = HAIR_CENTRE[2]
+    phi = np.arctan2(v[:, 0], v[:, 2] - zc)
+    rho = np.hypot(v[:, 0], v[:, 2] - zc)
+    cyl = np.stack([phi, v[:, 1], rho], axis=1)
+    h, w = int(36 * CYL[1]), int(2 * np.pi * CYL[0])
+    view = View((h, w), 1.0, (0.0, 0.0))
+    px = np.stack(
+        [(cyl[:, 0] + np.pi) * CYL[0], (CYL[2] - cyl[:, 1]) * CYL[1], cyl[:, 2]], 1
+    )
+    px[:, 1] *= -1  # raster() flips y
+    fr = raster(px, f, view)
+    out = np.where(fr.seen, fr.depth, 0.0)
+    # above the top of the face, let its distance fall away gently
+    fall = 1.8 / CYL[1]
+    for i in range(out.shape[0] - 2, -1, -1):
+        out[i] = np.maximum(out[i], out[i + 1] - fall)
+    for _ in range(2):
+        out = np.maximum(out, filters.box_blur(out, 5))
+    return filters.box_blur(out, 4)
+
+
+def clearance_at(cmap, phi, y):
+    i = np.clip(((CYL[2] - y) * CYL[1]).astype(np.int64), 0, cmap.shape[0] - 1)
+    j = np.clip(((phi + np.pi) * CYL[0]).astype(np.int64), 0, cmap.shape[1] - 1)
+    return cmap[i, j]
+
+
+def locks(phi, s, u, seed=11):
+    """Gentle clumping of the hair into locks, stronger towards the ends."""
+    rng = np.random.default_rng(seed)
+    out = np.zeros_like(phi)
+    for k in (5, 7, 11, 17, 26):
+        a, b, c = rng.uniform(0, 2 * np.pi, 3)
+        amp = rng.uniform(0.4, 1.0)
+        out += (
+            amp
+            * np.sin(
+                k * phi + a + 0.9 * np.sin(1.3 * s + b) + 0.5 * np.sin(2 * phi + c)
+            )
+            / k**0.7
+        )
+    return out * (0.03 + 0.38 * u**2.5)
+
+
+def soft_max(a, b, k):
+    h = np.clip(0.5 + 0.5 * (a - b) / k, 0, 1)
+    return b + (a - b) * h + k * h * (1 - h)
+
+
+def hair_points(g: HairGrid, cmap):
+    rho, y, fall = hair_profile(g)
+    edge = np.where(g.phi > 0, CURTAIN_EDGE[0], -CURTAIN_EDGE[1])
+    near_edge = np.exp(-np.clip(np.abs(g.phi) - edge, 0, None) / 0.35)
+    sway = (
+        0.22 * np.exp(-0.5 * ((fall - 6.5) / 3.5) ** 2)
+        + 0.08 * np.clip(fall / 14, 0, 1) ** 2
+    )
+    sweep = sway * near_edge * g.side
+    phi = g.phi - np.sign(g.phi) * sweep
+    rho = rho + locks(phi, g.s, g.u)
+    rho = soft_max(rho, clearance_at(cmap, phi, y) + 0.35 + 0.25 * g.side, 0.4)
+    # the parting: a narrow groove from the crown forward
+    alpha = np.minimum(g.s, np.pi / 2)
+    win = np.clip((alpha - 0.12) / 0.15, 0, 1) * np.clip((0.85 - alpha) / 0.2, 0, 1)
+    dphi = np.angle(np.exp(1j * (phi - PARTING)))
+    groove = 0.16 * win * np.exp(-0.5 * (dphi * rho / 0.35) ** 2)
+    rho = rho - groove
+    y = y - groove * np.cos(alpha)
+    zc = HAIR_CENTRE[2]
+    return np.stack([rho * np.sin(phi), y, zc + rho * np.cos(phi)], axis=-1), dphi
+
+
+def grid_triangles(rows, cols, wrap=True):
+    i, j = np.meshgrid(
+        np.arange(rows - 1), np.arange(cols if wrap else cols - 1), indexing="ij"
+    )
+    a = i * cols + j
+    b = i * cols + (j + 1) % cols
+    return np.concatenate(
+        [
+            np.stack([a, b, a + cols], -1).reshape(-1, 3),
+            np.stack([b, b + cols, a + cols], -1).reshape(-1, 3),
+        ]
+    )
+
+
+def hair_flow(p, dphi, g: HairGrid):
+    """Direction of the hair at each point, root to tip: down the profile,
+    turned away from the parting near it."""
+    ds = np.gradient(p, axis=0)
+    dp = np.gradient(p, axis=1)
+    ds /= np.maximum(np.linalg.norm(ds, axis=-1, keepdims=True), 1e-9)
+    dp /= np.maximum(np.linalg.norm(dp, axis=-1, keepdims=True), 1e-9)
+    alpha = np.minimum(g.s, np.pi / 2)
+    away = (
+        np.sign(dphi) * np.exp(-np.abs(dphi) / 0.5) * np.clip((1.0 - alpha) / 0.5, 0, 1)
+    )
+    flow = ds + 0.8 * away[..., None] * dp
+    return flow / np.maximum(np.linalg.norm(flow, axis=-1, keepdims=True), 1e-9)
+
+
+#: Locks that leave the mass: (azimuth, start along the hair, length,
+#: lift off it, sideways, width), centimetres.
+STRAYS = [
+    (1.75, 0.87, 2.4, 0.7, 0.3, 0.6),
+    (2.6, 0.86, 2.2, 0.55, -0.3, 0.55),
+    (-1.55, 0.86, 2.4, 0.6, -0.2, 0.55),
+]
+
+
+def stray(p, flow, g: HairGrid, spec, n=24):
+    """A ribbon for one lock leaving the hair's surface, tapering to a point."""
+    phi, u, length, lift, sideways, width = spec
+    j = int(np.argmin(np.abs(g.phi[0] - phi)))
+    i = int(np.argmin(np.abs(g.u[:, j] - u)))
+    root, t = p[i, j], flow[i, j]
+    out = root - HAIR_CENTRE
+    out[1] = 0.0
+    out = unit_rows(out - (out @ t) * t)
+    side = np.cross(t, out)
+    s = np.linspace(0, 1, n)[:, None]
+    curve = (
+        root + 0.04 * out + t * length * s + out * lift * s**2 + side * sideways * s**2
+    )
+    tan = unit_rows(np.gradient(curve, axis=0))
+    half = (width / 2) * (1 - s) ** 0.8 + 0.01
+    pts = np.vstack([curve - side * half, curve + side * half])
+    idx = np.arange(n - 1)
+    f = np.concatenate(
+        [
+            np.stack([idx, idx + 1, idx + n], 1),
+            np.stack([idx + 1, idx + n + 1, idx + n], 1),
+        ]
+    )
+    attrs = {
+        "flow": np.vstack([tan, tan]),
+        "hair_u": np.vstack([s, s]) * (1 - u) + u,
+        "strand": np.full((2 * n, 1), 37.0 * (phi + 4)) + np.vstack([s * 0, s * 0 + 3]),
+    }
+    return pts, f, attrs
+
+
+def build_hair(face_v, face_f):
+    g = hair_grid()
+    cmap = face_clearance(face_v, face_f)
+    p, dphi = hair_points(g, cmap)
+    flow = hair_flow(p, dphi, g)
+    rows, cols = g.phi.shape
+    f = grid_triangles(rows, cols)
+    strand = np.broadcast_to(np.arange(cols, dtype=float), (rows, cols))
+    attrs = {
+        "flow": flow.reshape(-1, 3),
+        "hair_u": g.u.reshape(-1, 1),
+        "strand": strand.reshape(-1, 1),
+    }
+    locks = [stray(p, flow, g, spec) for spec in STRAYS]
+    return p.reshape(-1, 3), f, attrs, locks
+
+
+# ------------------------------------------------------- posing and seeing
+
+HEAD_TURN = (-27.0, 3.0, -5.0)  # yaw, pitch (positive: face down), roll
+BODY_TURN = (-38.0, 0.0, 1.5)
+PIVOT = np.array([0.0, -3.5, -4.5])
+#: Picture scale (pixels per centimetre) and where the head-space origin
+#: (between the eyes, a little behind) lands.
+VIEW = View((HEIGHT, WIDTH), 34.0, (545.0, 565.0))
+#: The body sits this much higher than it was modelled: a shorter neck.
+BODY_LIFT = 1.9
+
+
+def make_pose():
+    body = rotation(*BODY_TURN)
+    head = body.T @ rotation(*HEAD_TURN)
+    return Pose(body, head, PIVOT)
+
+
+@dataclass
+class Model:
+    scene: Scene
+    eyes: list
+    pose: Pose
+    face: tuple
+
+
+def build_model() -> Model:
+    pose = make_pose()
+    face = build_face()
+    scene = Scene()
+    eyes = add_face(scene, pose, face)
+    sv, sf = skull()
+    scene.add(sv, pose.of_head(sv), sf, K_SKULL)
+    bv, bf = body_surface()
+    bv = shape_body(bv, bf)
+    scene.add(bv, pose.of_body(bv), bf, K_BODY)
+    hv, hf, attrs, locks = build_hair(face[0], face[1][face[2] != K_HOLE])
+    for pv, pf, pa in [(hv, hf, attrs)] + locks:
+        pa["flow"] = pose.head_dir(pa["flow"])
+        scene.add(pv, pose.of_head(pv), pf, K_HAIR, pa)
+    return Model(scene, eyes, pose, face)
+
+
+# ------------------------------------------------------------------ the light
+
+
+def unit(*v):
+    a = np.array(v, float)
+    return a / np.linalg.norm(a)
+
+
+#: Towards the key light (above, to the side she faces, in front) and the
+#: fill (weak, from the other side, low).
+KEY = unit(-0.75, 0.55, 0.38)
+FILL = unit(0.75, 0.2, 0.65)
+VIEWER = np.array([0.0, 0.0, 1.0])
+
+
+def light_basis(w):
+    u = np.cross([0.0, 1.0, 0.0], w)
+    u /= np.linalg.norm(u)
+    return np.stack([u, np.cross(w, u), w])
+
+
+@njit(cache=False)
+def _blocked(depth, x, y, z, bias):  # pragma: no cover
+    h, w = depth.shape
+    xi, yi = int(x), int(y)
+    if 0 <= xi < w and 0 <= yi < h:
+        return depth[yi, xi] - z - bias
+    return -1.0
+
+
+@njit(cache=False)
+def _soft_shadow(sx, sy, sz, grad, depth, disc, search, angle, out):  # pragma: no cover
+    """Percentage-closer soft shadows: find the blockers round each point,
+    then filter over a penumbra that widens with their distance.  Each
+    sample is compared with the plane of the receiving surface, ``grad``
+    being its slope in depth per pixel."""
+    k = disc.shape[0]
+    for i in range(sx.shape[0]):
+        bias = 0.05 + 0.8 * (abs(grad[i, 0]) + abs(grad[i, 1]))
+        nb, acc = 0, 0.0
+        for j in range(k):
+            dx, dy = disc[j, 0] * search, disc[j, 1] * search
+            z = sz[i] + grad[i, 0] * dx + grad[i, 1] * dy
+            d = _blocked(depth, sx[i] + dx, sy[i] + dy, z, bias)
+            if d > 0:
+                nb += 1
+                acc += d
+        if nb == 0:
+            out[i] = 1.0
+            continue
+        pen = max(acc / nb * angle, 1.0)
+        lit = 0
+        for j in range(k):
+            dx, dy = disc[j, 0] * pen, disc[j, 1] * pen
+            z = sz[i] + grad[i, 0] * dx + grad[i, 1] * dy
+            if _blocked(depth, sx[i] + dx, sy[i] + dy, z, bias) <= 0:
+                lit += 1
+        out[i] = lit / k
+
+
+def disc_samples(k=48):
+    i = np.arange(k) + 0.5
+    r = np.sqrt(i / k)
+    a = i * math.pi * (3 - math.sqrt(5))
+    return np.stack([r * np.cos(a), r * np.sin(a)], axis=1)
+
+
+def shadows(v, f, pos, normal, seen, lift, key=KEY, scale=36.0, softness=0.09):
+    """How much of the key light reaches each pixel's point (0 to 1); each
+    point is first moved ``lift`` towards the light (a bias against
+    surfaces shadowing themselves)."""
+    basis = light_basis(key)
+    lv = v @ basis.T
+    lo, hi = lv[:, :2].min(0) - 1, lv[:, :2].max(0) + 1
+    size = np.ceil((hi - lo) * scale).astype(int) + 1
+    view = View((size[1], size[0]), scale, (-lo[0] * scale, hi[1] * scale))
+    depth = raster(lv, f, view).depth
+    p = pos[seen] @ basis.T
+    sx = view.centre[0] + p[:, 0] * scale
+    sy = view.centre[1] - p[:, 1] * scale
+    nl = normal[seen] @ basis.T
+    nw = np.clip(nl[:, 2], 0.25, None)
+    # depth of the receiving plane per pixel step (x right, y down)
+    grad = np.stack([-nl[:, 0] / nw, nl[:, 1] / nw], axis=1) / scale
+    out = np.ones(len(p))
+    _soft_shadow(
+        sx,
+        sy,
+        p[:, 2] + lift[seen],
+        grad,
+        depth,
+        disc_samples(),
+        0.5 * scale,
+        softness * scale,
+        out,
+    )
+    full = np.ones(seen.shape)
+    full[seen] = out
+    return full
+
+
+def occlusion(depth, seen, scale):
+    """Ambient occlusion from the depth buffer: how much nearer surface
+    there is round each point, over a few distances."""
+    z = np.where(seen, depth, depth[seen].min() - 10.0)
+    occ = np.zeros_like(z)
+    for r_cm, wgt in ((0.12, 0.5), (0.35, 0.6), (1.0, 0.6), (2.6, 0.5)):
+        b = filters.box_blur(z, max(int(r_cm * scale), 1))
+        d = np.clip(b - z, 0, None)
+        occ += (
+            wgt
+            * np.clip(d / r_cm, 0, 1)
+            * np.exp(-np.clip(d - r_cm, 0, None) / (2 * r_cm))
+        )
+    return np.clip(1 - 0.45 * occ, 0.15, 1)
+
+
+# --------------------------------------------------------- what is seen where
+
+
+@dataclass
+class Buffers:
+    """Per pixel: what is seen, where it is (camera space and before the
+    pose), which way it faces, and the hair's direction."""
+
+    seen: np.ndarray
+    kind: np.ndarray
+    depth: np.ndarray
+    pos: np.ndarray
+    local: np.ndarray
+    normal: np.ndarray
+    inside: np.ndarray
+    flow: np.ndarray
+    hair_u: np.ndarray
+    strand: np.ndarray
+
+
+def unit_rows(a):
+    return a / np.maximum(np.linalg.norm(a, axis=-1, keepdims=True), 1e-12)
+
+
+def see(model: Model, view: View) -> Buffers:
+    v, f, kind, vn, loc = model.scene.merged()
+    fr = raster(v, f, view)
+    pos = interpolate(v, f, fr)
+    n = unit_rows(interpolate(vn, f, fr))
+    k = np.where(fr.seen, kind[np.maximum(fr.tid, 0)], -1)
+    centre = model.pose.of_head(HAIR_CENTRE)
+    outward = np.sign(np.sum(n * (pos - centre), axis=-1))
+    inside = (k == K_HAIR) & (outward * n[..., 2] < 0)
+    n = n * np.where(n[..., 2:3] < 0, -1, 1)
+    flow = interpolate(model.scene.attr("flow", 3), f, fr)
+    flow = unit_rows(flow - np.sum(flow * n, axis=-1, keepdims=True) * n)
+    hair_u = interpolate(model.scene.attr("hair_u", 1), f, fr)[..., 0]
+    strand = interpolate(model.scene.attr("strand", 1), f, fr)[..., 0]
+    local = interpolate(loc, f, fr)
+    return Buffers(fr.seen, k, fr.depth, pos, local, n, inside, flow, hair_u, strand)
+
+
+# ------------------------------------------------- features drawn on the face
+
+#: The rims of the eye openings, inner corner to outer: upper, lower.
+RIM_R = (
+    [133, 173, 157, 158, 159, 160, 161, 246, 33],
+    [133, 155, 154, 153, 145, 144, 163, 7, 33],
+)
+RIM_L = tuple([EYE_L[EYE_R.index(i)] for i in rim] for rim in RIM_R)
+
+
+def closed_curve(pts, n=200):
+    return catmull_rom(np.vstack([pts, pts[:1]]), n)
+
+
+def polyline_distance(q, line):
+    """Distance of points q (m, 2) to a polyline (k, 2), and the position
+    along it (0 to 1) of the nearest point."""
+    best = np.full(len(q), np.inf)
+    where = np.zeros(len(q))
+    seg = np.linalg.norm(np.diff(line, axis=0), axis=1)
+    acc = np.concatenate([[0], np.cumsum(seg)]) / max(seg.sum(), 1e-12)
+    for i in range(len(line) - 1):
+        a, b = line[i], line[i + 1]
+        ab = b - a
+        t = np.clip(((q - a) @ ab) / max(ab @ ab, 1e-12), 0, 1)
+        d = np.linalg.norm(q - (a + t[:, None] * ab), axis=1)
+        closer = d < best
+        best[closer] = d[closer]
+        where[closer] = (acc[i] + t * (acc[i + 1] - acc[i]))[closer]
+    return best, where
+
+
+def stroke(q, line, width, soft):
+    """Coverage of points q by a line of varying width (a function of the
+    position along it), with soft edges."""
+    d, t = polyline_distance(q, line)
+    return np.clip((width(t) / 2 - d) / soft + 0.5, 0, 1)
+
+
+@dataclass
+class Features:
+    """Shapes on the face, in head space (x, y), applied as decals."""
+
+    lips: np.ndarray
+    mouth: np.ndarray
+    brows: list
+    upper: list
+    lower: list
+    crease: list
+
+
+def brow_shape(v, idx):
+    """A young woman's brow: a soft head by the nose, a gentle arch two
+    thirds of the way out, a fine tail."""
+    lower, upper = v[idx[:5], :2][::-1], v[idx[5:], :2][::-1]
+    mid = catmull_rom((lower + upper) / 2, 40)[:36]
+    t = np.linspace(0, 1, 36)[:, None]
+    return (
+        mid
+        + np.array([0.0, 0.1]) * np.sin(np.pi * t**0.9)
+        - np.array([0, 0.2]) * t**3
+        - [0, 0.25]
+    )
+
+
+def brow_width(t):
+    return (0.5 - 0.42 * t**1.4) * (0.75 + 0.25 * np.sqrt(np.clip(t * 5, 0, 1)))
+
+
+def brow_strength(t):
+    head = np.clip(t / 0.3, 0, 1)
+    tail = np.clip((1 - t) / 0.25, 0, 1)
+    return (0.35 + 0.65 * head * head * (3 - 2 * head)) * (0.5 + 0.5 * tail)
+
+
+def lid_crease(v, upper):
+    pts = v[upper]
+    t = np.linspace(0, 1, len(upper))[:, None]
+    lift = 0.07 + 0.3 * np.sin(np.pi * t) ** 0.8
+    return catmull_rom(pts[:, :2] + np.hstack([np.zeros_like(t), lift]), 40)
+
+
+def face_features(v) -> Features:
+    up = v[[78] + UPPER_INNER + [308], :2]
+    lo = v[[78] + LOWER_INNER + [308], :2]
+    rims = (RIM_R, RIM_L)
+    return Features(
+        lips=closed_curve(v[LIP_OUTER, :2]),
+        mouth=catmull_rom((up + lo) / 2, 60),
+        brows=[brow_shape(v, BROW_R), brow_shape(v, BROW_L)],
+        upper=[catmull_rom(v[r[0], :2], 60) for r in rims],
+        lower=[catmull_rom(v[r[1], :2], 60) for r in rims],
+        crease=[lid_crease(v, r[0]) for r in rims],
+    )
+
+
+# --------------------------------------------------------------- the shading
+
+
+def to_linear(hex_colour):
+    c = np.array([int(hex_colour[i : i + 2], 16) for i in (1, 3, 5)]) / 255.0
+    return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+
+
+def to_srgb(c):
+    c = np.clip(c, 0, 1)
+    return np.where(c <= 0.0031308, 12.92 * c, 1.055 * c ** (1 / 2.4) - 0.055)
+
+
+COLOURS = {
+    BACKGROUND: "#fbfaf7",
+    SKIN: "#eec9b3",
+    LIPS: "#c46a6e",
+    EYE_WHITE: "#eae6e2",
+    IRIS: "#5f7896",
+    PUPIL: "#141010",
+    BROW: "#4a3530",
+    HAIR: "#201716",
+    GARMENT: "#3d5488",
+}
+LASH = to_linear("#1c1515")
+#: The colour of the light in the shadows of the skin, which has passed
+#: through it.
+WARM = np.array([1.25, 0.82, 0.75])
+
+
+@dataclass
+class Eyes:
+    """Per pixel on the eyeballs: iris and pupil masks, the iris's own
+    pattern, and the catchlight."""
+
+    white: np.ndarray
+    iris: np.ndarray
+    pupil: np.ndarray
+    pattern: np.ndarray
+    glint: np.ndarray
+
+
+def gaze(pose):
+    """The eyes look at the viewer, a touch less turned than that."""
+    return unit_rows(0.12 * pose.head_dir(np.array([0.0, 0.0, 1.0])) + 0.88 * VIEWER)
+
+
+def iris_pattern(q, g, cos_i):
+    """Radial fibres, a dark rim and a lighter lower side (the light
+    passing through the cornea comes out opposite it)."""
+    up = unit_rows(np.cross(np.cross(g, [0.0, 1.0, 0.0]), g))
+    side = np.cross(g, up)
+    a = np.arctan2(q @ side, q @ up)
+    r = np.sqrt(np.clip(1 - (q @ g) ** 2, 0, 1)) / math.sqrt(1 - cos_i**2)
+    fib = 1 + 0.12 * np.sin(23 * a) * np.sin(7 * a + 1) + 0.08 * np.sin(41 * a + 2)
+    rim = 1 - 0.55 * np.clip((r - 0.78) / 0.22, 0, 1) ** 1.5
+    inner = 1 - 0.25 * np.clip((0.42 - r) / 0.2, 0, 1)
+    low = 1 + 0.45 * np.clip(-(q @ up) / math.sqrt(1 - cos_i**2), 0, 1) * (r > 0.35)
+    return fib * rim * inner * low
+
+
+def see_eyes(b: Buffers, model: Model) -> Eyes:
+    shape = b.seen.shape
+    no = np.zeros(shape, dtype=bool)
+    out = Eyes(no.copy(), no.copy(), no.copy(), np.ones(shape), np.zeros(shape))
+    g = gaze(model.pose)
+    cos_i = math.sqrt(1 - (IRIS_RADIUS / EYE_RADIUS) ** 2)
+    cos_p = math.sqrt(1 - (PUPIL_RADIUS / EYE_RADIUS) ** 2)
+    half = unit_rows(KEY + VIEWER)
+    for eye in model.eyes:
+        c = model.pose.of_head(eye.centre)
+        ball = (b.kind == K_BALL) & (
+            np.linalg.norm(b.pos - c, axis=-1) < EYE_RADIUS + 0.02
+        )
+        q = unit_rows(b.pos[ball] - c)
+        ca = q @ g
+        iris, pupil = ca > cos_i, ca > cos_p
+        out.white[ball] = ~iris
+        out.iris[ball] = iris & ~pupil
+        out.pupil[ball] = pupil
+        out.pattern[ball] = np.where(iris, iris_pattern(q, g, cos_i), 1.0)
+        # the catchlight, off a cornea bulging from the ball
+        rc = 0.8
+        cc = c + g * (EYE_RADIUS - rc + 0.07)
+        dxy = (b.pos[ball] - cc)[:, :2]
+        nz = np.sqrt(np.clip(rc**2 - np.sum(dxy**2, axis=1), 0, None))
+        cn = unit_rows(np.hstack([dxy, nz[:, None]]))
+        out.glint[ball] = np.clip(cn @ half, 0, 1) ** 900 * iris
+    return out
+
+
+def neckline(x):
+    """Height of a soft scoop neckline across the body (body space)."""
+    t = np.clip(np.abs(x) / 10.8, 0, 1)
+    return np.where(np.abs(x) < 10.8, -21.8 + 5.0 * t**2.2, 99.0)
+
+
+def decal_points(b: Buffers):
+    m = np.isin(b.kind, (K_FACE, K_LID, K_BALL, K_MOUTH))
+    return m, b.local[m][:, :2]
+
+
+def flick(line, length=0.22, rise=0.1):
+    """The outer end of a lash line, carried on and up a little."""
+    d = unit_rows(line[-1] - line[-4])
+    tip = line[-1] + d * length + np.array([0.0, rise])
+    return np.vstack([line, line[-1] + (tip - line[-1]) * 0.5, tip])
+
+
+def face_marks(b: Buffers, feat: Features):
+    """Darkenings drawn on the face: lashes, lid creases, the line between
+    the lips.  Returns (strength 0 to 1, colour) per face pixel."""
+    m, q = decal_points(b)
+    dark = np.zeros(len(q))
+    for up, lo, cr in zip(feat.upper, feat.lower, feat.crease, strict=True):
+        dark = np.maximum(
+            dark, 0.92 * stroke(q, flick(up), lambda t: 0.05 + 0.13 * t**1.3, 0.025)
+        )
+        dark = np.maximum(dark, 0.3 * stroke(q, lo, lambda t: 0.015 + 0.035 * t, 0.02))
+        dark = np.maximum(dark, 0.3 * stroke(q, cr, lambda t: 0.05 + 0.0 * t, 0.05))
+    mouth = stroke(
+        q, feat.mouth, lambda t: 0.025 + 0.05 * np.sin(np.pi * t).clip(0) ** 0.6, 0.02
+    )
+    dark = np.maximum(dark, 0.75 * mouth)
+    out = np.zeros(b.seen.shape)
+    out[m] = dark
+    return out
+
+
+def regions(b: Buffers, feat: Features, eyes: Eyes):
+    """The region of each pixel, and how strongly the brows cover it."""
+    region = np.where(b.seen, SKIN, BACKGROUND)
+    region[b.kind == K_HAIR] = HAIR
+    garment = (b.kind == K_BODY) & (b.local[..., 1] < neckline(b.local[..., 0]))
+    region[garment] = GARMENT
+    face = b.kind == K_FACE
+    x, y = b.local[..., 0], b.local[..., 1]
+    region[face & polygon_inside(x, y, feat.lips)] = LIPS
+    brow = np.zeros(b.seen.shape)
+    q = b.local[face][:, :2]
+    for line in feat.brows:
+        d, t = polyline_distance(q, line)
+        cov = np.clip((brow_width(t) / 2 - d) / 0.06 + 0.5, 0, 1)
+        brow[face] = np.maximum(brow[face], cov * brow_strength(t))
+    region[brow > 0.3] = BROW
+    region[eyes.white] = EYE_WHITE
+    region[eyes.iris] = IRIS
+    region[eyes.pupil] = PUPIL
+    return region, brow
+
+
+def albedo(region, brow, eyes: Eyes, marks):
+    out = np.zeros(region.shape + (3,))
+    for r, hexc in COLOURS.items():
+        out[region == r] = to_linear(hexc)
+    out *= np.where(region == IRIS, eyes.pattern, 1.0)[..., None]
+    a = (0.8 * brow * np.isin(region, (SKIN, BROW)))[..., None]
+    out = np.where(
+        a > 0, (1 - a) * to_linear(COLOURS[SKIN]) + a * to_linear(COLOURS[BROW]), out
+    )
+    m = marks[..., None]
+    return out * (1 - m) + LASH * m
+
+
+@dataclass
+class Lighting:
+    diffuse: np.ndarray  # light falling on each point, before its colour
+    spec: np.ndarray  # light reflected off it
+    shadow: np.ndarray
+    ao: np.ndarray
+    soft: np.ndarray  # the part of ``diffuse`` from the fill and the room
+
+
+def value_noise(x, seed):
+    table = np.random.default_rng(seed).random(4096)
+    i = np.floor(x).astype(np.int64)
+    t = x - i
+    t = t * t * (3 - 2 * t)
+    return table[i % 4096] * (1 - t) + table[(i + 1) % 4096] * t
+
+
+def strands(b: Buffers):
+    """A texture of strands and clumps across the hair (0 to about 1)."""
+    c = b.strand
+    fine = value_noise(c * 3.1, 1) * 0.5 + value_noise(c * 7.3, 2) * 0.3
+    clump = value_noise(c / 5.0, 3)
+    return 0.35 * fine + 0.65 * clump * (0.6 + 0.4 * fine)
+
+
+def hair_light(b: Buffers, shadow, ao):
+    """Diffuse plus two highlights across the strands (shifted along the
+    normal, as off the scales of a hair)."""
+    t = b.flow
+    n = b.normal
+    half = unit_rows(KEY + VIEWER)
+    kk = np.sqrt(np.clip(1 - np.sum(t * KEY, axis=-1) ** 2, 0, 1))
+    ndl = np.clip(n @ KEY, 0, 1)
+    diff = (0.55 * ndl + 0.45 * kk * np.clip(n @ KEY + 0.4, 0, 1)) * shadow
+    spec = np.zeros(ndl.shape)
+    for shift, power, k in ((-0.1, 160, 0.3), (0.15, 40, 0.04)):
+        ts = unit_rows(t + shift * n)
+        th = np.sum(ts * half, axis=-1)
+        spec += k * np.sqrt(np.clip(1 - th**2, 0, 1)) ** power
+    tex = strands(b)
+    spec *= shadow * np.clip(ndl * 2.5, 0, 1) * ao * (0.25 + 1.3 * tex)
+    # a faint sheen from the fill, on the side away from the key
+    th = np.sum(unit_rows(t - 0.1 * n) * unit_rows(FILL + VIEWER), axis=-1)
+    sheen = (
+        0.012 * np.sqrt(np.clip(1 - th**2, 0, 1)) ** 60 * np.clip(n @ FILL, 0, 1) * ao
+    )
+    return diff * (0.55 + 0.9 * tex), spec + sheen * (0.3 + tex)
+
+
+def lighting(b: Buffers, region, shadow, ao) -> Lighting:
+    n = b.normal
+    ndl = n @ KEY
+    wrap = np.clip((ndl + 0.1) / 1.1, 0, 1) ** 1.4
+    key = np.where(region == GARMENT, np.clip(ndl, 0, 1), wrap) * shadow
+    fill = 0.07 * np.clip(n @ FILL, 0, 1) * ao
+    amb = 0.035 * ao * (0.6 + 0.4 * n[..., 1])
+    diff = key + fill + amb
+    half = unit_rows(KEY + VIEWER)
+    ndh = np.clip(n @ half, 0, 1)
+    gloss = {
+        SKIN: (0.035, 18),
+        LIPS: (0.16, 50),
+        EYE_WHITE: (0.08, 40),
+        BROW: (0.01, 10),
+    }
+    spec = np.zeros(ndl.shape)
+    for r, (k, p) in gloss.items():
+        spec = np.where(region == r, k * ndh**p * shadow, spec)
+    hd, hs = hair_light(b, shadow, ao)
+    hair = region == HAIR
+    diff = np.where(hair, hd + fill + amb, diff)
+    spec = np.where(hair, hs, spec)
+    inside = b.inside
+    diff = np.where(inside, 0.35 * diff, diff)
+    spec = np.where(inside, 0.0, spec)
+    dim = np.where(hair, 1.0, ao**0.5)
+    return Lighting(diff * dim, spec, shadow, ao, np.where(hair, 0, fill + amb) * dim)
+
+
+# --------------------------------------------------------------- the studies
+
+
+@dataclass
+class Picture:
+    b: Buffers
+    region: np.ndarray
+    light: Lighting
+    colour: np.ndarray  # linear RGB
+
+
+def picture(model: Model, view: View) -> Picture:
+    b = see(model, view)
+    feat = face_features(model.face[0])
+    eyes = see_eyes(b, model)
+    v, f, *_ = model.scene.merged()
+    lift = np.where(b.kind == K_HAIR, 0.12, 0.0)
+    shadow = shadows(v, f, b.pos, b.normal, b.seen, lift)
+    shadow = filters.box_blur(shadow, max(1, int(view.scale / 40)))
+    ao = occlusion(b.depth, b.seen, view.scale)
+    region, brow = regions(b, feat, eyes)
+    marks = face_marks(b, feat)
+    lt = lighting(b, region, shadow, ao)
+    warm = 1 + (WARM - 1) * (lt.soft / np.maximum(lt.diffuse, 1e-6))[..., None]
+    warm = np.where(
+        (region == SKIN)[..., None] | (region == LIPS)[..., None], warm, 1.0
+    )
+    colour = (
+        albedo(region, brow, eyes, marks) * lt.diffuse[..., None] * warm
+        + lt.spec[..., None]
+    )
+    colour += 1.6 * eyes.glint[..., None] * (shadow[..., None] > 0.3)
+    colour[~b.seen] = to_linear(COLOURS[BACKGROUND])
+    return Picture(b, region, lt, colour)
+
+
+def scaled(view: View, k: int) -> View:
+    return View(
+        (view.size[0] * k, view.size[1] * k),
+        view.scale * k,
+        (view.centre[0] * k, view.centre[1] * k),
+    )
+
+
+def shrink(img, k):
+    h, w = img.shape[0] // k, img.shape[1] // k
+    return img[: h * k, : w * k].reshape(h, k, w, k, *img.shape[2:]).mean(axis=(1, 3))
+
+
+def as_png(lin):
+    return np.round(to_srgb(lin) * 255).astype(np.uint8)
+
+
+def grey(lin):
+    y = lin @ np.array([0.2126, 0.7152, 0.0722])
+    return np.repeat(y[..., None], 3, axis=-1)
+
+
+def flat_colours(region):
+    out = np.zeros(region.shape + (3,))
+    for r, hexc in COLOURS.items():
+        out[region == r] = to_linear(hexc)
+    return out
+
+
+def crop_around(img, pts, view: View, k, pad):
+    """A crop of a k-times render round head-space points."""
+    x = (view.centre[0] + pts[:, 0] * view.scale) * k
+    y = (view.centre[1] - pts[:, 1] * view.scale) * k
+    x0, x1 = int(x.min() - pad * k), int(x.max() + pad * k)
+    y0, y1 = int(y.min() - pad * k), int(y.max() + pad * k)
+    return img[max(y0, 0) : y1, max(x0, 0) : x1]
+
+
+def write_studies(model: Model, out: Path, ss=2):
+    """The grey and colour studies (rendered at ``ss`` times the size and
+    shrunk), the regions in flat colours, and enlarged crops."""
+    pic = picture(model, scaled(VIEW, ss))
+    colour = shrink(pic.colour, ss)
+    write_png(str(out / "study_grey.png"), as_png(grey(colour)))
+    write_png(str(out / "study_colour.png"), as_png(colour))
+    write_png(str(out / "study_flat.png"), as_png(flat_colours(pic.region[::ss, ::ss])))
+    v = model.face[0]
+    eyes = model.pose.of_head(v[EYE_R + EYE_L])
+    mouth = model.pose.of_head(v[LIP_OUTER])
+    write_png(
+        str(out / "eyes.png"), as_png(crop_around(pic.colour, eyes, VIEW, ss, 40))
+    )
+    write_png(
+        str(out / "mouth.png"), as_png(crop_around(pic.colour, mouth, VIEW, ss, 40))
+    )
+
+
+# ------------------------------------------------- what the pen work follows
+
+
+def to_pixels(view: View, p):
+    return np.stack(
+        [view.centre[0] + p[:, 0] * view.scale, view.centre[1] - p[:, 1] * view.scale],
+        1,
+    )
+
+
+def visible(view: View, depth, p, tol=0.08):
+    """Which camera-space points are not hidden behind something else."""
+    xy = to_pixels(view, p).astype(np.int64)
+    h, w = depth.shape
+    inside = (xy[:, 0] >= 0) & (xy[:, 0] < w) & (xy[:, 1] >= 0) & (xy[:, 1] < h)
+    out = np.zeros(len(p), dtype=bool)
+    xi, yi = xy[inside, 0], xy[inside, 1]
+    out[inside] = p[inside, 2] >= depth[yi, xi] - tol
+    return out
+
+
+def lift_to_face(model: Model, line):
+    """Head-space points on the face under a line drawn in (x, y)."""
+    v = model.face[0]
+    front = v[:, 2] > 0
+    out = []
+    for q in line:
+        d = np.sum((v[front, :2] - q) ** 2, axis=1)
+        near = np.argsort(d)[:4]
+        wgt = 1 / (d[near] + 1e-4)
+        out.append([q[0], q[1], (v[front][near, 2] * wgt).sum() / wgt.sum()])
+    return np.array(out)
+
+
+def iris_rims(model: Model):
+    g = gaze(model.pose)
+    up = unit_rows(np.cross(np.cross(g, [0.0, 1.0, 0.0]), g))
+    side = np.cross(g, up)
+    sin_i = IRIS_RADIUS / EYE_RADIUS
+    th = np.linspace(0, 2 * np.pi, 73)[:, None]
+    ring = math.sqrt(1 - sin_i**2) * g + sin_i * (np.cos(th) * up + np.sin(th) * side)
+    return [model.pose.of_head(e.centre) + EYE_RADIUS * ring for e in model.eyes]
+
+
+def contours(model: Model, b: Buffers, view: View):
+    """The features' lines as polylines in picture pixels, each point with
+    a flag saying whether it is seen: {name: (k, 3) array of x, y, seen}."""
+    feat = face_features(model.face[0])
+    lines = {"lips": feat.lips, "mouth": feat.mouth}
+    for side, i in (("right", 0), ("left", 1)):
+        lines[f"brow_{side}"] = feat.brows[i]
+        lines[f"lid_upper_{side}"] = feat.upper[i]
+        lines[f"lid_lower_{side}"] = feat.lower[i]
+        lines[f"crease_{side}"] = feat.crease[i]
+    out = {}
+    for name, line in lines.items():
+        p = model.pose.of_head(lift_to_face(model, line))
+        out[name] = np.hstack(
+            [to_pixels(view, p), visible(view, b.depth, p, 0.2)[:, None]]
+        )
+    oval = closed_curve(model.face[0][OVAL], 240)
+    for name, p in [("face_oval", model.pose.of_head(oval))] + [
+        (f"iris_{s}", r)
+        for s, r in zip(("right", "left"), iris_rims(model), strict=True)
+    ]:
+        out[name] = np.hstack(
+            [to_pixels(view, p), visible(view, b.depth, p, 0.15)[:, None]]
+        )
+    return out
+
+
+def image_flow(b: Buffers):
+    """The hair's direction in the picture, as unit (dx, dy) in pixels (y
+    down); zero off the hair."""
+    d = np.stack([b.flow[..., 0], -b.flow[..., 1]], axis=-1)
+    d = d / np.maximum(np.linalg.norm(d, axis=-1, keepdims=True), 1e-9)
+    return np.where((b.kind == K_HAIR)[..., None], d, 0.0)
+
+
+def write_maps(model: Model, out: Path):
+    """Per-pixel maps at the picture's size, and the feature lines."""
+    pic = picture(model, VIEW)
+    b = pic.b
+    np.savez_compressed(
+        out / "maps.npz",
+        region=pic.region.astype(np.uint8),
+        region_names=np.array(REGION_NAMES),
+        tone=(pic.colour @ np.array([0.2126, 0.7152, 0.0722])).astype(np.float32),
+        light=np.clip(pic.light.diffuse + pic.light.spec, 0, 2).astype(np.float32),
+        shadow=pic.light.shadow.astype(np.float32),
+        normal=np.where(b.seen[..., None], b.normal, 0).astype(np.float32),
+        flow=image_flow(b).astype(np.float32),
+        hair_u=b.hair_u.astype(np.float32),
+        depth=np.where(b.seen, b.depth, np.nan).astype(np.float32),
+    )
+    np.savez_compressed(out / "contours.npz", **contours(model, b, VIEW))
+
+
+def main(out: Path):
+    out.mkdir(parents=True, exist_ok=True)
+    model = build_model()
+    write_studies(model, out)
+    write_maps(model, out)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        sys.exit("usage: portrait.py OUTPUT_FOLDER")
+    main(Path(sys.argv[1]))
