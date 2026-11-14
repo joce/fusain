@@ -571,9 +571,9 @@ def tail_axes():
 #: The tail feathers seen, from the uppermost (the middle pair) down: how
 #: far sideways each lies, how long it is (of TAIL_LENGTH), how far it fans
 #: (degrees) and how wide it is.
-BLADES = [(0.05, 1.0, 1.0, 0.25), (-0.07, 0.95, -1.2, 0.25), (0.2, 0.8, 3.5, 0.24),
-          (-0.21, 0.76, -3.5, 0.24), (0.33, 0.6, 6.0, 0.23),
-          (-0.34, 0.56, -6.0, 0.23)]  # fmt: skip
+BLADES = [(0.05, 1.0, 1.0, 0.25), (-0.07, 0.95, -0.4, 0.25), (0.2, 0.8, 3.5, 0.24),
+          (-0.17, 0.76, -1.0, 0.24), (0.33, 0.6, 6.0, 0.23),
+          (-0.26, 0.56, -1.6, 0.23)]  # fmt: skip
 
 
 def blade_half(t, half: float) -> np.ndarray:
