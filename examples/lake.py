@@ -20,6 +20,7 @@ against the light, their tops catching a little of it.
 
 from __future__ import annotations
 
+import functools
 import math
 import sys
 from dataclasses import dataclass
@@ -42,10 +43,8 @@ SEED = 1907
 NEAR, FAR = 0.5, 40000.0
 
 #: What each pixel shows.
-(SKY, CLOUD, SNOW, RIDGE3, RIDGE2, RIDGE1, HILLS, FOREST, WATER, GROUND) = range(10)
-(SHINGLE, ROCK, REED, TRUNK, BOUGH, HULL, INSIDE, GUNWALE, THWART, ROPE) = range(
-    10, 20
-)
+SKY, CLOUD, SNOW, RIDGE3, RIDGE2, RIDGE1, HILLS, FOREST, WATER, GROUND = range(10)
+SHINGLE, ROCK, REED, TRUNK, BOUGH, HULL, INSIDE, GUNWALE, THWART, ROPE = range(10, 20)
 STAKE = 20
 NAMES = (
     "sky cloud snow ridge3 ridge2 ridge1 hills forest water ground shingle rock "
@@ -159,15 +158,22 @@ def frustum_grid(z_rows: np.ndarray, cols: int, reach: float = 1.12):
     return X, Z
 
 
-def height_mesh(X, Y, Z, ident, albedo, grain=None) -> Mesh:
+def height_mesh(X, Y, Z, ident, albedo) -> Mesh:
+    """Ground as triangles, its normals up; strokes on it follow the fall
+    line."""
     rows, cols = X.shape
     verts = np.stack([X.ravel(), Y.ravel(), Z.ravel()], axis=1)
     faces = grid_faces(rows, cols)
-    mesh = make_mesh(verts, faces, ident, albedo, grain)
+    mesh = make_mesh(verts, faces, ident, albedo)
     flip = mesh.normals[:, 1] < 0  # (terrain faces up)
     if flip.mean() > 0.5:
         mesh.faces = mesh.faces[:, [0, 2, 1]]
         mesh.normals = -mesh.normals
+    n = mesh.normals[mesh.faces].mean(axis=1)
+    down = np.array([0.0, -1.0, 0.0]) - n * (-n[:, 1:2])
+    flat = np.linalg.norm(down, axis=1) < 0.05
+    down[flat] = (1.0, 0.0, 0.0)  # (level ground: across the view)
+    mesh.grain = down
     return mesh
 
 
@@ -190,6 +196,7 @@ class Ridge:
     snow: float
     albedo: float
     ident: int
+    gullies: float
 
 
 RIDGES = (
@@ -197,34 +204,65 @@ RIDGES = (
         14500.0,
         5000.0,
         3000.0,
-        ((-1.3, 1300), (-0.75, 1650), (-0.42, 2450), (-0.18, 1900), (0.1, 1350),
-         (0.32, 1500), (0.62, 2050), (0.95, 1700), (1.3, 1400)),
-        0.07,
-        1950.0,
+        (
+            (-1.3, 1300),
+            (-0.75, 1650),
+            (-0.42, 2450),
+            (-0.18, 1900),
+            (0.1, 1350),
+            (0.32, 1500),
+            (0.62, 2050),
+            (0.95, 1700),
+            (1.3, 1400),
+        ),
+        0.035,
+        2180.0,
         0.30,
         RIDGE3,
+        0.06,
     ),
     Ridge(
         8200.0,
         3200.0,
         2200.0,
-        ((-1.3, 1150), (-0.85, 1080), (-0.55, 900), (-0.2, 760), (0.1, 480),
-         (0.3, 560), (0.58, 840), (0.85, 1000), (1.3, 1080)),
+        (
+            (-1.3, 1150),
+            (-0.85, 1080),
+            (-0.55, 900),
+            (-0.2, 760),
+            (0.1, 480),
+            (0.3, 560),
+            (0.58, 840),
+            (0.85, 1000),
+            (1.3, 1080),
+        ),
         0.06,
         9e9,
         0.26,
         RIDGE2,
+        0.14,
     ),
     Ridge(
         4300.0,
         1700.0,
         1300.0,
-        ((-1.3, 520), (-0.95, 470), (-0.6, 380), (-0.3, 300), (0.0, 200),
-         (0.15, 150), (0.34, 210), (0.6, 330), (0.9, 360), (1.3, 400)),
+        (
+            (-1.3, 520),
+            (-0.95, 470),
+            (-0.6, 380),
+            (-0.3, 300),
+            (0.0, 200),
+            (0.15, 150),
+            (0.34, 210),
+            (0.6, 330),
+            (0.9, 360),
+            (1.3, 400),
+        ),
         0.09,
         9e9,
         0.18,
         RIDGE1,
+        0.22,
     ),
 )
 
@@ -259,21 +297,23 @@ def ridge_mesh(ridge: Ridge, rng) -> Mesh:
     # spurs and gullies running down the fall line, broader low down
     gully = noise.aniso_noise(rows, cols, 14.0, 3.5, 90.0, rng, octaves=3)
     bumps = world_map(rng, (rows, cols), 22.0, 4)
-    Y = crest * slope * (1.0 + 0.22 * (gully - 0.5) * (1.2 - slope))
+    Y = crest * slope * (1.0 + ridge.gullies * (gully - 0.5) * (1.2 - slope))
     Y *= 1.0 + 0.12 * (bumps - 0.5)
     Y -= 40.0
-    mesh = height_mesh(X, Y, Z, ridge.ident, ridge.albedo, grain=(0.0, 0.0, 1.0))
-    snow_faces(mesh, ridge)
+    mesh = height_mesh(X, Y, Z, ridge.ident, ridge.albedo)
+    snow_faces(mesh, ridge, bumps)
     return mesh
 
 
-def snow_faces(mesh: Mesh, ridge: Ridge) -> None:
-    """Snow lies on the highest ground where it is not too steep."""
+def snow_faces(mesh: Mesh, ridge: Ridge, patches: np.ndarray) -> None:
+    """Snow lies on the highest ground, in the hollows more than on the
+    ribs, and not where it is steep."""
     if ridge.snow > 1e8:
         return
     fy = mesh.verts[mesh.faces, 1].mean(axis=1)
     ny = mesh.normals[mesh.faces, 1].mean(axis=1)
-    snowy = (fy > ridge.snow) & (ny > 0.62 - 0.25 * (fy - ridge.snow) / 600)
+    line = ridge.snow + 300.0 * (patches.ravel()[mesh.faces].mean(axis=1) - 0.5)
+    snowy = (fy > line) & (ny > 0.45)
     mesh.ids[snowy, 0] = SNOW
     mesh.albedo[snowy, 0] = 0.95
 
@@ -308,7 +348,7 @@ def hills(rng) -> tuple[Mesh, Mesh]:
     bumps = world_map(rng, (130, 350), 30.0, 3)
     B = sample_grid(bumps, extent, X, Z) ** 1.3
     Y = hills_height(X, Z, line, B)
-    ground = height_mesh(X, Y, Z, HILLS, 0.13, grain=(0.0, 0.0, 1.0))
+    ground = height_mesh(X, Y, Z, HILLS, 0.13)
     return ground, forest(rng, line, bumps, extent)
 
 
@@ -327,9 +367,9 @@ def forest(rng, line, bumps, extent) -> Mesh:
     clear = sample_grid(world_map(rng, (90, 240), 14.0, 3), extent, P[:, 0], P[:, 1])
     B = sample_grid(bumps, extent, P[:, 0], P[:, 1]) ** 1.3
     Yb = hills_height(P[:, 0], P[:, 1], line, B)
-    keep = (Yb > 0.5) & (clear > 0.36)
+    keep = (Yb > 0.5) & (clear > 0.4) & (rng.random(len(P)) > 0.15)
     P, Yb = P[keep], Yb[keep]
-    heights = rng.uniform(13.0, 27.0, len(P))
+    heights = np.clip(rng.lognormal(np.log(18.0), 0.3, len(P)), 7.0, 36.0)
     return spires(P, Yb, heights, rng)
 
 
@@ -360,8 +400,12 @@ def spires(P, Yb, heights, rng) -> Mesh:
         verts.append(v.reshape(-1, 3))
     verts = np.concatenate(verts)
     faces = np.concatenate(faces)
-    normals = np.tile(np.array([0.0, 0.35, -1.0]) / math.hypot(0.35, 1.0), (len(verts), 1))
-    return make_mesh(verts, faces, FOREST, 0.09, (0.0, 1.0, 0.0), normals=normals)
+    normals = np.tile(
+        np.array([0.0, 0.35, -1.0]) / math.hypot(0.35, 1.0), (len(verts), 1)
+    )
+    mesh = make_mesh(verts, faces, FOREST, 0.09, (0.0, 1.0, 0.0), normals=normals)
+    mesh.albedo[:, 0] = np.tile(rng.uniform(0.06, 0.13, n), tiers)
+    return mesh
 
 
 # ----------------------------------------------------------------------
@@ -370,13 +414,33 @@ def spires(P, Yb, heights, rng) -> Mesh:
 #: The near shores, as polygons in (X, Z): the point where the pines stand,
 #: on the left, and the shingle bank the boat is drawn up on, on the right.
 POINT_LAND = (
-    (-60.0, 4.0), (-2.75, 4.0), (-2.9, 7.0), (-3.5, 10.0), (-4.5, 14.0),
-    (-6.0, 20.0), (-8.1, 30.0), (-10.0, 42.0), (-11.8, 55.0), (-12.6, 65.0),
-    (-12.1, 73.0), (-13.6, 81.0), (-18.0, 89.0), (-28.0, 95.0), (-60.0, 99.0),
+    (-60.0, 4.0),
+    (-2.75, 4.0),
+    (-2.9, 7.0),
+    (-3.5, 10.0),
+    (-4.5, 14.0),
+    (-6.0, 20.0),
+    (-8.1, 30.0),
+    (-10.0, 42.0),
+    (-11.8, 55.0),
+    (-12.6, 65.0),
+    (-12.1, 73.0),
+    (-13.6, 81.0),
+    (-18.0, 89.0),
+    (-28.0, 95.0),
+    (-60.0, 99.0),
 )
 BANK = (
-    (-0.4, 4.0), (0.45, 7.6), (1.45, 9.4), (2.7, 10.9), (3.9, 12.15),
-    (5.4, 13.25), (7.4, 14.1), (10.4, 14.9), (16.0, 15.3), (16.0, 4.0),
+    (-0.4, 4.0),
+    (0.45, 7.6),
+    (1.45, 9.4),
+    (2.7, 10.9),
+    (3.9, 12.15),
+    (5.4, 13.25),
+    (7.4, 14.1),
+    (10.4, 14.9),
+    (16.0, 15.3),
+    (16.0, 4.0),
 )
 
 
@@ -396,54 +460,98 @@ def signed_distance(X: np.ndarray, Z: np.ndarray, polygon) -> np.ndarray:
     return np.where(inside, best, -best)
 
 
+@functools.cache
+def shore_noise() -> np.ndarray:
+    """How the shores wander from their outlines (murex noise, its own
+    seed so that every caller sees the same)."""
+    return world_map(np.random.default_rng(SEED + 5), (420, 300), 9.0, 4)
+
+
 def ground_height(X, Z, bumps):
-    d = np.maximum(signed_distance(X, Z, POINT_LAND), signed_distance(X, Z, BANK))
-    rise = 0.32 * np.clip(d, -2.0, 3.0) + 0.06 * np.clip(d - 3.0, 0.0, 30.0)
-    knoll = 2.2 * np.exp(-(((X + 23.0) / 9.0) ** 2) - ((Z - 70.0) / 14.0) ** 2)
-    rough = 0.35 * (bumps - 0.5) * np.clip(d, 0.0, 1.5)
-    return rise + knoll + rough - 0.05, d
+    """Height of the near shores above the water, and how far inland each
+    point is (negative out in the water)."""
+    wander = sample_grid(shore_noise(), (-70.0, 0.0, 30.0, 140.0), X, Z) - 0.5
+    d_point = signed_distance(X, Z, POINT_LAND) + 2.4 * wander
+    d_bank = signed_distance(X, Z, BANK) + 1.0 * wander
+    point = 0.22 * np.clip(d_point, -2.0, 2.5) + 0.05 * np.clip(
+        d_point - 2.5, 0.0, 40.0
+    )
+    point += 2.0 * np.exp(-(((X + 23.0) / 9.0) ** 2) - ((Z - 70.0) / 14.0) ** 2)
+    bank = 0.09 * np.clip(d_bank, -2.0, 8.0)
+    d = np.maximum(d_point, d_bank)
+    rough = 0.25 * (bumps - 0.5) * np.clip(d, 0.0, 1.5)
+    return np.maximum(point, bank) + rough - 0.04, d
 
 
 def ground(rng) -> Mesh:
     rows, cols = 220, 700
-    z_rows = np.geomspace(6.5, 130.0, rows)
+    z_rows = np.geomspace(2.5, 130.0, rows)
     X, Z = frustum_grid(z_rows, cols, reach=1.08)
     extent = (-70.0, 0.0, 30.0, 140.0)
     bumps = sample_grid(world_map(rng, (280, 200), 6.0, 4), extent, X, Z)
     Y, d = ground_height(X, Z, bumps)
-    mesh = height_mesh(X, Y, Z, GROUND, 0.16, grain=(1.0, 0.0, 0.0))
+    mesh = height_mesh(X, Y, Z, GROUND, 0.085)
     fd = d.ravel()[mesh.faces].mean(axis=1)
-    near_water = fd < 1.4 + 0.8 * bumps.ravel()[mesh.faces].mean(axis=1)
+    fx = X.ravel()[mesh.faces].mean(axis=1)
+    beach = np.where(fx > -1.0, 6.0, 1.2)  # (the bank is shingle well up)
+    near_water = fd < beach + 0.8 * bumps.ravel()[mesh.faces].mean(axis=1)
     mesh.ids[near_water, 0] = SHINGLE
-    mesh.albedo[near_water, 0] = 0.33
+    mesh.albedo[near_water, 0] = 0.15
     return mesh
 
 
 # rocks: (X, Z, size, how flat, yaw)
 ROCKS = (
-    (-3.15, 8.9, 1.15, 0.62, 0.3),
-    (-2.55, 7.7, 0.55, 0.55, 1.2),
-    (-3.9, 12.1, 0.7, 0.6, 2.0),
-    (-6.3, 20.4, 0.95, 0.6, 0.7),
-    (-5.5, 18.6, 0.45, 0.5, 2.4),
-    (-8.5, 30.6, 1.25, 0.58, 1.1),
-    (-10.1, 41.5, 0.8, 0.6, 0.2),
-    (-12.1, 56.0, 1.5, 0.55, 2.8),
-    (-12.6, 69.5, 1.0, 0.6, 1.7),
-    (0.85, 8.4, 0.42, 0.55, 0.4),
-    (5.4, 13.0, 0.55, 0.6, 1.4),
-    (8.6, 14.7, 0.95, 0.55, 2.2),
+    (-3.35, 9.9, 0.55, 0.6, 0.3),
+    (-2.85, 8.6, 0.26, 0.55, 1.2),
+    (-6.4, 21.0, 0.75, 0.6, 0.7),
+    (-6.0, 22.6, 0.45, 0.5, 2.4),
+    (-12.0, 56.0, 1.35, 0.55, 2.8),
+    (-11.6, 52.5, 0.5, 0.6, 0.9),
+    (0.95, 8.7, 0.33, 0.55, 0.4),
+    (5.25, 12.85, 0.42, 0.6, 1.4),
+    (8.6, 14.7, 0.8, 0.55, 2.2),
 )
 
 
 def icosphere(levels: int) -> tuple[np.ndarray, np.ndarray]:
     t = (1.0 + math.sqrt(5.0)) / 2.0
-    v = [(-1, t, 0), (1, t, 0), (-1, -t, 0), (1, -t, 0), (0, -1, t), (0, 1, t),
-         (0, -1, -t), (0, 1, -t), (t, 0, -1), (t, 0, 1), (-t, 0, -1), (-t, 0, 1)]
-    f = [(0, 11, 5), (0, 5, 1), (0, 1, 7), (0, 7, 10), (0, 10, 11), (1, 5, 9),
-         (5, 11, 4), (11, 10, 2), (10, 7, 6), (7, 1, 8), (3, 9, 4), (3, 4, 2),
-         (3, 2, 6), (3, 6, 8), (3, 8, 9), (4, 9, 5), (2, 4, 11), (6, 2, 10),
-         (8, 6, 7), (9, 8, 1)]
+    v = [
+        (-1, t, 0),
+        (1, t, 0),
+        (-1, -t, 0),
+        (1, -t, 0),
+        (0, -1, t),
+        (0, 1, t),
+        (0, -1, -t),
+        (0, 1, -t),
+        (t, 0, -1),
+        (t, 0, 1),
+        (-t, 0, -1),
+        (-t, 0, 1),
+    ]
+    f = [
+        (0, 11, 5),
+        (0, 5, 1),
+        (0, 1, 7),
+        (0, 7, 10),
+        (0, 10, 11),
+        (1, 5, 9),
+        (5, 11, 4),
+        (11, 10, 2),
+        (10, 7, 6),
+        (7, 1, 8),
+        (3, 9, 4),
+        (3, 4, 2),
+        (3, 2, 6),
+        (3, 6, 8),
+        (3, 8, 9),
+        (4, 9, 5),
+        (2, 4, 11),
+        (6, 2, 10),
+        (8, 6, 7),
+        (9, 8, 1),
+    ]
     verts = [np.array(p, float) / np.linalg.norm(p) for p in v]
     faces = f
     for _ in range(levels):
@@ -487,7 +595,7 @@ def rock(x, z, size, flat, yaw, rng) -> Mesh:
     v = v @ np.array([[c, 0, -s], [0, 1, 0], [s, 0, c]])
     v += np.array([x, size * flat * 0.35, z])
     v, f = v[f].reshape(-1, 3), np.arange(3 * len(f)).reshape(-1, 3)
-    mesh = make_mesh(v, f, ROCK, 0.36)
+    mesh = make_mesh(v, f, ROCK, 0.2)
     a, b, cc = (v[f[:, k]] for k in range(3))
     fn = np.cross(b - a, cc - a)
     fn /= np.linalg.norm(fn, axis=1, keepdims=True)
@@ -507,15 +615,18 @@ class Pine:
     height: float
     lean: float
     seed: int
+    spread: float
 
 
+#: The pines: where each stands, how tall, how it leans, and how far its
+#: boughs reach for its height (a young tree is bushier).
 PINES = (
-    Pine(-24.5, 66.0, 23.0, -0.012, 1),
-    Pine(-18.6, 60.5, 19.5, 0.018, 2),
-    Pine(-29.5, 77.0, 25.5, 0.006, 3),
-    Pine(-15.2, 72.0, 12.5, 0.03, 4),
-    Pine(-35.0, 70.0, 20.0, -0.02, 5),
-    Pine(-21.0, 80.0, 16.0, 0.0, 6),
+    Pine(-33.5, 76.0, 24.0, -0.015, 5, 0.95),
+    Pine(-23.7, 66.0, 23.5, -0.01, 1, 1.15),
+    Pine(-24.1, 72.0, 19.0, 0.012, 3, 0.85),
+    Pine(-17.4, 62.0, 17.5, 0.022, 2, 1.0),
+    Pine(-14.3, 71.0, 11.5, 0.03, 4, 1.2),
+    Pine(-14.1, 58.0, 5.5, -0.02, 6, 1.3),
 )
 
 
@@ -551,21 +662,30 @@ def bough(root, length, azimuth, droop, rng) -> tuple[np.ndarray, list[Stamps]]:
     foliage along it, and twigs hanging from it in a fringe."""
     s = np.linspace(0.0, 1.0, 14)
     out = np.array([math.cos(azimuth), 0.0, math.sin(azimuth)])
-    sag = -droop * length * s**1.5 + 0.18 * droop * length * np.maximum(s - 0.75, 0) ** 2 * 16
+    sag = (
+        -droop * length * s**1.5
+        + 0.18 * droop * length * np.maximum(s - 0.75, 0) ** 2 * 16
+    )
     wobble = rng.normal(0.0, 0.03 * length, (len(s), 3)) * s[:, None]
     P = root + out * length * s[:, None] + np.outer(sag, [0.0, 1.0, 0.0]) + wobble
-    thick = (0.22 + 0.12 * rng.random()) * (0.45 + 0.55 * np.sin(np.pi * np.clip(s * 1.25, 0, 1)))
+    thick = (0.22 + 0.12 * rng.random()) * (
+        0.45 + 0.55 * np.sin(np.pi * np.clip(s * 1.25, 0, 1))
+    )
     thick *= 1.0 - 0.45 * s
     thick = np.maximum(thick, 0.06) * (0.6 + 0.4 * min(length / 3.0, 1.0))
-    parts = [curve(P, thick, BOUGH, 0.075)]
+    parts = [curve(P, thick, BOUGH, 0.05)]
     for sj in np.arange(0.18, 0.98, 0.11 + 0.05 * rng.random()):
         if rng.random() < 0.25:
             continue
         at = np.array([np.interp(sj, s, P[:, k]) for k in range(3)])
         drop = (0.25 + 0.45 * rng.random()) * (1.0 - 0.4 * sj) * min(length / 2.0, 1.2)
-        tip = at + out * 0.12 * drop + np.array([rng.normal(0, 0.05), -drop, rng.normal(0, 0.05)])
+        tip = (
+            at
+            + out * 0.12 * drop
+            + np.array([rng.normal(0, 0.05), -drop, rng.normal(0, 0.05)])
+        )
         twig = np.array([at, 0.5 * (at + tip) + out * 0.04, tip])
-        parts.append(curve(twig, np.array([0.11, 0.08, 0.05]), BOUGH, 0.075))
+        parts.append(curve(twig, np.array([0.11, 0.08, 0.05]), BOUGH, 0.05))
     return P, parts
 
 
@@ -579,14 +699,20 @@ def pine(tree: Pine) -> tuple[Stamps, list[np.ndarray]]:
     H = tree.height
     h = np.linspace(0.0, H, 60)
     sway = 0.25 * np.sin(h / H * 2.6 + tree.seed)
-    axis = np.stack([tree.x + tree.lean * h + sway * 0.4, y0 + h, tree.z + sway * 0.3], 1)
-    parts = [curve(axis, 0.03 + 0.24 * (1 - h / H) ** 1.2 * (H / 22), TRUNK, 0.13, 0.05)]
+    axis = np.stack(
+        [tree.x + tree.lean * h + sway * 0.4, y0 + h, tree.z + sway * 0.3], 1
+    )
+    parts = [
+        curve(axis, 0.03 + 0.24 * (1 - h / H) ** 1.2 * (H / 22), TRUNK, 0.07, 0.05)
+    ]
     lines = [axis]
     crown = rng.uniform(0.14, 0.26) * H
     hk = crown
     while hk < H - 0.4:
         up = (hk - crown) / (H - crown)
-        reach = 0.19 * H * (1.0 - up) ** 0.95 * (0.3 + 0.7 * (1 - up) ** 0.3)
+        reach = (
+            0.19 * H * tree.spread * (1.0 - up) ** 0.95 * (0.3 + 0.7 * (1 - up) ** 0.3)
+        )
         for azimuth in rng.uniform(0, 2 * np.pi, rng.integers(3, 7)):
             if rng.random() < 0.18:
                 continue
@@ -599,7 +725,7 @@ def pine(tree: Pine) -> tuple[Stamps, list[np.ndarray]]:
         hk += rng.uniform(0.38, 0.75) * (1.0 - 0.3 * up)
     parts.append(dead_stubs(axis, h, crown, rng))
     tip = axis[-1] + np.array([0.0, 0.9, 0.0])
-    parts.append(curve(np.array([axis[-1], tip]), np.array([0.09, 0.03]), BOUGH, 0.075))
+    parts.append(curve(np.array([axis[-1], tip]), np.array([0.09, 0.03]), BOUGH, 0.05))
     return merge_stamps(parts), lines
 
 
@@ -609,7 +735,9 @@ def dead_stubs(axis, h, crown, rng) -> Stamps:
         root = np.array([np.interp(hk, h, axis[:, k]) for k in range(3)])
         a = rng.uniform(0, 2 * np.pi)
         out = np.array([math.cos(a), -0.25, math.sin(a)]) * rng.uniform(0.4, 1.0)
-        parts.append(curve(np.array([root, root + out]), np.array([0.04, 0.015]), TRUNK, 0.13))
+        parts.append(
+            curve(np.array([root, root + out]), np.array([0.04, 0.015]), TRUNK, 0.08)
+        )
     return merge_stamps(parts)
 
 
@@ -625,17 +753,26 @@ def pines() -> tuple[Stamps, list[np.ndarray]]:
 def reeds(rng) -> Stamps:
     """Clumps of reeds in the shallows: blades from a root, leaning and
     bending, some broken over."""
-    clumps = ((-4.3, 12.6, 22), (-5.2, 16.5, 16), (-7.3, 26.0, 18), (6.7, 13.9, 26),
-              (0.25, 8.05, 14), (-3.3, 10.6, 10))
+    clumps = (
+        (-4.4, 13.0, 34),
+        (-5.4, 16.8, 24),
+        (-7.4, 26.0, 22),
+        (-3.45, 10.5, 18),
+        (5.9, 13.65, 30),
+        (1.05, 8.95, 16),
+    )
     parts = []
     for cx, cz, n in clumps:
         for _ in range(n):
-            x, z = cx + rng.normal(0, 0.28), cz + rng.normal(0, 0.22)
-            tall = rng.uniform(0.45, 1.35)
+            x, z = cx + rng.normal(0, 0.3), cz + rng.normal(0, 0.22)
+            tall = rng.uniform(0.2, 0.75) * (1.3 if cz > 15 else 1.0)
             lean = rng.normal(0.0, 0.18, 2)
             s = np.linspace(0, 1, 8)[:, None]
             bend = s**2
-            P = np.concatenate([x + lean[0] * tall * bend, -0.1 + tall * s, z + lean[1] * tall * bend], 1)
+            P = np.concatenate(
+                [x + lean[0] * tall * bend, -0.1 + tall * s, z + lean[1] * tall * bend],
+                1,
+            )
             parts.append(curve(P, np.linspace(0.016, 0.004, 8), REED, 0.2, 0.01))
     return merge_stamps(parts)
 
@@ -644,7 +781,9 @@ def reeds(rng) -> Stamps:
 # the boat
 
 #: Where the boat lies: its stern out on the water, its bow on the shingle.
-STERN, BOW = np.array([0.55, 14.35]), np.array([3.65, 11.75])
+STERN, BOW = np.array([0.85, 14.05]), np.array([3.95, 11.45])
+#: It lies over on its side a little, towards the eye.
+HEEL = math.radians(7.0)
 LENGTH = float(np.linalg.norm(BOW - STERN))
 STRAKES = 5
 
@@ -659,7 +798,10 @@ def sheer(s):
 
 
 def keel(s):
-    return 0.12 * np.clip((0.22 - s) / 0.22, 0, 1) ** 2 + 0.5 * np.clip((s - 0.72) / 0.28, 0, 1) ** 2
+    return (
+        0.12 * np.clip((0.22 - s) / 0.22, 0, 1) ** 2
+        + 0.5 * np.clip((s - 0.72) / 0.28, 0, 1) ** 2
+    )
 
 
 def hull_point(s, v, side):
@@ -674,18 +816,29 @@ def hull_point(s, v, side):
     return np.stack(np.broadcast_arrays(s * LENGTH, y, z), axis=-1)
 
 
+def width_at(s: float, z: float) -> float:
+    """Half the hull's width inside at station ``s`` and height ``z``."""
+    v = np.linspace(0.0, 1.0, 200)
+    p = hull_point(np.full(200, s), v, 1.0)
+    return float(np.interp(z, p[:, 2], p[:, 1]))
+
+
 def boat_frame():
     """Rotation and offset from the boat's frame to the world: yawed so its
     bow points at BOW, pitched a little bow up where it rests on the shingle,
     sunk to its waterline."""
     d = (BOW - STERN) / LENGTH
-    fwd = np.array([d[0], 0.035, d[1]])
+    fwd = np.array([d[0], -0.03, d[1]])
     fwd /= np.linalg.norm(fwd)
     port = np.cross(np.array([0.0, 1.0, 0.0]), fwd)
     port /= np.linalg.norm(port)
     up = np.cross(fwd, port)
+    port, up = (
+        math.cos(HEEL) * port - math.sin(HEEL) * up,
+        math.cos(HEEL) * up + math.sin(HEEL) * port,
+    )
     R = np.stack([fwd, port, up], axis=0)  # rows: frame axes in the world
-    origin = np.array([STERN[0], -0.17, STERN[1]])
+    origin = np.array([STERN[0], -0.03, STERN[1]])
     return R, origin
 
 
@@ -702,10 +855,14 @@ def hull() -> Mesh:
     for side in (1.0, -1.0):
         P = hull_point(s, v, side).reshape(-1, 3)
         faces = grid_faces(ns, nv)
-        if side < 0:
+        n = vertex_normals(P, faces)
+        if (n[:, 1] * side).mean() < 0:  # (outward: to port on the port side)
             faces = faces[:, [0, 2, 1]]
         m = make_mesh(to_world(P), faces, HULL, 0.42, inside=(INSIDE, 0.16))
-        m.grain = np.tile(to_world(np.array([[1.0, 0, 0]])) - to_world(np.zeros((1, 3))), (len(faces), 1))
+        m.grain = np.tile(
+            to_world(np.array([[1.0, 0, 0]])) - to_world(np.zeros((1, 3))),
+            (len(faces), 1),
+        )
         meshes.append(m)
     meshes.append(transom())
     return merge_meshes(meshes)
@@ -718,16 +875,27 @@ def transom() -> Mesh:
     verts = np.concatenate([centre, rim])
     faces = np.array([[0, k + 1, k + 2] for k in range(len(rim) - 1)])
     m = make_mesh(to_world(verts), faces, HULL, 0.36, inside=(INSIDE, 0.16))
-    m.grain = np.tile(to_world(np.array([[0, 1.0, 0]])) - to_world(np.zeros((1, 3))), (len(faces), 1))
+    m.grain = np.tile(
+        to_world(np.array([[0, 1.0, 0]])) - to_world(np.zeros((1, 3))), (len(faces), 1)
+    )
     return m
 
 
 def box(centre, axes, half, ident, albedo) -> Mesh:
     """A box in the boat's frame: its centre, its three axes (rows) and half
     sizes along them."""
-    corners = np.array([[i, j, k] for i in (-1, 1) for j in (-1, 1) for k in (-1, 1)], float)
+    corners = np.array(
+        [[i, j, k] for i in (-1, 1) for j in (-1, 1) for k in (-1, 1)], float
+    )
     P = centre + (corners * half) @ axes
-    quads = ((0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3))
+    quads = (
+        (0, 1, 3, 2),
+        (4, 6, 7, 5),
+        (0, 4, 5, 1),
+        (2, 3, 7, 6),
+        (0, 2, 6, 4),
+        (1, 5, 7, 3),
+    )
     faces = []
     for a, b, c, d in quads:
         faces += [(a, b, c), (a, c, d)]
@@ -760,13 +928,38 @@ def fittings() -> Mesh:
             across = np.cross(np.array([0, 0, 1.0]), along)
             up = np.cross(along, across)
             axes = np.stack([along, across, up])
-            parts.append(box(c, axes, np.array([np.linalg.norm(b - a) / 2 + 0.01, 0.03, 0.035]), GUNWALE, 0.5))
+            parts.append(
+                box(
+                    c,
+                    axes,
+                    np.array([np.linalg.norm(b - a) / 2 + 0.03, 0.03, 0.035]),
+                    GUNWALE,
+                    0.5,
+                )
+            )
     I3 = np.eye(3)
     for s, wide in ((0.36, 0.22), (0.66, 0.2), (0.07, 0.3)):
         z = sheer(s) - 0.2
-        parts.append(box(np.array([s * LENGTH, 0.0, z]), I3, np.array([wide / 2, half_beam(s) - 0.02, 0.02]), THWART, 0.45))
+        half = width_at(s, z) - 0.025
+        parts.append(
+            box(
+                np.array([s * LENGTH, 0.0, z]),
+                I3,
+                np.array([wide / 2, half, 0.02]),
+                THWART,
+                0.45,
+            )
+        )
     stem = np.array([LENGTH + 0.02, 0.0, 0.5 * (keel(1.0) + sheer(1.0)) + 0.04])
-    parts.append(box(stem, I3, np.array([0.03, 0.03, 0.5 * (sheer(1.0) - keel(1.0)) + 0.05]), GUNWALE, 0.4))
+    parts.append(
+        box(
+            stem,
+            I3,
+            np.array([0.03, 0.03, 0.5 * (sheer(1.0) - keel(1.0)) + 0.05]),
+            GUNWALE,
+            0.4,
+        )
+    )
     return merge_meshes(parts)
 
 
@@ -776,16 +969,44 @@ def rope_and_stake() -> Stamps:
     head = to_world(np.array([[LENGTH + 0.02, 0.0, sheer(1.0) + 0.04]]))[0]
     stake = np.array([4.35, 0.0, 10.05])
     top = stake + np.array([0.0, 0.55, 0.0])
-    lie = 0.5 * (head + top) + np.array([0.1, 0.0, -0.1])
+    lie = 0.5 * (head + top) + np.array([0.15, 0.0, -0.15])
     lie[1] = ground_at(lie[0], lie[2]) + 0.03
-    path = np.array([head, head + 0.35 * (lie - head) + np.array([0, -0.15, 0]), lie,
-                     lie + 0.6 * (top - lie) + np.array([0, -0.05, 0]), top])
-    pts, _, _, _ = CatmullRom(path[:, [0, 2]]).sample(0.01)
-    ys = np.interp(np.linspace(0, 1, len(pts)), np.linspace(0, 1, len(path)), path[:, 1])
-    rope = curve(np.stack([pts[:, 0], ys, pts[:, 1]], 1), np.full(len(pts), 0.016), ROPE, 0.55, 0.008)
+    hang = 0.5 * (head + lie)
+    hang[1] = max(ground_at(hang[0], hang[2]) + 0.03, lie[1] - 0.05)
+    rest = 0.5 * (lie + top)
+    rest[1] = ground_at(rest[0], rest[2]) + 0.03
+    t = np.linspace(0.0, 1.0, 60)[:, None]
+    falls = (1 - t) ** 2 * head + 2 * t * (1 - t) * hang + t**2 * lie
+    rises = (1 - t) ** 2 * lie + 2 * t * (1 - t) * rest + t**2 * top
+    path = np.concatenate([falls, rises[1:]])
+    rope = curve(path, np.full(len(path), 0.016), ROPE, 0.55, 0.008)
     post = np.array([[stake[0], -0.1, stake[2]], top + np.array([0, 0.06, 0])])
     stake_s = curve(post, np.array([0.03, 0.025]), STAKE, 0.12, 0.01)
     return merge_stamps([rope, stake_s])
+
+
+def boat_lines() -> list[np.ndarray]:
+    """The lines a draughtsman would draw the boat by, in the world: each
+    sheer, the lands of the strakes, the stem and the transom's edge."""
+    s = np.linspace(0.0, 1.0, 120)
+    lines = []
+    for side in (1.0, -1.0):
+        lines.append(to_world(hull_point(s, np.ones_like(s), side) + [0, 0, 0.06]))
+        for k in range(1, STRAKES):
+            lines.append(to_world(hull_point(s, np.full_like(s, k / STRAKES), side)))
+    v = np.linspace(0.0, 1.0, 40)
+    rim = np.concatenate([hull_point(0.0, v[::-1], 1.0), hull_point(0.0, v[1:], -1.0)])
+    lines.append(to_world(rim))
+    stem = np.stack(
+        [
+            np.full(20, LENGTH + 0.03),
+            np.zeros(20),
+            np.linspace(keel(1.0), sheer(1.0) + 0.09, 20),
+        ],
+        1,
+    )
+    lines.append(to_world(stem))
+    return lines
 
 
 def boat() -> tuple[Mesh, Stamps]:
@@ -797,7 +1018,9 @@ def boat() -> tuple[Mesh, Stamps]:
 
 
 @njit(cache=True, error_model="numpy")
-def _raster(xy, iz, nrm, ids, alb, ang, cam, zbuf, ident, albedo, normal, angle):  # pragma: no cover
+def _raster(
+    xy, iz, nrm, ids, alb, ang, cam, zbuf, ident, albedo, normal, angle
+):  # pragma: no cover
     """Fill triangles (screen corners ``xy``, 1/Z at each ``iz``, a normal
     at each corner) into the buffers, nearest first. What lies under the
     water is not seen; the side of a face turned from the eye shows its
@@ -849,11 +1072,15 @@ def _raster(xy, iz, nrm, ids, alb, ang, cam, zbuf, ident, albedo, normal, angle)
 
 
 @njit(cache=True, error_model="numpy")
-def _stamp(px, py, pr, pz, ids, alb, ang, cam, zbuf, ident, albedo, normal, angle):  # pragma: no cover
-    """Fill discs (each a round lump facing the eye) into the buffers."""
+def _stamp(
+    px, py, pr, pz, ids, alb, ang, cam, zbuf, ident, albedo, normal, angle
+):  # pragma: no cover
+    """Fill discs into the buffers: each a slice of a round rod lying along
+    the direction ``ang`` on the sheet, so lit as a rod."""
     h, w = zbuf.shape
     for k in range(px.shape[0]):
         r = max(pr[k], 0.6)
+        ca, sa = math.cos(ang[k]), math.sin(ang[k])
         lo_x, hi_x = max(int(px[k] - r), 0), min(int(px[k] + r) + 1, w - 1)
         lo_y, hi_y = max(int(py[k] - r), 0), min(int(py[k] + r) + 1, h - 1)
         z = pz[k]
@@ -865,12 +1092,13 @@ def _stamp(px, py, pr, pz, ids, alb, ang, cam, zbuf, ident, albedo, normal, angl
                 q = dx * dx + dy * dy
                 if q > 1.0 or z >= zbuf[y, x]:
                     continue
+                across = -dx * sa + dy * ca
                 zbuf[y, x] = z
                 ident[y, x] = ids[k]
                 albedo[y, x] = alb[k]
-                normal[y, x, 0] = dx
-                normal[y, x, 1] = -dy
-                normal[y, x, 2] = -math.sqrt(1.0 - q)
+                normal[y, x, 0] = -across * sa
+                normal[y, x, 1] = -across * ca
+                normal[y, x, 2] = -math.sqrt(max(1.0 - across * across, 0.0))
                 angle[y, x] = ang[k]
 
 
@@ -881,7 +1109,7 @@ def _band_depth(dx, dy, norm, cam, za, zb, band, tops, extent):  # pragma: no co
     a, b = max(za, z0), min(zb, z1)
     if b <= a:
         return 0.0
-    gh, gw = tops.shape
+    gh, gw = tops.shape[1], tops.shape[2]
     n = 24
     step = (b - a) / n
     tau = 0.0
@@ -893,13 +1121,16 @@ def _band_depth(dx, dy, norm, cam, za, zb, band, tops, extent):  # pragma: no co
         fz = min(max(fz, 0.0), gh - 1.001)
         ix, iz = int(fx), int(fz)
         tx, tz = fx - ix, fz - iz
-        top = (tops[iz, ix] * (1 - tx) + tops[iz, ix + 1] * tx) * (1 - tz) + (
-            tops[iz + 1, ix] * (1 - tx) + tops[iz + 1, ix + 1] * tx
+        top = (tops[0, iz, ix] * (1 - tx) + tops[0, iz, ix + 1] * tx) * (1 - tz) + (
+            tops[0, iz + 1, ix] * (1 - tx) + tops[0, iz + 1, ix + 1] * tx
+        ) * tz
+        thick = (tops[1, iz, ix] * (1 - tx) + tops[1, iz, ix + 1] * tx) * (1 - tz) + (
+            tops[1, iz + 1, ix] * (1 - tx) + tops[1, iz + 1, ix + 1] * tx
         ) * tz
         y = cam + dy * z
         t = min(max((top + soft - y) / (2.0 * soft), 0.0), 1.0)
         edge = min(max(min(z - z0, z1 - z) / fade, 0.0), 1.0)
-        tau += dens * t * t * (3.0 - 2.0 * t) * edge * edge * (3.0 - 2.0 * edge)
+        tau += dens * thick * t * t * (3.0 - 2.0 * t) * edge * edge * (3.0 - 2.0 * edge)
     return tau * step * norm
 
 
@@ -927,8 +1158,12 @@ def _fog(zbuf, cam, mirrored, bands, tops, extent, air, out):  # pragma: no cove
             if abs(dy) < 1e-7:
                 tau = air[0] * math.exp(-y0 / air[1]) * (z1 - z0) * norm
             else:
-                tau = air[0] * air[1] / dy * norm * (
-                    math.exp(-y0 / air[1]) - math.exp(-y1 / air[1])
+                tau = (
+                    air[0]
+                    * air[1]
+                    / dy
+                    * norm
+                    * (math.exp(-y0 / air[1]) - math.exp(-y1 / air[1]))
                 )
             for b in range(bands.shape[0]):
                 tau += _band_depth(dx, dy, norm, cam, z0, z1, bands[b], tops[b], extent)
@@ -951,8 +1186,13 @@ class View:
 def screen_angle(points: np.ndarray, along: np.ndarray, cam: float) -> np.ndarray:
     """The direction on the sheet of a world vector at world points."""
     a = project(points, cam)
-    b = project(points + 0.05 * along / np.maximum(
-        np.linalg.norm(along, axis=-1, keepdims=True), 1e-9), cam)
+    b = project(
+        points
+        + 0.05
+        * along
+        / np.maximum(np.linalg.norm(along, axis=-1, keepdims=True), 1e-9),
+        cam,
+    )
     return np.arctan2(b[..., 1] - a[..., 1], b[..., 0] - a[..., 0])
 
 
@@ -1009,9 +1249,13 @@ def stamp(view: View, stamps: Stamps, cam: float) -> None:
 
 @dataclass
 class World:
+    """Everything in the scene: meshes, stamps, and the centre lines of the
+    pines' trunks and boughs and the lines of the boat (world polylines)."""
+
     meshes: list[Mesh]
     stamps: list[Stamps]
     pine_lines: list[np.ndarray]
+    boat_lines: list[np.ndarray]
 
 
 def build_world() -> World:
@@ -1023,7 +1267,7 @@ def build_world() -> World:
     hull_mesh, rope = boat()
     meshes.append(hull_mesh)
     trees, lines = pines()
-    return World(meshes, [trees, reeds(rng), rope], lines)
+    return World(meshes, [trees, reeds(rng), rope], lines, boat_lines())
 
 
 def look(world: World, cam: float) -> View:
@@ -1079,21 +1323,23 @@ CLOUD_EXTENT = (-45000.0, 4000.0, 45000.0, 90000.0)
 
 
 def cloud_map(rng) -> np.ndarray:
-    streaks = noise.aniso_noise(320, 420, 70.0, 7.0, 4.0, rng, octaves=3)
-    patch = world_map(rng, (320, 420), 60.0, 2)
-    return filters.smoothstep(0.6, 0.78, 0.75 * streaks + 0.25 * patch)
+    streaks = noise.aniso_noise(320, 420, 30.0, 2.5, 3.0, rng, octaves=3)
+    patch = world_map(rng, (320, 420), 25.0, 2)
+    return filters.smoothstep(0.6, 0.7, streaks) * filters.smoothstep(0.5, 0.66, patch)
 
 
 def sky_light(d: np.ndarray, cam: float, clouds: np.ndarray) -> np.ndarray:
     """The sky: lightest low down and towards the glow, a few thin clouds
     lit from below."""
     elev = np.arcsin(np.clip(d[..., 1], -1.0, 1.0))
-    sky = 0.66 + 0.2 * np.exp(-np.maximum(elev, 0.0) / 0.1) + 0.1 * glow(d)
+    sky = 0.5 + 0.3 * np.exp(-np.maximum(elev, 0.0) / 0.11) + 0.12 * glow(d)
     up = np.maximum(d[..., 1], 1e-4)
     t = (CLOUD_HEIGHT - cam) / up
     X, Z = d[..., 0] * t, d[..., 2] * t
     cover = sample_grid(clouds, CLOUD_EXTENT, X, Z)
-    cover *= filters.smoothstep(0.02, 0.08, d[..., 1])
+    cover *= filters.smoothstep(0.08, 0.13, d[..., 1]) * (
+        1 - filters.smoothstep(0.26, 0.32, d[..., 1])
+    )
     return sky * (1.0 - 0.75 * cover) + (0.98 + 0.02 * glow(d)) * 0.75 * cover, cover
 
 
@@ -1101,6 +1347,7 @@ def sky_light(d: np.ndarray, cam: float, clouds: np.ndarray) -> np.ndarray:
 #: dense, how soft its top (metres), how its density fades at its two ends,
 #: and the height of its top, low and high (it varies across the world).
 MIST = (
+    (30.0, 260.0, 0.004, 1.2, 25.0, 0.6, 3.5),
     (240.0, 1450.0, 0.0028, 5.0, 220.0, 3.0, 13.0),
     (2500.0, 4000.0, 0.0011, 40.0, 450.0, 50.0, 190.0),
     (4900.0, 7300.0, 0.0006, 80.0, 700.0, 150.0, 420.0),
@@ -1108,15 +1355,20 @@ MIST = (
 )
 MIST_EXTENT = (-9000.0, 0.0, 9000.0, 16000.0)
 #: The air: density at the water, and the height over which it thins.
-AIR = (1.0 / 8500.0, 2200.0)
+AIR = (1.0 / 8500.0, 1200.0)
 
 
 def mist_tops(rng) -> np.ndarray:
-    tops = []
-    for band in MIST:
-        n = world_map(rng, (160, 180), 9.0, 3)
-        tops.append(band[5] + (band[6] - band[5]) * n)
-    return np.stack(tops)
+    """For each band, over the world: the height of its top, and how thick
+    it lies there (it gathers in some places and thins in others)."""
+    out = []
+    for band, cell in zip(MIST, (1.5, 3.0, 9.0, 12.0, 14.0), strict=True):
+        top = band[5] + (band[6] - band[5]) * world_map(rng, (160, 180), cell, 3)
+        thick = 0.12 + 0.88 * filters.smoothstep(
+            0.3, 0.68, world_map(rng, (160, 180), cell * 1.4, 3)
+        )
+        out.append(np.stack([top, thick]))
+    return np.stack(out)
 
 
 def veil(view: View, cam: float, mirrored: bool, tops: np.ndarray) -> np.ndarray:
@@ -1198,13 +1450,28 @@ def mirror_image(world: World, clouds, tops) -> tuple[np.ndarray, np.ndarray]:
     return filters.box_blur(L, 1, axis=0), view.ident
 
 
-def ruffles(Z: np.ndarray, X: np.ndarray, rng) -> np.ndarray:
-    """Where a breath of wind ruffles the water: a few long streaks."""
-    extent = (-600.0, 0.0, 600.0, 1400.0)
-    streak = noise.aniso_noise(700, 300, 45.0, 2.2, 0.0, rng, octaves=2)
-    where = world_map(rng, (700, 300), 80.0, 2)
-    field = sample_grid(streak, extent, X, Z) * sample_grid(where, extent, X, Z) ** 0.5
-    return filters.smoothstep(0.5, 0.62, field)
+#: Where a breath of wind ruffles the water: a few streaks, each its
+#: distance, where it runs across (X from, to) and how deep it is (metres).
+RUFFLES = (
+    (46.0, 3.0, 15.0, 1.3),
+    (96.0, -14.0, 30.0, 2.2),
+    (128.0, 18.0, 70.0, 3.0),
+    (205.0, -40.0, 15.0, 5.0),
+    (330.0, 30.0, 150.0, 7.0),
+    (560.0, -160.0, -40.0, 12.0),
+)
+
+
+def ruffles(Z: np.ndarray, X: np.ndarray) -> np.ndarray:
+    """How ruffled the water is at (X, Z): a few streaks, soft at their
+    ends."""
+    out = np.zeros_like(Z)
+    for z, x0, x1, deep in RUFFLES:
+        across = np.exp(-(((Z - z) / deep) ** 2))
+        mid, half = 0.5 * (x0 + x1), 0.5 * (x1 - x0)
+        along = 1.0 - filters.smoothstep(0.55, 1.0, np.abs(X - mid) / half)
+        out = np.maximum(out, across * along)
+    return out
 
 
 def water_light(study_z, mirror, mirror_id, rng):
@@ -1221,16 +1488,18 @@ def water_light(study_z, mirror, mirror_id, rng):
     d = directions()
     cos_i = np.maximum(-d[..., 1], 0.0)
     fresnel = 0.02 + 0.98 * (1.0 - cos_i) ** 5
-    reflect = np.maximum(fresnel, 0.35)  # (a little sky light from the mist too)
+    reflect = np.maximum(fresnel, 0.42)  # (a little sky light from the mist too)
     L = reflect * seen + (1.0 - reflect) * 0.08
     X = d[..., 0] / np.maximum(d[..., 2], 1e-9) * study_z
-    ruff = ruffles(study_z, X, rng)
+    ruff = ruffles(study_z, X)
     return L * (1.0 - 0.8 * ruff) + 0.95 * 0.8 * ruff, seen_id, ruff
 
 
 def to_grey(L: np.ndarray) -> np.ndarray:
     """Light to the grey of the pencil's range."""
-    v = np.where(L <= 0.0031308, 12.92 * L, 1.055 * np.maximum(L, 0) ** (1 / 2.4) - 0.055)
+    v = np.where(
+        L <= 0.0031308, 12.92 * L, 1.055 * np.maximum(L, 0) ** (1 / 2.4) - 0.055
+    )
     lo, hi = 0.21, 0.975
     return DARKEST + (PAPER - DARKEST) * np.clip((v - lo) / (hi - lo), 0.0, 1.0)
 
@@ -1262,6 +1531,20 @@ def study(world: World) -> Study:
     )
 
 
+def seen_runs(line: np.ndarray, st: Study, slack: float = 0.04) -> list[np.ndarray]:
+    """The parts of a world polyline the eye sees, as polylines on the
+    sheet: where nothing nearer stands in front of it."""
+    P = project(line, EYE)
+    xi = np.clip(np.round(P[:, 0]).astype(int), 0, WIDTH - 1)
+    yi = np.clip(np.round(P[:, 1]).astype(int), 0, HEIGHT - 1)
+    inside = (P[:, 0] >= 0) & (P[:, 0] < WIDTH) & (P[:, 1] >= 0) & (P[:, 1] < HEIGHT)
+    seen = (
+        inside & (P[:, 2] <= st.depth[yi, xi] * (1.0 + slack) + 0.05) & (line[:, 1] > 0)
+    )
+    runs = np.split(np.arange(len(P)), np.nonzero(np.diff(seen.astype(int)))[0] + 1)
+    return [P[r, :2] for r in runs if seen[r[0]] and len(r) > 1]
+
+
 def ridge_lines(st: Study) -> dict[int, np.ndarray]:
     """The crest of each ridge and the top of the forest, as polylines on
     the sheet: in each column, the highest pixel of it."""
@@ -1270,8 +1553,13 @@ def ridge_lines(st: Study) -> dict[int, np.ndarray]:
         mine = (st.ident == ident) | ((ident == RIDGE3) & (st.ident == SNOW))
         mine[int(CY) + 2 :] = False
         has = mine.any(axis=0)
-        top = np.argmax(mine, axis=0).astype(float)
+        top = np.argmax(mine, axis=0)
+        # (only where it stands against something further: not where a
+        # nearer thing hides its top)
+        above = st.ident[np.maximum(top - 1, 0), np.arange(WIDTH)]
+        has &= (LAYER[above] <= LAYER[ident]) & (top > 0)
         xs = np.nonzero(has)[0]
+        top = top.astype(float)
         out[ident] = np.stack([xs.astype(float), top[xs]], axis=1)
     return out
 
@@ -1282,15 +1570,48 @@ def ridge_lines(st: Study) -> dict[int, np.ndarray]:
 
 PALETTE = np.array(
     [
-        (235, 240, 250), (250, 250, 255), (255, 255, 255), (200, 205, 230),
-        (170, 180, 215), (130, 145, 190), (120, 150, 120), (70, 110, 70),
-        (150, 200, 230), (120, 100, 70), (190, 175, 150), (160, 160, 160),
-        (180, 200, 90), (110, 70, 40), (30, 70, 40), (200, 120, 60),
-        (90, 50, 30), (240, 200, 120), (220, 160, 90), (250, 80, 80),
+        (235, 240, 250),
+        (250, 250, 255),
+        (255, 255, 255),
+        (200, 205, 230),
+        (170, 180, 215),
+        (130, 145, 190),
+        (120, 150, 120),
+        (70, 110, 70),
+        (150, 200, 230),
+        (120, 100, 70),
+        (190, 175, 150),
+        (160, 160, 160),
+        (180, 200, 90),
+        (110, 70, 40),
+        (30, 70, 40),
+        (200, 120, 60),
+        (90, 50, 30),
+        (240, 200, 120),
+        (220, 160, 90),
+        (250, 80, 80),
         (60, 60, 60),
     ],
     np.uint8,
 )
+
+
+def write_contours(st: Study, world: World, path: Path) -> None:
+    """The contours over a pale copy of the study, to check them."""
+    img = np.repeat((180 + 0.3 * st.grey).astype(np.uint8)[..., None], 3, axis=2)
+    lines = [(p, (40, 40, 200)) for p in ridge_lines(st).values()]
+    for line in world.pine_lines:
+        lines += [(r, (20, 120, 20)) for r in seen_runs(line, st)]
+    for line in world.boat_lines:
+        lines += [(r, (200, 40, 40)) for r in seen_runs(line, st, 0.01)]
+    for pts, colour in lines:
+        seg = np.linalg.norm(np.diff(pts, axis=0), axis=1).sum()
+        t = np.linspace(0, len(pts) - 1, max(int(seg * 2), 2))
+        x = np.interp(t, np.arange(len(pts)), pts[:, 0]).round().astype(int)
+        y = np.interp(t, np.arange(len(pts)), pts[:, 1]).round().astype(int)
+        ok = (x >= 0) & (x < WIDTH) & (y >= 0) & (y < HEIGHT)
+        img[y[ok], x[ok]] = colour
+    write_png(str(path), img)
 
 
 def write_study(st: Study, folder: Path) -> None:
@@ -1306,11 +1627,20 @@ def write_study(st: Study, folder: Path) -> None:
     for name, (x0, y0, x1, y1) in crops.items():
         c = rgb[y0:y1, x0:x1]
         write_png(str(folder / f"{name}.png"), np.repeat(np.repeat(c, 2, 0), 2, 1))
-    small = rgb[: HEIGHT // 3 * 3, : WIDTH // 3 * 3].reshape(HEIGHT // 3, 3, WIDTH // 3, 3, 3)
-    write_png(str(folder / "study_third.png"), np.round(small.mean(axis=(1, 3))).astype(np.uint8))
+    small = rgb[: HEIGHT // 3 * 3, : WIDTH // 3 * 3].reshape(
+        HEIGHT // 3, 3, WIDTH // 3, 3, 3
+    )
+    write_png(
+        str(folder / "study_third.png"),
+        np.round(small.mean(axis=(1, 3))).astype(np.uint8),
+    )
     write_png(str(folder / "map_ids.png"), PALETTE[st.ident])
     write_png(str(folder / "map_mirrored.png"), PALETTE[st.mirrored])
-    for name, field in (("map_veil", st.veil), ("map_softness", st.softness), ("map_ruffle", st.ruffle)):
+    for name, field in (
+        ("map_veil", st.veil),
+        ("map_softness", st.softness),
+        ("map_ruffle", st.ruffle),
+    ):
         g = np.round(255 * (1.0 - np.clip(field, 0, 1))).astype(np.uint8)
         write_png(str(folder / f"{name}.png"), np.repeat(g[..., None], 3, axis=2))
     a = (st.angle % np.pi) / np.pi
@@ -1323,6 +1653,7 @@ def main(studies: Path | None = None) -> None:
     st = study(world)
     if studies is not None:
         write_study(st, studies)
+        write_contours(st, world, studies / "map_contours.png")
         print(f"wrote the study to {studies}")
 
 
