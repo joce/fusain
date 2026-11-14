@@ -1169,21 +1169,24 @@ def draw_face_lines(model: Model, ink: Marks, rng) -> None:
             np.hypot(arc[:, 0], arc[:, 1]) > IRIS + 0.07
         )
         for run in runs(arc, keep):
-            for dash in dashes(rng, run, (0.008, 0.045), (0.004, 0.04)):
-                crowd = face_crowd(dash.mean(axis=0))
-                if rng.random() < 0.5 * (1.0 - crowd):
-                    continue
-                d = rng.uniform(0.3, 0.85) * (0.6 + 0.4 * crowd)
-                draw3d(
-                    ink,
-                    model,
-                    on_head(model, dash),
-                    rng.uniform(1.4, 2.0),
-                    d,
-                    6.0,
-                    PLUME,
-                )
+            face_dashes(model, ink, rng, run)
         radius += rng.uniform(0.055, 0.09)
+
+
+def face_dashes(model: Model, ink: Marks, rng, run: np.ndarray) -> None:
+    """One stretch of a row of the face's tiny feathers: broken dashes, and
+    more of them crowding near the bill's base and under the eye."""
+    for loose in (True, False):
+        size, gap = (
+            ((0.008, 0.05), (0.006, 0.06)) if loose else ((0.008, 0.03), (0.01, 0.05))
+        )
+        for dash in dashes(rng, run, size, gap):
+            crowd = face_crowd(dash.mean(axis=0))
+            if not loose and rng.random() > 0.85 * crowd:
+                continue
+            d = rng.uniform(0.3, 0.85) * (0.6 + 0.4 * crowd)
+            pts = on_head(model, dash)
+            draw3d(ink, model, pts, rng.uniform(1.4, 2.0), d, 6.0, PLUME)
 
 
 def face_crowd(p) -> float:
