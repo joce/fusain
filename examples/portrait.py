@@ -1628,8 +1628,9 @@ class Eyes:
 
 
 def gaze(pose):
-    """The eyes look at the viewer, a touch less turned than that."""
-    return unit_rows(0.3 * pose.head_dir(np.array([0.0, 0.0, 1.0])) + 0.7 * VIEWER)
+    """The eyes look at the viewer, a little less turned than that."""
+    ahead = 0.3 * pose.head_dir(np.array([0.0, 0.0, 1.0])) + 0.7 * VIEWER
+    return unit_rows(ahead - [0.0, 0.07, 0.0])  # a touch down: calm, not pleading
 
 
 def iris_pattern(q, g, cos_i):
@@ -2556,6 +2557,10 @@ def eye_zones(local):
     rest = np.exp(-0.5 * (((x - 3.0) / 1.3) ** 2 + ((y - 1.55) / 0.55) ** 2))
     veil = np.exp(-0.5 * (((x - 2.9) / 1.3) ** 2 + ((y - 2.9) / 0.8) ** 2))
     temple = smoothstep(2.0, 3.5, local[..., 0]) * smoothstep(2.2, 3.4, y)
+    # and between the brows, where violet reads as a frown
+    temple = np.maximum(
+        temple, np.exp(-0.5 * ((local[..., 0] / 0.9) ** 2 + ((y - 4.2) / 0.7) ** 2))
+    )
     return rest, veil, temple
 
 
@@ -2640,10 +2645,10 @@ def feature_targets(m: Maps):
     S, lips, white = m.shade, m.part == P_LIPS, m.part == P_WHITE
     bare = 1 - smoothstep(0.03, 0.09, m.spec)
     upper = lips & (m.local[..., 1] > m.nose["stomion_y"])
-    red = np.where(lips, (0.1 + 0.1 * S) * (0.2 + 0.8 * bare), 0) + 0.09 * upper
+    red = np.where(lips, (0.1 + 0.1 * S) * (0.2 + 0.8 * bare), 0) + 0.045 * upper
     red = red + np.where(white, 0.06 * smoothstep(0.3, 0.8, S), 0)
     blue = np.where(white, 0.05 * smoothstep(0.4, 0.9, S), 0)
-    black = 0.03 * upper + np.where(lips, 0.02 * smoothstep(0.7, 1.0, S), 0)
+    black = 0.008 * upper
     return {"red": red, "blue": blue, "black": black}
 
 
@@ -2829,7 +2834,7 @@ def level_brow(line, arch=4.5):
     base = a + np.outer(t, [b[0] - a[0], 0.0])
     bump = np.exp(-0.5 * ((t - 0.64) / 0.26) ** 2)
     bump = bump - bump[0] * (1 - t)
-    lift = arch * bump / bump.max() + 1.2 * np.minimum(t / 0.5, 1.0)
+    lift = arch * bump / bump.max()
     return base - np.outer(lift, [0.0, 1.0])
 
 
@@ -2857,7 +2862,7 @@ def draw_brow(h: Hatcher, line, scale):
         k = brow_strength(t)
         pen = BLACK if rng.uniform() < 0.45 else (RED if rng.uniform() < 0.6 else BLUE)
         edge = 1 - abs(start_side) ** 2
-        p = (0.05 + 0.2 * k) * (0.5 + 0.5 * edge) * (0.55 + 0.45 * min(t / 0.3, 1))
+        p = (0.04 + 0.17 * k) * (0.5 + 0.5 * edge) * (0.55 + 0.45 * min(t / 0.3, 1))
         mid = start + d * ln / 2 + up * ln * 0.06
         h.sheet.stroke(
             [tuple(start), tuple(mid), tuple(start + d * ln)],
@@ -2882,7 +2887,7 @@ def draw_mouth(h: Hatcher):
         run = run - np.stack([0 * u, 4.0 * np.abs(u) ** 3], 1)  # the corners lift
         n = len(run)
         pen_line(h.sheet, run, BLACK, swell(0.05, 0.42, 0.5, 0.3), 1)
-        pen_line(h.sheet, run[n // 3 : -n // 3], BLACK, swell(0.1, 0.3, 0.5, 0.3), 1)
+        pen_line(h.sheet, run[n // 3 : -n // 3], BLACK, swell(0.15, 0.5, 0.5, 0.3), 1)
         pen_line(h.sheet, run + [0, -1.0], RED, swell(0.15, 0.45, 0.5, 0.2), 1)
 
 
@@ -2913,11 +2918,11 @@ class StrandInk:
 STRAND_INKS = [
     StrandInk(
         RED,
-        0.7,
+        0.4,
         lambda d: 0.2 + 0.8 * smoothstep(0.08, 0.3, d),
-        (0.25, 0.4),
+        (0.2, 0.32),
     ),
-    StrandInk(BLACK, 1.3, lambda d: 0.88 * smoothstep(0.3, 0.92, d) ** 1.2, (0.25, 0.6)),
+    StrandInk(BLACK, 1.3, lambda d: 0.88 * smoothstep(0.15, 0.85, d), (0.3, 0.6)),
     StrandInk(BLUE, 0.25, lambda d: smoothstep(0.78, 1.0, d), (0.3, 0.5)),
 ]
 
@@ -2975,11 +2980,16 @@ def draw_hair(h: Hatcher):
     middles, a few in the shine."""
     m, rng = h.maps, h.rng
     dark = hair_dark(m)
-    base = {"length": (150, 400), "count": (4, 9), "spacing": (3.0, 9.0), "by_lock": False}
+    base = {
+        "length": (150, 400),
+        "count": (4, 9),
+        "spacing": (3.0, 9.0),
+        "by_lock": False,
+    }
     hair = m.part == P_HAIR
-    red = np.where(hair, 0.07 * smoothstep(0.1, 0.3, dark), 0).astype(np.float32)
+    red = np.where(hair, 0.04 * smoothstep(0.1, 0.3, dark), 0).astype(np.float32)
     black = np.where(hair, 0.16 * smoothstep(0.4, 0.95, dark), 0).astype(np.float32)
-    h.lay(Pass(RED, P_HAIR, 0, 0.0, 0.07, 0.3, **base), red)
+    h.lay(Pass(RED, P_HAIR, 0, 0.0, 0.04, 0.25, **base), red)
     h.lay(Pass(BLACK, P_HAIR, 0, 0.0, 0.16, 0.35, **base), black)
     for k, grid in enumerate(m.strands):
         mid = to_pixels(VIEW, grid[grid.shape[0] // 2])
