@@ -27,6 +27,8 @@ eye, the bare face with its broken lines of tiny dark feathers, the velvet
 red brow. The drawing loosens toward the end of the tail.
 """
 
+# cspell:words ambiguus culmen headness lognormal tomium TURQ
+
 from __future__ import annotations
 
 import math
@@ -190,7 +192,9 @@ class Hand:
 
     def erase(self, pts, tool, pressure, width: float) -> None:
         """One pass of an eraser through ``pts`` (N, 2) of the sheet."""
-        self.sheet.erase(np.asarray(pts, dtype=np.float64).tolist(), tool, pressure, width)
+        self.sheet.erase(
+            np.asarray(pts, dtype=np.float64).tolist(), tool, pressure, width
+        )
 
 
 @dataclass
@@ -327,9 +331,22 @@ def build(rng: np.random.Generator) -> Bird:
     shade = shading(model, part)
     feathered = part["feathers"] | part["wing"]
     shade = np.where(feathered, stretch(shade, feathered) ** 1.35, shade)
+    shade = np.clip(shade + feather_shadows(wing, part["wing"]), 0.0, 1.0)
     mottle = noise.fractal_noise_2d(HEIGHT, WIDTH, 40.0, rng, octaves=4)
     mottle = (mottle - mottle.min()) / (np.ptp(mottle) + 1e-9)
     return Bird(model, wing, tiles, part, shade, directions(model), mottle)
+
+
+def feather_shadows(wing: dict, seen: np.ndarray) -> np.ndarray:
+    """How much darker each place of the wing is for the feather over it:
+    each covert dark just under the tips of the row above and lighter toward
+    its own tip; each flight feather dark beside the edge of the one over
+    it."""
+    covert = seen & (wing["row"] >= 0)
+    flight = seen & (wing["row"] < 0) & (wing["blade"] >= 0)
+    q, qf = wing["q"], wing["qf"]
+    out = covert * (0.32 * (1.0 - q) ** 3 - 0.06 * q)
+    return out + flight * (0.3 * (1.0 - qf) ** 2.5 - 0.08 * band(qf, 0.4, 0.9))
 
 
 # ----------------------------------------------------------------------
@@ -416,8 +433,11 @@ def draw_bill(hand: Hand, bird: Bird) -> None:
     sk = np.nan_to_num(bird.model.skull)
     s = bird.shade
     tip = band(-sk[..., 1], 0.55, 0.95) * band(sk[..., 0], 0.95, 0.75)
-    for mask, base, length in ((upper, 0.28, 24.0), (lower, 0.62, 14.0)):
-        tone = np.clip(base + (1.0 - base) * s - 0.25 * tip, 0.0, 1.0)
+    for mask, base, gain, length in (
+        (upper, 0.24, 0.85, 24.0),
+        (lower, 0.62, 1.0, 14.0),
+    ):
+        tone = np.clip(base + gain * (1.0 - base) * s - 0.25 * tip, 0.0, 1.0)
         how = {"clip": mask, "spread": 0.03, "bend": 0.0, "hatch": 0.55}
         how["angles"] = (55.0, 125.0, 95.0)
         build_up(hand, INKS, mask * 1.0, tone, bird.angle, length=length, **how)
@@ -426,8 +446,12 @@ def draw_bill(hand: Hand, bird: Bird) -> None:
     culmen = mm.smooth_curve(mm.bill_point(mm.CULMEN), 40)
     lit_side = culmen + mm.grain_offset(culmen, -0.06)
     ridge = mm.on_bill(bird.model, 0, lit_side[4:28])
-    for _ in range(2):
-        hand.erase(ridge[:, :2], tools.KNEADED, (0.7 * swell(24)).tolist(), 8.0)
+    hand.erase(ridge[:, :2], tools.ERASER, (0.45 * swell(24)).tolist(), 6.0)
+    tomium = mm.smooth_curve(mm.bill_point(mm.TOMIUM), 40)
+    edge = mm.on_bill(bird.model, 0, tomium + mm.grain_offset(tomium, 0.01))
+    seen = mm.visible(bird.model, edge, 5.0, ("upper",))
+    for a, b in spans(seen):
+        hand.line(BLACK, edge[a:b, :2], (0.95 * swell(b - a)).tolist(), 3.0, 0.1)
 
 
 def draw_tail(hand: Hand, bird: Bird) -> None:
@@ -441,7 +465,9 @@ def draw_tail(hand: Hand, bird: Bird) -> None:
             continue
         t, across = mm.blade_coords(bird.model, k)
         blue = np.clip(
-            band(t, 0.55, 0.85) + 0.55 * band(np.abs(across), 0.5, 0.95) + 0.3 * (k >= 4),
+            band(t, 0.55, 0.85)
+            + 0.55 * band(np.abs(across), 0.5, 0.95)
+            + 0.3 * (k >= 4),
             0.0,
             1.0,
         )
@@ -451,10 +477,15 @@ def draw_tail(hand: Hand, bird: Bird) -> None:
         how["hatch"] = 0.4
         s = bird.shade
         build_up(hand, RUSTS, seen * (1.0 - blue), s, bird.angle, length=60, **how)
-        build_up(hand, BLUES[1:], seen * blue * (1 - tip), s, bird.angle, length=56, **how)
+        rust = seen * (1.0 - blue) * trapezoid(s, (-0.1, 0.2, 0.85, 1.0))
+        hand.layer(MADDER, rust, bird.angle, 0.42, length=50, cover=1.0, clip=seen)
+        hand.layer(UMBER, rust, bird.angle, 0.35, length=50, cover=0.9, clip=seen)
+        build_up(
+            hand, BLUES[1:], seen * blue * (1 - tip), s, bird.angle, length=56, **how
+        )
         hand.tone(SKY, seen * tip, 0.45, (on,), 4.0)
         hand.layer(SKY, seen * tip, bird.angle, 0.5, length=40, cover=1.6, clip=seen)
-    mm.draw_tail(bird.model, Pencil(hand, OXBLOOD, 1.2), hand.rng)
+    mm.draw_tail(bird.model, Pencil(hand, OXBLOOD, 2.0, 1.3), hand.rng)
     for k, (_, frac, _, half) in enumerate(mm.BLADES):
         ring = mm.blade_outline(mm.TAIL_LENGTH * frac, half)
         patch = mm.bird_patches()[1][1 + k]
@@ -499,7 +530,10 @@ def draw_plumage(hand: Hand, bird: Bird) -> None:
     b = np.nan_to_num(bird.model.bird)
     rump = band(b[..., 0], -3.0, -3.5) * band(b[..., 1], -4.0, -4.6) * feathers
     hand.layer(TURQ, rump * 0.8, bird.angle, 0.45, length=14, cover=1.4, clip=clip)
-    for where, length, scale in ((feathers & ~head, 18.0, 1.1), (feathers & head, 8.0, 0.85)):
+    for where, length, scale in (
+        (feathers & ~head, 18.0, 1.1),
+        (feathers & head, 8.0, 0.85),
+    ):
         build_up(
             hand,
             GREENS,
@@ -520,8 +554,8 @@ def draw_wing(hand: Hand, bird: Bird) -> None:
     feathers' edges); then the green coverts, the secondaries going from
     green to blue, the blue primaries along the lower edge and the tip."""
     model, wing = bird.model, bird.wing
-    mm.draw_coverts(model, Pencil(hand, PINE, 1.0, 1.6), wing, hand.rng)
-    mm.draw_flight(model, Pencil(hand, NIGHT, 0.9), hand.rng)
+    mm.draw_coverts(model, Pencil(hand, PINE, 1.3, 1.6), wing, hand.rng, 9)
+    mm.draw_flight(model, Pencil(hand, NIGHT, 1.1), hand.rng)
     seen = bird.part["wing"]
     blade, u = wing["blade"], wing["u"]
     covert = seen & (wing["row"] >= 0)
@@ -533,18 +567,48 @@ def draw_wing(hand: Hand, bird: Bird) -> None:
     hand.layer(TURQ, teal, angle, 0.5, length=26, cover=1.5, clip=seen)
     vary = 0.75 + 0.5 * bird.mottle
     build_up(
-        hand, GREENS, green * covert, s, angle, vary=vary, length=8, clip=seen, spread=0.1
+        hand,
+        GREENS,
+        green * covert,
+        s,
+        angle,
+        vary=vary,
+        length=8,
+        clip=seen,
+        spread=0.1,
     )
     build_up(
-        hand, GREENS, green * flight, s, angle, vary=vary, length=22, clip=seen,
+        hand,
+        GREENS,
+        green * flight,
+        s,
+        angle,
+        vary=vary,
+        length=22,
+        clip=seen,
         spread=0.04,
     )
     deeper = np.clip(s + 0.25 * band(u, 0.75, 1.0), 0.0, 1.0)
     build_up(
         hand, BLUES, blue + 0.5 * teal, deeper, angle, length=40, clip=seen, spread=0.05
     )
-    mm.draw_coverts(model, Pencil(hand, DEEP, 0.75, 1.3), wing, hand.rng)
-    mm.draw_flight(model, Pencil(hand, NAVY, 0.8), hand.rng)
+    mm.draw_coverts(model, Pencil(hand, DEEP, 0.9, 1.2), wing, hand.rng, 9)
+    mm.draw_flight(model, Pencil(hand, NIGHT, 0.9), hand.rng)
+    lift_flight_edges(hand, bird)
+
+
+def lift_flight_edges(hand: Hand, bird: Bird) -> None:
+    """The light caught along each flight feather's free edge, lifted out
+    with the kneaded eraser just inside its dark line."""
+    for edge, reach in mm.FLIGHT[:-1]:
+        u = np.linspace(mm.GREATER + 0.02, reach - 0.04, 40)
+        up, low = mm.wing_edges(u)
+        v = up + (edge - 0.025) * (low - up)
+        pts = mm.on_wing(bird.model, np.stack([u, v], 1))
+        seen = mm.visible(bird.model, pts, 4.0, ("wing",))
+        for a, b in spans(seen):
+            bear = 0.5 * swell(b - a)
+            hand.erase(pts[a:b, :2], tools.KNEADED, bear.tolist(), 4.0)
 
 
 def draw_face(hand: Hand, bird: Bird) -> None:
@@ -558,8 +622,9 @@ def draw_face(hand: Hand, bird: Bird) -> None:
     turn = band(bird.shade, 0.2, 0.75)
     flush = band(sk[..., 0], 0.0, 0.5) * (0.5 + 0.5 * band(-sk[..., 1], 0.1, 0.6))
     mm.draw_face_lines(bird.model, Pencil(hand, LINE, 1.0), hand.rng)
-    hand.tone(COOL, w * turn**1.3, 0.3, (25,), 2.6)
-    hand.tone(MAUVE, w * turn**2.5, 0.28, (70,), 2.6)
+    back = band(-sk[..., 0], 0.0, 0.45) * band(-sk[..., 1], 0.0, 0.8)
+    hand.tone(COOL, w * np.clip(turn + 0.6 * back, 0, 1), 0.36, (25,), 2.6)
+    hand.tone(MAUVE, w * np.clip(turn**2 + 0.4 * back, 0, 1), 0.3, (70,), 2.6)
     hand.tone(ROSE, w * (0.3 + 0.7 * flush), 0.3, (-20,), 2.6)
     hand.tone(BLUSH, w, 0.28, (10, 80), 2.6)
 
@@ -597,7 +662,11 @@ def draw_ticks(hand: Hand, bird: Bird) -> None:
         length, width = size[iy, ix] * short[iy, ix], 0.85 * size[iy, ix]
         t = np.linspace(-0.8, 0.8, 7)
         along = 0.5 * length * np.sqrt(1 - t**2) + 0.8
-        pts = np.array([x, y]) + np.outer(along, d) + np.outer(t * width / 2, [-d[1], d[0]])
+        pts = (
+            np.array([x, y])
+            + np.outer(along, d)
+            + np.outer(t * width / 2, [-d[1], d[0]])
+        )
         colour = PINE if bird.shade[iy, ix] < 0.55 else DEEP
         firm = (0.25 + 0.4 * r) * hand.rng.uniform(0.7, 1.1)
         hand.line(colour, pts, (firm * swell(7)).tolist(), 2.0 if length < 12 else 2.6)
@@ -612,13 +681,17 @@ def draw_brow(hand: Hand, bird: Bird) -> None:
     clip = soft(brow, 3) > 0.15
     s = band(bird.shade, 0.1, 0.8)
     angle = bird.angle
+    hand.tone(CRIMSON, w * (0.5 + 0.5 * s), 0.45, (-30,), 2.6)
+    hand.tone(SCARLET, w, 0.5, (40,), 2.6)
     for colour, weight, firm, cover in (
         (OXBLOOD, w * s**2, 0.6, 1.8),
         (CRIMSON, w * (0.4 + 0.6 * s), 0.62, 2.2),
         (SCARLET, w, 0.64, 3.0),
         (FLAME, w * (1.0 - s) * 0.5, 0.4, 0.8),
     ):
-        hand.layer(colour, weight, angle, firm, length=5, width=2.6, cover=cover, clip=clip)
+        hand.layer(
+            colour, weight, angle, firm, length=5, width=2.6, cover=cover, clip=clip
+        )
 
 
 def eye_masks(bird: Bird):
@@ -653,7 +726,9 @@ def draw_eye(hand: Hand, bird: Bird) -> None:
     hand.line(LINE, pts[:, :2], (0.9 * swell(30) + 0.1).tolist(), 3.2, 0.1)
     t = np.linspace(1.12 * math.pi, 1.9 * math.pi, 24)
     lower = np.stack([np.cos(t), np.sin(t)], 1) * (mm.IRIS + 0.01)
-    hand.line(MAUVE, mm.on_head(model, lower)[:, :2], (0.5 * swell(24)).tolist(), 2.2, 0.1)
+    hand.line(
+        MAUVE, mm.on_head(model, lower)[:, :2], (0.5 * swell(24)).tolist(), 2.2, 0.1
+    )
     centre = mm.on_head(model, [glint])[0, :2]
     for _ in range(3):
         hand.erase([centre - [0.8, 0.0], centre + [0.8, 0.0]], tools.ERASER, 1.0, 3.2)
@@ -675,7 +750,13 @@ def draw_eye_skin(hand: Hand, bird: Bird) -> None:
         seen = mm.visible(bird.model, pts, 6.0, ("plumage", "eye"))
         if seen.all():
             firm = rng.uniform(0.15, 0.32)
-            hand.line(MAUVE if rng.random() < 0.6 else COOL, pts[:, :2], (firm * swell(8)).tolist(), 1.8, 0.1)
+            hand.line(
+                MAUVE if rng.random() < 0.6 else COOL,
+                pts[:, :2],
+                (firm * swell(8)).tolist(),
+                1.8,
+                0.1,
+            )
 
 
 def draw_feet(hand: Hand, bird: Bird) -> None:
@@ -700,11 +781,17 @@ def draw_branch(hand: Hand, bird: Bird) -> None:
     w = bird.part["branch"] * fade
     b, up, _ = mm.branch_frame()
     s = bird.shade
-    hand.tone(SEPIA, w * band(s, 0.35, 0.9), 0.6, (-5, 30), 2.6)
+    hand.tone(SEPIA, w * band(fade, 0.4, 0.8) * band(s, 0.35, 0.9), 0.6, (-5, 30), 2.6)
     clip = bird.part["branch"] & (fade > 0.05)
     hand.layer(
-        UMBER, w * band(s, 0.15, 0.5), bird.angle, 0.45, length=34, width=4.0,
-        cover=1.6, clip=clip,
+        UMBER,
+        w * band(s, 0.15, 0.5),
+        bird.angle,
+        0.45,
+        length=34,
+        width=4.0,
+        cover=1.6,
+        clip=clip,
     )
     hand.layer(
         WARM_GREY, w, bird.angle, 0.32, length=40, width=4.0, cover=1.0, clip=clip

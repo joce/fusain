@@ -1,12 +1,11 @@
-"""A structural study of a great green macaw: the bird built as solids.
+"""The great green macaw of ``macaw.py``, built as solids and lit.
 
-Run from the repository root: ``python examples/macaw_study.py OUTDIR``.
-Writes ``study_grey.png``, ``study_colour.png``, ``head.png`` and
-``head_colour.png`` into OUTDIR (in about a minute).
-
-This is the under-drawing of ``macaw.py``, not yet a drawing in pencil: the
-bird modelled from measurements, posed, lit from the upper left, and its
-feather tracts and features drawn on the model in line and tone.
+Imported by ``macaw.py``, which lays the coloured pencil over it: this
+module gives, for every pixel of the sheet, which part of the bird is seen
+there, where on the bird it lies, how much light it takes, and which way
+the feathers run; and it lays the lines it knows (the eye's lids, the
+face's rows of feathers, the bill's edges, the wing's feather edges, the
+tail's shafts) on the bird's surfaces through any object with a ``line``.
 
 The measurements (landmarks read off fine grids laid over eleven reference
 photographs, CC BY / CC0; nothing sampled from them). The head, from seven
@@ -44,6 +43,8 @@ size down the wing, overlapping flight feathers, small tiles over head and
 body that follow the way the feathers run), shown only as much as the light
 rakes them.
 """
+
+# cspell:words Catmull culmen headness interp keepdims lexsort nanmin prio tomial tomium
 
 from __future__ import annotations
 
@@ -652,7 +653,7 @@ def toe(centre, turn, along, thick, part="toes"):
 
 #: The toes of a foot: round the branch from the top (degrees), sideways
 #: along it, thickness: two over the near side, two over the far side.
-TOES = ((95, -35, 0.2, 0.135), (95, -25, -0.12, 0.135), (95, 215, 0.14, 0.125),
+TOES = ((100, 5, 0.1, 0.14), (100, 12, -0.09, 0.14), (95, 215, 0.14, 0.125),
         (95, 205, -0.16, 0.1))  # fmt: skip
 
 
@@ -1161,9 +1162,9 @@ def draw_face_lines(model: Model, ink: Marks, rng) -> None:
             np.hypot(arc[:, 0], arc[:, 1]) > IRIS + 0.07
         )
         for run in runs(arc, keep):
-            for dash in dashes(rng, run, (0.012, 0.04), (0.012, 0.05)):
+            for dash in dashes(rng, run, (0.008, 0.05), (0.006, 0.06)):
                 fade = smoothstep(0.55, 0.2, float(dash[:, 0].mean()))
-                d = rng.uniform(0.45, 0.8) * (0.5 + 0.5 * fade)
+                d = rng.uniform(0.3, 0.85) * (0.45 + 0.55 * fade)
                 draw3d(
                     ink,
                     model,
@@ -1173,7 +1174,7 @@ def draw_face_lines(model: Model, ink: Marks, rng) -> None:
                     6.0,
                     PLUME,
                 )
-        radius += rng.uniform(0.06, 0.08)
+        radius += rng.uniform(0.055, 0.09)
 
 
 def runs(points: np.ndarray, keep: np.ndarray) -> list[np.ndarray]:
@@ -1619,11 +1620,11 @@ def draw_flight(model: Model, ink: Marks, rng) -> None:
         )
 
 
-def draw_coverts(model: Model, ink: Marks, wing: dict, rng) -> None:
+def draw_coverts(model: Model, ink: Marks, wing: dict, rng, count: int = 4) -> None:
     """The tips of the larger coverts, each a soft dark line along its edge,
     stated where the light rakes the wing and left out elsewhere."""
     rows = wing["rows"]
-    for row in rows[-4:]:
+    for row in rows[-count:]:
         e = row["edges"]
         for a, b in pairwise(e):
             v = np.linspace(a, b, 14)
@@ -1633,9 +1634,9 @@ def draw_coverts(model: Model, ink: Marks, wing: dict, rng) -> None:
             ) / wing_frame()[3]
             pts = on_wing(model, np.stack([u + 0.004, v], 1))
             weight = shade_at(model, pts)
-            if rng.random() > 0.35 + 0.6 * float(weight.mean()):
+            if rng.random() > 0.45 + 0.5 * float(weight.mean()):
                 continue
-            dark = (0.2 + 0.5 * weight) * np.sin(np.linspace(0.1, 3.0, 14))
+            dark = (0.3 + 0.45 * weight) * np.sin(np.linspace(0.1, 3.0, 14))
             draw3d(ink, model, pts, rng.uniform(1.4, 2.4), dark, 4.0, ("wing",))
 
 
@@ -1764,8 +1765,8 @@ def branch_fade(model: Model) -> np.ndarray:
     x, y, _ = model.pose.to_sheet(np.asarray(BRANCH_AT))
     h, w = model.seen.z.shape
     yy, xx = np.mgrid[:h, :w]
-    far = np.hypot(xx - x, (yy - y) * 1.5)
-    fade = np.exp(-((far / 230.0) ** 2.5))
+    far = np.hypot(xx - x - 70.0, (yy - y) * 1.5)
+    fade = np.exp(-((far / 300.0) ** 3))
     near = box_blur(model.part("branch").astype(np.float32), 3) > 0.01
     bird = (
         box_blur(
