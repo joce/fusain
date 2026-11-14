@@ -40,6 +40,13 @@ class Medium:
         never looks quite black. Charcoal, pastel and wax have none. (Wax
         has a gloss of another kind, which is not the medium's but its
         polish's: see :meth:`fusain.Sheet.shine`.)
+    melts:
+        0..1: how far it melts into a film of wax it is pressed hard on. A
+        colourless blender is soft clear wax and nothing else: it works into
+        the film under it, however thin, and stirs it into the valleys of
+        the tooth, so that the white flecks of the paper close. A lead or a
+        crayon, whose wax binds its own pigment, polishes a film only as far
+        as the film is slick already, and stirs it less.
     side:
         How many times as wide as its point the side of a stick of it
         marks, held flat (at full tilt): what length of it lies on the
@@ -58,11 +65,12 @@ class Medium:
     sheen: float = 0.0
     side: float = SIDE
     name: str = ""
+    melts: float = 0.0
 
     def __post_init__(self):
         if not isinstance(self.pigment, Pigment):
             raise TypeError(f"pigment must be a murex Pigment, got {self.pigment!r}")
-        for field in ("softness", "binding", "wax", "sheen"):
+        for field in ("softness", "binding", "wax", "sheen", "melts"):
             if not 0.0 <= getattr(self, field) <= 1.0:
                 raise ValueError(
                     f"{field} must be between 0 and 1, got {getattr(self, field)!r}"

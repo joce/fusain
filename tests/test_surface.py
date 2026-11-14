@@ -98,7 +98,7 @@ def test_what_flattens_is_a_tip_that_is_hard_dry_and_all_of_a_piece():
     paper = np.array([1.0, 0.5, 0.5, 1.0])
 
     def crush(softness, binding=0.85, wax=0.0) -> float:
-        medium = np.array([0.1, softness, binding, wax, 0.0])
+        medium = np.array([0.1, softness, binding, wax, 0.0, 0.0])
         return float(eng.law_of(medium, paper)[0][10])
 
     assert crush(0.0, 1.0) == pytest.approx(eng.FLATTEN)

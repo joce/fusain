@@ -17,15 +17,19 @@ is judged on. Each one is measurable, so each becomes a test.
    soft one. Rough paper takes more layers than smooth paper.
 3. **Loose and held pigment.** Charcoal and soft pastel leave dust that a
    finger moves and a kneaded eraser lifts. Graphite is held better, wax-based
-   pencil and crayon almost completely. An oil pastel is a paste: a finger
-   smears it, and a kneaded eraser does not lift it.
+   pencil and crayon almost completely, and wax holds against an eraser: a
+   light layer of coloured pencil comes off a vinyl one, a dense or
+   burnished one hardly, and its lights are kept or scratched out. An oil
+   pastel is a paste: a finger smears it, and a kneaded eraser does not lift
+   it.
 4. **Layering.** Coloured pencil is translucent: yellow over blue reads green.
    Pastel is opaque: a light stick covers a dark one.
 5. **Wax.** A waxy layer fills the tooth and turns slick: later layers take
    badly (resist), dry media hardly at all, even over one firm line (charcoal
    shaded over a crayon drawing leaves it showing), and heavy pressure
-   polishes it flat (burnishing). Laid over dust, wax lies on it and binds
-   part of it.
+   polishes it flat (burnishing): a colourless blender pressed hard closes
+   the white flecks of the paper, and the colour is deeper, smoother and
+   glossy. Laid over dust, wax lies on it and binds part of it.
 6. **The tip.** A point wears to a flat, so a line widens as it is drawn.
    The side of a stick lays a broad band. Tilting the pencil widens the mark.
 7. **Conservation.** What leaves the stick is on the paper, on the tool that
@@ -141,6 +145,7 @@ code runs all of them; only the numbers change.
 | `wax` | Binder that films over the tooth: resist, burnishing | graphite, charcoal | coloured pencil, crayon, oil pastel |
 | opacity (of the pigment) | How strongly it hides what is underneath | coloured pencil | pastel |
 | `sheen` | How much of it mirrors the light once the paper holds it, as a metal does | everything else | graphite, the more the softer the lead |
+| `melts` | How far it melts into a film of wax it is pressed hard on, and stirs it | everything else | a colourless blender |
 
 Presets group by family: `pencils.HB`, `pencils.B6`, `charcoal.VINE`,
 `charcoal.COMPRESSED`, `pastels.soft("#c0392b")`, `pastels.oil(...)`,
@@ -191,7 +196,29 @@ A tool is a tip plus, usually, a medium.
 - **Tools that lay nothing** use the same stroke runner: stump and finger
   (carry `loose` along and press part of it in, and slide held graphite),
   kneaded eraser (lifts loose dust), hard eraser (also abrades `held`, and
-  with it what is set, a film and paste), burnisher.
+  with it what is set, a film and paste), and what scrapes: a sand eraser
+  and the point of a knife.
+- **Wax holds against an eraser** (built). Wax binds what it holds, and an
+  eraser slides on it. Of what the paper holds at a pixel (and of a film
+  and what is set there) an eraser lifts `WAX_HOLDS` less where the wax is
+  `WAX_FAST` thick or more and has kept its tooth, less in proportion where
+  it is thinner, and `POLISH_HOLDS` less where it has been polished flat
+  (`press`). One rub to and fro of a vinyl eraser at 0.9 takes nine tenths
+  of one light layer of a dark coloured pencil, two thirds of three layers
+  at 0.5, and a third of four firm layers, burnished or not; three rubs
+  leave three tenths of the firm layers, lighter by then (a fifth of the
+  paper's tone), and two fifths of the burnished ones, as dark as they
+  were. A kneaded eraser takes a quarter of the light layer in a rub and a
+  fourteenth of the burnished ones. (Before, a vinyl eraser took nine
+  tenths of anything in a rub, and a kneaded one a third.) A tool with
+  `scrape` cuts through the wax by that share: a sand eraser
+  (`tools.SAND_ERASER`, 0.8) takes nine tenths of the burnished dark in a
+  rub, and the point of a knife (`tools.KNIFE`, 1) scratches a line two
+  pixels wide back to the paper (it takes all but a hundredth of what lay
+  on its line, and the wax with it, so the line takes pencil again). What
+  they take off is on the tool, as for any eraser. The lights of a coloured
+  pencil drawing are therefore kept (bare paper, or a line indented first)
+  or scratched out, as they are in life.
 - **A tool in the hand** (built). A `Smudger` is to a `Tool` what a `Stick`
   is to a medium: the tool as it is held, with what it carries, which it
   keeps from one pass to the next until `clean()`. It lands with its load,
@@ -284,7 +311,32 @@ At each step, for each pixel under the tip:
    that thick, so charcoal shaded over it skips it: wax resist. Pressed hard, the tip polishes the film: it raises `press`,
    which levels the tooth so that every part of the pixel is touched, and it
    drags some of the waxy layer along and lays it back down, valleys
-   included. That closes the white specks (burnishing).
+   included. That closes the white specks (burnishing). How much a tip
+   polishes goes with how slick the film is, and it takes up `BURNISH_LIFT`
+   times its polish of what the paper holds. A colourless blender is made
+   for this: soft clear wax and nothing else, it melts into the film
+   (`Medium.melts`), so it polishes a thin film as if it were slick, takes
+   up `MELT_LIFT` times its polish and lays it back within about its own
+   width: one firm layer of it stirs about half of what is under it into an
+   even film. On three layers of red at 0.5 on cartridge paper,
+   a tenth of the pixels still show the paper; one layer of the blender at
+   full pressure leaves a fifth of those (two layers a twenty-fifth), the
+   chroma of the patch goes from 34 to 59 (69), its lightness from 67 to 57
+   (54), it is half as grainy, and it has 0.46 (0.79) of the gloss of
+   polished wax; at a pressure of 0.7 the blender closes a third of the
+   flecks, and at 0.5 none. (In the first build the blender was a
+   coloured pencil without colour: one firm layer left two fifths of the
+   flecks.) Two colours laid over each other are stirred into one, and
+   a blender drawn from a dark out over bare paper drags it along: a
+   quarter of the dark's pigment lies next to the edge, a thirteenth a
+   tip's width out, and under a hundredth three widths out. A dark over a light is a
+   matter of room and of wax, not of order: on cartridge paper two layers
+   of a dark teal at 0.6 over four of lemon at 0.4 take half of what they
+   take on bare paper and go two thirds of the way to the tone of the teal
+   alone; on a paper with a shallow tooth (depth 0.4), which those four
+   layers fill (the fourth takes a fifth of the first), the teal takes a
+   fifth and goes a third of the way, and over one layer of lemon it takes
+   over half. There the darks go first.
 7. **The tooth.** A dry tip pressed hard (harder than `BURNISH_FROM`, as for
    burnishing) flattens the tooth itself, and raises `press` too: the hardest
    lead by `FLATTEN` in a pass at full pressure, a softer one as the cube of
@@ -301,7 +353,7 @@ At each step, for each pixel under the tip:
 
 A stump, a finger or an eraser runs the same way but lays nothing of its own.
 Where it bears, it lifts a share of the `loose` pigment (and, for an eraser,
-of the `held`; paste as dust if it smears, as held pigment if it does not;
+of the `held`, less where wax holds it; paste as dust if it smears, as held pigment if it does not;
 what is set and a film as held pigment), carries it, and lays a share of what it carries back down a
 little further on, as dust spread over the whole pixel. As strongly as it
 smears, it also spreads the dust under it from grain to grain, within a few
@@ -354,7 +406,7 @@ raking one; it is added to what the pigment sends back.
   how slick the film of wax is at the pixel (as for the resist) times the
   square of how far the surface is pressed flat (a film half polished still
   scatters most of the light), so a coloured pencil laid lightly has
-  none, one burnished with a blender seven tenths of the most, and two
+  none, one burnished with a blender eight tenths of the most, and two
   layers of crayon from none at a pressure of 0.3 to three quarters at full
   pressure. It counts
   wherever the wax lies: a film laid over dust is on top and shines; what
@@ -460,8 +512,10 @@ sheet.stroke(path, pastels.soft("#c0392b"), pressure=(0.2, 0.8), tilt=1)
 sheet.stroke(path, pencils.B2, width=lambda u: 8 - 6 * u)  # tapers
 sheet.stroke(path, pastels.hard("#2c3e50"), width=6, ends="flat")  # cut square
 sheet.indent(path, pressure=0.7)     # a stylus: a groove that a tone skips
+sheet.shade(area, pencils.BLENDER, pressure=1.0)   # burnish coloured pencil
 sheet.smudge(path, tools.STUMP)
 sheet.erase(path, tools.KNEADED)
+sheet.erase(path, tools.KNIFE)       # scratch a light out of wax
 sheet.rub(area, tools.FINGER)        # a whole area, to and fro
 stump = Smudger(tools.STUMP)         # in the hand: it keeps what it picks up
 sheet.rub(area, stump)

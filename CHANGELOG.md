@@ -8,6 +8,96 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `tools.KNIFE` and `tools.SAND_ERASER`, and `Tool.scrape` (0 to 1): how
+  far a tool cuts through wax, which holds against an eraser (see Fixed).
+  The point of a knife scratches a line two pixels wide out of a dense or
+  burnished layer of coloured pencil, crayon or oil pastel, back to the
+  paper (sgraffito): one pass at 0.9 takes all but a hundredth of what lay
+  on its line, wax included, so the line takes pencil again, and leaves
+  what lies two pixels to either side alone. A sand eraser takes nine
+  tenths of a burnished dark in one rub. What they take off is on the tool
+  and returned by `Sheet.erase`, as for any eraser.
+- `Medium.melts` (0 to 1): how far a medium melts into a film of wax it is
+  pressed hard on, and stirs it. 1 for `pencils.BLENDER`, 0 for every other
+  preset (see Fixed).
+
+### Fixed
+
+- The blender shows. `pencils.BLENDER` was a coloured pencil without
+  colour, and pressed hard it made little difference: one firm layer of it
+  over three layers of red at 0.5 on cartridge paper left two fifths of the
+  white flecks, and in `examples/macaw.py`, on a paper with a shallow tooth,
+  half of them. A blender is soft clear wax and nothing else, and it melts
+  into the film it is pressed on: `Medium.melts` (0 to 1; 1 for the blender,
+  0 for every other preset) says how far. A tip that melts polishes a film
+  of wax however thin, takes up two and a half times as much of what is
+  under it (`MELT_LIFT` 1.5, against `BURNISH_LIFT` 0.6) and lays it back a
+  little sooner (`MELT_LAY` 6, against `BURNISH_LAY` 4). One firm layer now
+  leaves a fifth of the flecks (2.0% of the pixels, from 10.7%) and two a
+  twenty-fifth; the chroma of the patch goes from 34 to 59 and to 69
+  (before, to 49 and to 60), its lightness from 67 to 57 and to 54, it is
+  half as grainy, and it has 0.46 and 0.79 of the gloss of polished wax. On
+  the macaw's plumage one layer takes the flecks from 7.3% to 1.1% (before,
+  to 3.4%) and the chroma from 47 to 57. At a pressure of 0.7 the blender
+  closes a third of the flecks; at 0.5 it does nothing. It stirs what it
+  goes over: yellow and blue laid over each other become one green, and
+  drawn from a dark out over bare paper it drags the dark along (a quarter
+  of its pigment next to the edge, a thirteenth a tip's width out, under a
+  hundredth three widths out). Nothing is lost: what the blender lays and
+  what it drags are on the sheet. A coloured pencil or a crayon pressed
+  hard burnishes as it did.
+- Wax holds against an eraser. An eraser took a coloured pencil off as it
+  takes graphite: one rub to and fro of a vinyl eraser took over nine tenths
+  of a dense, burnished dark, and a kneaded one a third. (The dab reported in
+  the issue lifted a third and showed no light only because a stroke
+  less than a pixel long is a sixth of a pass.) Of what the paper holds
+  where there is wax, an eraser now lifts less: `WAX_HOLDS` (0.6) less
+  where the wax is `WAX_FAST` (0.1) thick or more, in proportion where it is
+  thinner, and `POLISH_HOLDS` (0.9) less where it has been polished. One rub
+  of a vinyl eraser at 0.9 takes 92% of one light layer of a dark coloured
+  pencil, two thirds of three layers at 0.5, and a third of four firm
+  layers, burnished or not; after three rubs three tenths of the firm layers
+  are left, at a fifth of the paper's tone, and two fifths of the burnished
+  ones, as dark as before. A kneaded eraser takes a quarter of the light
+  layer in a rub and 7% of the burnished ones. Graphite, charcoal and
+  pastel come off as they did. A vinyl eraser now takes half of an oil
+  pastel in a rub, where it took over 0.7: a knife scrapes it off.
+
+### Examples
+
+- `examples/macaw.py`: the feathers, the bill and the brow are burnished
+  with the blender, along the lie of the feathers and the arch of the horn
+  (4,250 strokes of it after the 32,500 of the pencils), all but the end of
+  the tail. The white flecks are gone from the plumage and its colour is
+  deeper. No eraser takes a light out of that, so the lights are scratched
+  with the knife: the edges of the flight feathers, the thin light under
+  the bill's cutting edge, and the catchlight, which now sits on the edge of
+  the pupil. The small dark touches under the feathers' tips go on before
+  the burnishing; no feather is drawn across the eye; the image is rendered
+  without gloss, as a scanner sees it (under a lamp the burnished wax greys
+  the darks).
+- `examples/colour.py`: the red square, half burnished, is crossed by three
+  lights: a line indented before the red was laid, a vinyl eraser rubbed to
+  and fro (it clears the half that kept its tooth and slides on the
+  burnished one) and two lines scratched with the knife.
+- Every image is regenerated. `colour.png` and `macaw.png` change as said;
+  `shine.png` where its coloured pencil is burnished; `crayons.png` where a
+  kneaded eraser and a finger go over oil pastel (by a few levels). The
+  others are unchanged.
+
+### Changed
+
+- With the blender burnishing more, a red burnished with it has 0.78 of the
+  gloss of polished wax (from 0.70), and goes from (222, 83, 56) to
+  (225, 90, 67) under the default lamp.
+- `tools.ERASER` and `tools.KNEADED` take less of a coloured pencil, a
+  crayon or an oil pastel than they did (see Fixed).
+- `rub_stroke` (in `fusain._engine`) takes the sheet's `press` after
+  `cover` and the tool's `scrape` after `smear`; `lay_stroke` takes a
+  medium of six numbers, the last how far it melts.
+
+### Added
+
 - `Sheet.indent(path, pressure=0.7, width=3.0)`: a stylus, a hard round
   point that lays nothing and presses a groove into the paper, and
   `Sheet.dent`, the depth of the groove at each pixel (below the peaks of
