@@ -100,6 +100,8 @@ class Part:
     flow: Callable | None = None  # the direction of the strokes at x
     drift: float = 10.0  # how far that wanders from patch to patch
     tint: str | None = None  # a lighter colour laid first in some patches
+    radial: bool = False  # filled with strokes radiating from its middle
+    weight: float = 1.0  # how firmly it is filled, against its colour's way
 
 
 Item = Part | Mark
@@ -220,8 +222,10 @@ def sun(hand: Hand, cx=1165.0, cy=168.0, r=86.0) -> list[Item]:
             (cx + long * math.cos(a), cy + long * math.sin(a)),
             (cx + base * math.cos(a + half), cy + base * math.sin(a + half)),
         ]
-        items.append(Part(hand.poly(pts, 1.0, 0.6), ORANGE, math.degrees(a), 9.0))
-    items.append(Part(hand.blob(cx, cy, r, r * 0.97, 11, 0.025), SUN, 60.0, 12.0))
+        items.append(Part(hand.poly(pts, 1.0, 0.6), ORANGE, math.degrees(a), 6.5))
+    disc = Part(hand.blob(cx, cy, r, r * 0.97, 11, 0.025), SUN, 60.0, 12.0)
+    disc.radial = True
+    items.append(disc)
     return items
 
 
@@ -393,6 +397,8 @@ def far_hills(hand: Hand):
     ]
     patches, edges = fields(hand, height, FAR_CUTS, 800, hill, looks)
     items: list[Item] = [hill, *patches]
+    for k in (0, 2, 4, 5):  # (the green fields, whose patterns are dark)
+        patches[k].weight = 0.82
     items += far_patterns(hand, height, patches)
     items += edges
     items.append(Mark(top, BLACK, OUTLINE))
@@ -477,15 +483,13 @@ def meadow(hand: Hand):
 
 def windmill(hand: Hand, x=318.0, base=372.0) -> list[Item]:
     items: list[Item] = []
-    tower = [(x - 34, base), (x + 34, base), (x + 21, base - 112), (x - 21, base - 112)]
+    tower = [(x - 34, base), (x + 34, base), (x + 21, base - 108)]
+    tower += [(x + 10, base - 124), (x - 10, base - 124), (x - 21, base - 108)]
     items.append(Part(hand.poly(tower), None, 90.0, 10.0))
     door = [(x - 12, base), (x + 12, base), (x + 12, base - 30), (x, base - 38)]
     items.append(
         Part(hand.poly([*door, (x - 12, base - 30)], 1.0, 0.5), NAVY, 90.0, 8.0)
     )
-    cap = [(x - 36, base - 106), (x + 36, base - 106), (x + 30, base - 146)]
-    cap += [(x, base - 172), (x - 30, base - 146)]
-    items.append(Part(hand.poly(cap), RED, 30.0, 9.0))
     hub = np.array([x + 2, base - 112.0])
     start = hand.u(43, 47)
     for k in range(4):
@@ -558,14 +562,14 @@ def house(hand: Hand, cx=468.0, base=656.0) -> list[Item]:
 def smoke(hand: Hand, x, y) -> list[Item]:
     """Smoke from the chimney: three puffs, growing as they rise and drift."""
     items: list[Item] = []
-    for k, r in enumerate((10.0, 14.0, 19.0)):
-        cx, cy = x + 16 * k + 6 * k * k, y - 30 * k - 4 * k * k
+    for k, r in enumerate((13.0, 18.0, 24.0)):
+        cx, cy = x + 20 * k + 7 * k * k, y - 36 * k - 5 * k * k
         items.append(
             Part(
                 hand.scallop(cx, cy, r * 1.25, r, 5, 0.18, 0.9),
                 None,
                 0.0,
-                6.0,
+                8.0,
                 ink=SMOKE,
             )
         )
@@ -698,7 +702,7 @@ def apple_tree(hand: Hand, x, base, h, r) -> list[Item]:
     ]
     box = (x + lean - r * 0.68, cy - r * 0.58, x + lean + r * 0.68, cy + r * 0.55)
     for px, py in scatter(hand, 8, *box, 26):
-        rr = hand.u(9, 11)
+        rr = hand.u(10, 12)
         items.append(
             Part(hand.blob(px, py, rr, rr * 0.95, 6, 0.05), RED, hand.u(0, 180), 0.0)
         )
@@ -715,11 +719,11 @@ def sunflower(hand: Hand, x, base, h, r) -> list[Item]:
         size = hand.u(0.85, 1.1)
         leaf = [
             (sx, sy),
-            (sx + side * 22 * size, sy - 20 * size),
-            (sx + side * 44 * size, sy - 14 * size),
-            (sx + side * 24 * size, sy + 2),
+            (sx + side * 26 * size, sy - 26 * size),
+            (sx + side * 54 * size, sy - 18 * size),
+            (sx + side * 30 * size, sy + 4),
         ]
-        items.append(Part(hand.closed(leaf, 1.0, 0.6), LEAF, 0.0, 7.0))
+        items.append(Part(hand.closed(leaf, 1.0, 0.6), LEAF, side * 30.0, 6.0))
     n = int(hand.u(11, 14))
     start = hand.u(0, 2 * np.pi)
     for k in range(n):
@@ -975,9 +979,9 @@ def sheep(hand: Hand, place: Place) -> list[Item]:
                 0.0,
                 10.0,
             ),
-            shape(hand, place, [(56, -28), (40, -42), (46, -24)], BLACK, 0.0, 7.0),
-            shape(hand, place, oval(76, -10, 22, 29, 9, -25), BLACK, 60.0, 8.0),
-            dot(hand, place, 80, -17, 4.5, None),
+            shape(hand, place, [(84, -30), (64, -46), (74, -22)], BLACK, 0.0, 6.0),
+            shape(hand, place, oval(102, -8, 19, 26, 9, -25), BLACK, 60.0, 6.0),
+            dot(hand, place, 106, -16, 5.0, None),
         )
     )
     return items
@@ -1101,8 +1105,8 @@ def pond(hand: Hand, cx=660.0, cy=905.0) -> list[Item]:
 
 def middle(hand: Hand) -> list[Item]:
     items: list[Item] = []
-    items += sheep(hand, Place(138, 618, 0.8, left=True, turn=3))
-    items += sheep(hand, Place(252, 572, 0.78, left=True, turn=-2))
+    items += sheep(hand, Place(148, 624, 0.8, left=True, turn=3))
+    items += sheep(hand, Place(292, 590, 0.78, left=True, turn=-2))
     items += apple_tree(hand, 690, 660, 64, 66)
     items += house(hand)
     items += barn(hand)
@@ -1218,7 +1222,7 @@ CRAYON = {
     ROSE: "#e8517f",
     GREEN: "#27922c",
     LIME: "#a4cc1e",
-    LEAF: "#17703a",
+    LEAF: "#0f6131",
     BROWN: "#7c3f1a",
     NAVY: "#1f45a0",
     POND: "#1659b8",
@@ -1235,8 +1239,8 @@ ORDER += [LEAF, NAVY, SMOKE]
 #: edges read thinner than a flat one.
 BOLD = 1.15
 FILL_WIDTH = 12.0  # the width of a crayon filling a shape, in pixels
-FILL_GAP = 0.55  # how far apart its strokes are, in widths
-REACH = 300.0  # a shape larger than this is filled patch by patch
+FILL_GAP = 1.2  # how far apart its strokes are, in widths
+REACH = 420.0  # a shape larger than this is filled patch by patch
 MARGIN = 27.0  # the bare paper left round the picture, in pixels
 
 
@@ -1425,14 +1429,15 @@ def line_strokes(
             pts = piece[:: max(1, len(piece) // 30)]
             if len(pts) < 2:
                 pts = piece[[0, -1]]
-            w = width * hand.u(0.92, 1.08) * (BOLD if colour == BLACK else 1.0)
+            bold = BOLD if colour == BLACK and width >= 10 else 1.0
+            w = width * hand.u(0.92, 1.08) * bold
             out.append(Line(pts, colour, w, firm_along(hand, len(pts), base), under))
-            if not under and width >= 7 and hand.u(0, 1) < 0.6 and len(pts) > 4:
-                out.append(retrace(hand, pts, colour, w))
+            if (under or (width >= 7 and hand.u(0, 1) < 0.6)) and len(pts) > 4:
+                out.append(retrace(hand, pts, colour, w, 0.9 if under else 0.68))
     return out
 
 
-def retrace(hand: Hand, pts: np.ndarray, colour: str, width: float) -> Line:
+def retrace(hand: Hand, pts: np.ndarray, colour: str, width: float, firm) -> Line:
     """Part of a line gone over again, a pixel or so off."""
     n = len(pts)
     a = int(hand.u(0, 0.4) * n)
@@ -1443,7 +1448,7 @@ def retrace(hand: Hand, pts: np.ndarray, colour: str, width: float) -> Line:
         tan[:, ::-1] * [1, -1] / np.maximum(np.linalg.norm(tan, axis=1), 1e-9)[:, None]
     )
     sub = sub + normal * hand.u(-1.6, 1.6)
-    return Line(sub, colour, width * 0.9, firm_along(hand, len(sub), 0.68))
+    return Line(sub, colour, width * 0.9, firm_along(hand, len(sub), firm))
 
 
 def plan(items: Sequence[Item], hand: Hand) -> tuple[Plan, np.ndarray]:
@@ -1480,7 +1485,8 @@ def plan_mark(hand, work: Plan, mark: Mark, covered, loose, reg: Region):
     if mark.colour is None:
         return
     target = work.ink if mark.colour == BLACK else work.lines
-    base = 0.9 if mark.under else 0.85
+    firm = mark.under or mark.colour == LEAF
+    base = 0.97 if firm or (mark.colour == BLACK and mark.width < 9) else 0.85
     within = reg if mark.clip is not None else None
     target += line_strokes(
         hand,
@@ -1515,26 +1521,53 @@ def axes(angle: float) -> tuple[np.ndarray, np.ndarray]:
     return np.array([math.cos(t), -math.sin(t)]), np.array([math.sin(t), math.cos(t)])
 
 
-def scan(m: np.ndarray, angle: float, gap: float, hand: Hand):
-    """Lines across the mask at ``angle``, about ``gap`` apart: for each, its
-    offset and the stretches of it inside the mask, as (start, end) along."""
-    along, across = axes(angle)
+class Frame:
+    """Which way the strokes of a pass run: straight, at ``angle`` degrees,
+    or radiating from ``centre`` (local pixels), when an offset across them
+    is an arc length at radius ``ref``."""
+
+    def __init__(self, angle: float, centre=None, ref: float = 1.0):
+        self.along, self.across = axes(angle)
+        self.turn = math.radians(angle)
+        self.centre = None if centre is None else np.asarray(centre, float)
+        self.ref = ref
+
+    def coords(self, pts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """How far along and how far across the strokes each point lies."""
+        if self.centre is None:
+            return pts @ self.along, pts @ self.across
+        d = pts - self.centre
+        turn = (np.arctan2(d[:, 1], d[:, 0]) - self.turn) % (2 * np.pi)
+        return np.hypot(d[:, 0], d[:, 1]), turn * self.ref
+
+    def point(self, off: float, s) -> np.ndarray:
+        """The point (or points) ``s`` along the stroke at ``off`` across."""
+        if self.centre is None:
+            return off * self.across + np.multiply.outer(s, self.along)
+        t = off / self.ref + self.turn
+        ray = np.array([math.cos(t), math.sin(t)])
+        return self.centre + np.multiply.outer(s, ray)
+
+
+def scan(m: np.ndarray, frame: Frame, gap: float, hand: Hand):
+    """Lines across the mask, about ``gap`` apart, running as ``frame`` says:
+    for each, its offset and the stretches of it inside the mask, as (start,
+    end) along it."""
     ys, xs = np.nonzero(m)
     if len(xs) == 0:
         return []
-    pts = np.stack([xs, ys], 1) + 0.5
-    s, o = pts @ along, pts @ across
+    s, o = frame.coords(np.stack([xs, ys], 1) + 0.5)
     s_line = np.arange(s.min() - 1.5, s.max() + 1.5, 1.0)
     out = []
     off = o.min() + gap * hand.u(0.2, 0.6)
     while off < o.max():
-        p = off * across + s_line[:, None] * along
+        p = frame.point(off, s_line)
         xi, yi = np.floor(p[:, 0]).astype(int), np.floor(p[:, 1]).astype(int)
         ok = (xi >= 0) & (yi >= 0) & (xi < m.shape[1]) & (yi < m.shape[0])
         hit = np.zeros(len(p), bool)
         hit[ok] = m[yi[ok], xi[ok]]
         out.append((off, [(s_line[a], s_line[b - 1]) for a, b in runs(hit)]))
-        off += gap * hand.u(0.75, 1.3)
+        off += gap * hand.u(0.88, 1.12)
     return out
 
 
@@ -1583,28 +1616,37 @@ class Touch:
     gap: float = FILL_GAP
     loose: float = 1.0
     skip: float = 0.0  # the share of strokes the hand leaves out
+    centre: tuple[float, float] | None = None  # strokes radiate from here
+    patchy: bool = False  # the strokes come in clusters, gaps between
+    even: bool = False  # every leg as firm as the next
 
 
-def zigzag(run: Run, touch: Touch, origin, hand: Hand, rim):
+def zigzag(run: Run, touch: Touch, frame: Frame, origin, hand: Hand, rim):
     """The path of one back-and-forth stroke through the legs of ``run``, and
-    how hard the hand bears at each of its points: each leg a little more or
-    less than the last."""
-    along, across = axes(touch.angle)
+    how hard the hand bears at each of its points: each leg clearly more or
+    less than the last, and drifting along its length."""
     pts, bear = [], []
     for j, (off, s0, s1) in enumerate(run.legs):
-        leg_firm = hand.u(0.84, 1.1)
         a = s0 - end_play(hand, touch)
         b = s1 + end_play(hand, touch)
         if j % 2:
             a, b = b, a
         n = max(int(abs(b - a) // 50), 0)
         ease = 1.0 - (1.0 - EASE) * min(abs(b - a) / (4.0 * touch.width), 1.0)
+        firm, drift = (1.0, 0.0) if touch.even else leg_weight(hand)
         wob = hand.rng.normal(0, 0.7 * touch.loose, n + 2)
         for t, w in zip(np.linspace(0, 1, n + 2), wob, strict=True):
-            pts.append(origin + (off + w) * across + (a + (b - a) * t) * along)
+            pts.append(origin + frame.point(off + w, a + (b - a) * t))
             # (the hand bears on mid-leg, and eases where it turns)
-            bear.append(leg_firm * (ease if t in (0.0, 1.0) else 1.0))
+            weight = firm * (1.0 + drift * (2.0 * t - 1.0))
+            bear.append(weight * (ease if t in (0.0, 1.0) else 1.0))
     return stray(np.array(pts), hand, rim), np.array(bear)
+
+
+def leg_weight(hand: Hand) -> tuple[float, float]:
+    """How hard one leg is pressed against the pass's pressure, and how much
+    that drifts from its start to its end."""
+    return hand.u(LEG_LIGHT, LEG_HEAVY), hand.u(-0.22, 0.22)
 
 
 def end_play(hand: Hand, touch: Touch) -> float:
@@ -1657,18 +1699,29 @@ def scribble(sheet, hand: Hand, m, hard, y0, x0, colour, touch: Touch, rim, agai
     back (``again`` times) into what a narrow neck of it left bare."""
     width = fit_width(m, touch.width)
     reach = int(round(width / 2 - 1.5))
-    centre = m & ~grow(hard & ~m, reach, True) & ~grow(~m & ~hard, reach - SOFT, False)
+    # (black keeps clear of everything it does not own, as of a cat's eyes,
+    # and so does a crown round its apples)
+    soft = reach if colour in (BLACK, LEAF) else reach - SOFT
+    centre = m & ~grow(hard & ~m, reach, True) & ~grow(~m & ~hard, soft, False)
     if not centre.any():
         dab(sheet, hand, m, y0, x0, colour, touch)
         return
     medium = crayons.wax(CRAYON[colour])
     origin = np.array([x0, y0], float)
-    touch = Touch(touch.angle, width, touch.firm, touch.gap, touch.loose)
+    # (a narrow shape is filled closer: its few strokes must cover it)
+    gap = touch.gap if width > 0.75 * FILL_WIDTH else min(touch.gap, 0.65)
+    plain = Touch(touch.angle, width, touch.firm, gap, touch.loose, touch.skip)
+    plain.centre, plain.even, plain.patchy = touch.centre, touch.even, touch.patchy
+    touch = plain
+    frame = frame_for(touch, centre)
     reached = np.zeros_like(m)
-    for run in link(scan(centre, touch.angle, touch.gap * width, hand), hand):
+    lines = scan(centre, frame, touch.gap * width, hand)
+    if touch.patchy:
+        lines = clusters(lines, hand)
+    for run in link(lines, hand):
         if hand.u(0, 1) < touch.skip:
             continue
-        path, bear = zigzag(run, touch, origin, hand, rim)
+        path, bear = zigzag(run, touch, frame, origin, hand, rim)
         if len(path) < 2:
             continue
         cap = 0.98 if colour == BLACK else 0.82
@@ -1680,7 +1733,42 @@ def scribble(sheet, hand: Hand, m, hard, y0, x0, colour, touch: Touch, rim, agai
     left = m & ~reached
     if again > 0 and (left & ~grow(~left, 2, True)).any():
         narrow = Touch(touch.angle + hand.u(-30, 30), width, touch.firm, touch.gap)
+        narrow.even = touch.even
         scribble(sheet, hand, left, hard, y0, x0, colour, narrow, rim, again - 1)
+
+
+def clusters(lines, hand: Hand):
+    """Keep the lines of a pass in clusters of a few, with gaps of a few
+    between them, and only part of each line: the patches a hand goes over
+    again."""
+    if not lines:
+        return lines
+    n = len(lines)
+    across = noise.value_noise_1d(n, hand.u(3.0, 5.0), hand.rng)
+    length = max((b for _, st in lines for _, b in st), default=0.0)
+    start = min((a for _, st in lines for a, _ in st), default=0.0)
+    out = []
+    for k, (off, stretches) in enumerate(lines):
+        if across[k] < 0.55:
+            continue
+        lo = start + (length - start) * hand.u(-0.3, 0.4)
+        hi = lo + (length - start) * hand.u(0.5, 0.9)
+        cut = [
+            (max(a, lo), min(b, hi))
+            for a, b in stretches
+            if min(b, hi) - max(a, lo) > 8
+        ]
+        out.append((off, cut))
+    return out
+
+
+def frame_for(touch: Touch, m: np.ndarray) -> Frame:
+    """Straight strokes, or strokes radiating from the touch's centre."""
+    if touch.centre is None:
+        return Frame(touch.angle)
+    ys, xs = np.nonzero(m)
+    far = np.hypot(xs - touch.centre[0], ys - touch.centre[1]).max()
+    return Frame(touch.angle, touch.centre, 0.6 * max(far, 1.0))
 
 
 def mark_reached(reached: np.ndarray, path: np.ndarray, width: float) -> None:
@@ -1707,7 +1795,7 @@ def dab(sheet: Sheet, hand: Hand, m, y0, x0, colour, touch: Touch):
     reach = max((size - width) / 2, size * 0.15) * along
     path = [(cx, cy) - reach, (cx, cy) + reach]
     medium = crayons.wax(CRAYON[colour])
-    sheet.stroke(path, medium, 0.66, width)
+    sheet.stroke(path, medium, max(min(touch.firm, 0.86), 0.66), width)
 
 
 # ----------------------------------------------------------------------
@@ -1764,30 +1852,42 @@ def fill(sheet: Sheet, hand: Hand, part: Part, m: np.ndarray, hard, y0, x0, rim)
     parts = [(m, x0 + w / 2)] if max(h, w) <= REACH else patches(m, hand, 260.0)
     for patch, cx in parts:
         angle = part_angle(part, cx) + hand.u(-part.drift, part.drift)
-        firm = FIRM.get(part.colour or "", 0.76) * hand.u(0.9, 1.06)
+        firm = FIRM.get(part.colour or "", 0.86) * hand.u(0.92, 1.05) * part.weight
         if part.tint is not None and hand.u(0, 1) < 0.4:
             under = Touch(angle - hand.u(20, 40), firm=0.6, gap=FILL_GAP * 1.2)
             scribble(sheet, hand, patch, hard, y0, x0, part.tint, under, rim, 0)
             firm *= 0.85
-        for touch in passes(hand, part, angle, firm):
+        centre = radial_centre(part, patch)
+        for touch in passes(hand, part, angle, firm, centre):
             scribble(sheet, hand, patch, hard, y0, x0, part.colour, touch, rim)
 
 
-def passes(hand: Hand, part: Part, angle: float, firm: float) -> list[Touch]:
-    """How a patch is filled: one pass, and where the shape should be solid
-    a second across it, lighter and less neat; black is pressed solid."""
-    turn = hand.u(40, 62) * hand.rng.choice([-1, 1])
+def passes(hand: Hand, part: Part, angle: float, firm: float, centre) -> list[Touch]:
+    """How a patch is filled: one pass with its legs about a width apart,
+    and where the shape should be solid a second, patchy one across it;
+    black is pressed solid, in two even passes."""
+    turn = hand.u(45, 70) * hand.rng.choice([-1, 1])
     if part.colour == BLACK:
-        return [
-            Touch(angle, firm=firm, gap=0.5),
-            Touch(angle + turn, firm=0.9, gap=0.55),
-        ]
-    out = [Touch(angle, firm=firm)]
+        first = Touch(angle, firm=0.95, gap=0.5)
+        cross = Touch(angle + turn, firm=0.95, gap=0.5)
+        first.even = cross.even = True
+        return [first, cross]
+    first = Touch(angle, firm=firm)
+    first.centre = centre
+    out = [first]
     if hand.u(0, 1) < part.passes - 1:
-        cross = Touch(angle + turn, firm=min(firm * 0.8, 0.58), gap=FILL_GAP * 1.3)
-        cross.loose, cross.skip = 1.8, 0.18
+        cross = Touch(angle + turn, firm=firm * 0.95, gap=0.9)
+        cross.loose, cross.patchy = 1.6, True
         out.append(cross)
     return out
+
+
+def radial_centre(part: Part, m: np.ndarray):
+    """Where a shape filled radiating (the sun) radiates from: its middle."""
+    if not part.radial:
+        return None
+    ys, xs = np.nonzero(m)
+    return (float(xs.mean()) + 0.5, float(ys.mean()) + 0.5)
 
 
 def part_angle(part: Part, x: float) -> float:
@@ -1799,9 +1899,12 @@ def part_angle(part: Part, x: float) -> float:
 #: Where a stroke turns, at a shape's edge, it bears this much as hard as
 #: mid-leg: under the pressure at which wax smears what it passes over.
 EASE = 0.8
+#: How hard a leg of a pass is pressed, against the pass's own pressure:
+#: from a skim to a firm one.
+LEG_LIGHT, LEG_HEAVY = 0.45, 1.15
 
 #: How firmly each colour is pressed when filling.
-FIRM = {SUN: 0.8, LIME: 0.66, GREEN: 0.7, SKY: 0.74, CREAM: 0.6, PINK: 0.7}
+FIRM = {SUN: 0.86, LIME: 0.74, GREEN: 0.78, SKY: 0.82, CREAM: 0.66, PINK: 0.78}
 FIRM[BLACK] = 0.95
 
 

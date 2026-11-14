@@ -30,6 +30,8 @@ import numpy as np
 from murex import CatmullRom, filters, noise, write_png
 from numba import njit
 
+from fusain import Medium, Sheet, Stick, papers, pencils, tools
+
 HERE = Path(__file__).parent
 WIDTH, HEIGHT = 1500, 1000
 #: The camera: focal length in pixels, where the eye's axis meets the sheet
@@ -260,7 +262,7 @@ RIDGES = (
         ),
         0.09,
         9e9,
-        0.18,
+        0.14,
         RIDGE1,
         0.22,
     ),
@@ -338,8 +340,9 @@ def hills_height(X, Z, line, bumps):
     return shore + hill - 2.0
 
 
-def hills(rng) -> tuple[Mesh, Mesh]:
-    """The forested hills beyond the lake and the trees on them."""
+def hills(rng) -> tuple[Mesh, Mesh, np.ndarray]:
+    """The forested hills beyond the lake and the trees on them, as
+    triangles and as (X, foot height, Z, height, lean) per tree."""
     line = 220.0 * (noise.value_noise_1d(400, 22, rng) - 0.5)
     rows, cols = 150, 520
     z_rows = np.geomspace(SHORE_Z - 300.0, 3300.0, rows)
@@ -349,10 +352,11 @@ def hills(rng) -> tuple[Mesh, Mesh]:
     B = sample_grid(bumps, extent, X, Z) ** 1.3
     Y = hills_height(X, Z, line, B)
     ground = height_mesh(X, Y, Z, HILLS, 0.13)
-    return ground, forest(rng, line, bumps, extent)
+    trees, spec = forest(rng, line, bumps, extent)
+    return ground, trees, spec
 
 
-def forest(rng, line, bumps, extent) -> Mesh:
+def forest(rng, line, bumps, extent) -> tuple[Mesh, np.ndarray]:
     """Conifers on the hills and along the far shore: each a spire of three
     or four tiers, a few metres apart, thinning to clearings."""
     pts = []
@@ -367,18 +371,21 @@ def forest(rng, line, bumps, extent) -> Mesh:
     clear = sample_grid(world_map(rng, (90, 240), 14.0, 3), extent, P[:, 0], P[:, 1])
     B = sample_grid(bumps, extent, P[:, 0], P[:, 1]) ** 1.3
     Yb = hills_height(P[:, 0], P[:, 1], line, B)
-    keep = (Yb > 0.5) & (clear > 0.4) & (rng.random(len(P)) > 0.15)
-    P, Yb = P[keep], Yb[keep]
+    clumps = sample_grid(world_map(rng, (90, 240), 6.0, 2), extent, P[:, 0], P[:, 1])
+    keep = (Yb > 0.5) & (clear > 0.44) & (rng.random(len(P)) > 0.2)
+    P, Yb, clumps = P[keep], Yb[keep], clumps[keep]
     heights = np.clip(rng.lognormal(np.log(18.0), 0.3, len(P)), 7.0, 36.0)
-    return spires(P, Yb, heights, rng)
+    heights *= 0.55 + 0.9 * clumps  # (taller stands and lower ones)
+    lean = rng.normal(0.0, 0.03, len(P))
+    spec = np.stack([P[:, 0], Yb, P[:, 1], heights, lean], axis=1)
+    return spires(P, Yb, heights, lean, rng), spec
 
 
-def spires(P, Yb, heights, rng) -> Mesh:
+def spires(P, Yb, heights, lean, rng) -> Mesh:
     """Conifer silhouettes, three tiers each, as triangles facing the eye."""
     n = len(P)
     tiers = 3
     verts, faces = [], []
-    lean = rng.normal(0.0, 0.03, n)
     for k in range(tiers):
         lo = 0.12 + 0.27 * k + rng.uniform(-0.04, 0.04, n)
         hi = np.minimum(lo + 0.5 + rng.uniform(0, 0.12, n), 1.0)
@@ -574,9 +581,10 @@ def icosphere(levels: int) -> tuple[np.ndarray, np.ndarray]:
 
 
 def rock(x, z, size, flat, yaw, rng) -> Mesh:
-    """A boulder: a sphere pushed out in a few lobes and cut by a few
-    planes, so that it has broad facets, flattened, half sunk."""
-    v, f = icosphere(2)
+    """A weathered boulder: a sphere pushed out in a few lobes and cut by a
+    few planes, so that it is rounded with a few flats, flattened, half
+    sunk."""
+    v, f = icosphere(3)
     r = np.ones(len(v))
     for _ in range(5):
         u = rng.normal(size=3)
@@ -594,13 +602,9 @@ def rock(x, z, size, flat, yaw, rng) -> Mesh:
     v = v * np.array([1.0, flat, 0.8 + 0.3 * rng.random()]) * size
     v = v @ np.array([[c, 0, -s], [0, 1, 0], [s, 0, c]])
     v += np.array([x, size * flat * 0.35, z])
-    v, f = v[f].reshape(-1, 3), np.arange(3 * len(f)).reshape(-1, 3)
     mesh = make_mesh(v, f, ROCK, 0.2)
-    a, b, cc = (v[f[:, k]] for k in range(3))
-    fn = np.cross(b - a, cc - a)
-    fn /= np.linalg.norm(fn, axis=1, keepdims=True)
-    mesh.normals = np.repeat(fn, 3, axis=0)  # flat facets
-    mesh.grain = np.cross(fn, np.array([0.0, 1.0, 0.0]))  # along the facet
+    fn = mesh.normals[f].mean(axis=1)
+    mesh.grain = np.cross(fn, np.array([0.0, 1.0, 0.0]))  # round the form
     return mesh
 
 
@@ -616,17 +620,18 @@ class Pine:
     lean: float
     seed: int
     spread: float
+    dead: bool = False
 
 
 #: The pines: where each stands, how tall, how it leans, and how far its
 #: boughs reach for its height (a young tree is bushier).
 PINES = (
-    Pine(-33.5, 76.0, 24.0, -0.015, 5, 0.95),
-    Pine(-23.7, 66.0, 23.5, -0.01, 1, 1.15),
-    Pine(-24.1, 72.0, 19.0, 0.012, 3, 0.85),
-    Pine(-17.4, 62.0, 17.5, 0.022, 2, 1.0),
-    Pine(-14.3, 71.0, 11.5, 0.03, 4, 1.2),
-    Pine(-14.1, 58.0, 5.5, -0.02, 6, 1.3),
+    Pine(-33.5, 76.0, 22.0, -0.015, 5, 0.95),
+    Pine(-23.7, 66.0, 27.0, -0.01, 1, 1.1),
+    Pine(-24.1, 72.0, 18.0, 0.02, 3, 0.85),
+    Pine(-17.4, 62.0, 16.5, 0.03, 2, 1.0),
+    Pine(-15.6, 66.0, 10.5, -0.01, 4, 1.25),
+    Pine(-14.0, 76.0, 13.0, 0.045, 7, 0.55, True),
 )
 
 
@@ -657,9 +662,10 @@ def merge_stamps(parts: list[Stamps]) -> Stamps:
     )
 
 
-def bough(root, length, azimuth, droop, rng) -> tuple[np.ndarray, list[Stamps]]:
+def bough(root, length, azimuth, droop, rng, bare=False) -> tuple[np.ndarray, list[Stamps]]:
     """One bough: out from the trunk, sagging, its tip turned up a little;
-    foliage along it, and twigs hanging from it in a fringe."""
+    foliage along it, and twigs hanging from it in a fringe. A bare one
+    (broken, or on a dead tree) is wood only."""
     s = np.linspace(0.0, 1.0, 14)
     out = np.array([math.cos(azimuth), 0.0, math.sin(azimuth)])
     sag = (
@@ -673,6 +679,9 @@ def bough(root, length, azimuth, droop, rng) -> tuple[np.ndarray, list[Stamps]]:
     )
     thick *= 1.0 - 0.45 * s
     thick = np.maximum(thick, 0.06) * (0.6 + 0.4 * min(length / 3.0, 1.0))
+    if bare:
+        wood = np.linspace(0.05, 0.015, len(s)) * min(length / 1.5, 1.4)
+        return P, [curve(P, wood, TRUNK, 0.12)]
     parts = [curve(P, thick, BOUGH, 0.05)]
     for sj in np.arange(0.18, 0.98, 0.11 + 0.05 * rng.random()):
         if rng.random() < 0.25:
@@ -695,38 +704,60 @@ def pine(tree: Pine) -> tuple[Stamps, list[np.ndarray]]:
     stubs below the crown. Returns its stamps and the centre lines of its
     trunk and boughs."""
     rng = np.random.default_rng(SEED + 31 * tree.seed)
-    y0 = ground_at(tree.x, tree.z) - 0.3
+    axis, h = trunk_axis(tree, rng)
     H = tree.height
-    h = np.linspace(0.0, H, 60)
-    sway = 0.25 * np.sin(h / H * 2.6 + tree.seed)
-    axis = np.stack(
-        [tree.x + tree.lean * h + sway * 0.4, y0 + h, tree.z + sway * 0.3], 1
-    )
-    parts = [
-        curve(axis, 0.03 + 0.24 * (1 - h / H) ** 1.2 * (H / 22), TRUNK, 0.07, 0.05)
-    ]
+    radius = 0.03 + 0.24 * (1 - h / H) ** 1.2 * (H / 22)
+    wood = 0.13 if tree.dead else 0.07
+    parts = [curve(axis, radius, TRUNK, wood, 0.05)]
     lines = [axis]
     crown = rng.uniform(0.14, 0.26) * H
     hk = crown
     while hk < H - 0.4:
         up = (hk - crown) / (H - crown)
-        reach = (
-            0.19 * H * tree.spread * (1.0 - up) ** 0.95 * (0.3 + 0.7 * (1 - up) ** 0.3)
-        )
+        reach = 0.19 * H * tree.spread * (1.0 - up) ** 0.95 * (0.3 + 0.7 * (1 - up) ** 0.3)
+        root = np.array([np.interp(hk, h, axis[:, k]) for k in range(3)])
         for azimuth in rng.uniform(0, 2 * np.pi, rng.integers(3, 7)):
-            if rng.random() < 0.18:
-                continue
-            length = max(reach * rng.uniform(0.55, 1.15), 0.35)
-            droop = (0.18 + 0.32 * (1 - up)) * rng.uniform(0.6, 1.3)
-            root = np.array([np.interp(hk, h, axis[:, k]) for k in range(3)])
-            line, bits = bough(root, length, azimuth, droop, rng)
+            line, bits = whorl_bough(tree, root, reach, up, azimuth, rng)
             parts += bits
-            lines.append(line)
-        hk += rng.uniform(0.38, 0.75) * (1.0 - 0.3 * up)
+            if line is not None:
+                lines.append(line)
+        # (whorls come unevenly: now close, now a gap of a poor year)
+        step = rng.uniform(0.3, 0.85) * (2.0 if rng.random() < 0.12 else 1.0)
+        hk += step * (1.0 - 0.3 * up)
     parts.append(dead_stubs(axis, h, crown, rng))
-    tip = axis[-1] + np.array([0.0, 0.9, 0.0])
-    parts.append(curve(np.array([axis[-1], tip]), np.array([0.09, 0.03]), BOUGH, 0.05))
+    if not tree.dead:
+        tip = axis[-1] + np.array([0.0, 0.9, 0.0])
+        parts.append(curve(np.array([axis[-1], tip]), np.array([0.09, 0.03]), BOUGH, 0.05))
     return merge_stamps(parts), lines
+
+
+def trunk_axis(tree: Pine, rng) -> tuple[np.ndarray, np.ndarray]:
+    """The trunk's centre line: leaning, and swaying as it grew, its crown
+    bent over a little."""
+    y0 = ground_at(tree.x, tree.z) - 0.3
+    H = tree.height
+    h = np.linspace(0.0, H, 60)
+    sway = rng.uniform(0.15, 0.5) * np.sin(h / H * rng.uniform(2.0, 3.5) + tree.seed)
+    bend = rng.normal(0.0, 0.6) * (h / H) ** 3
+    x = tree.x + tree.lean * h + 0.4 * sway + bend
+    return np.stack([x, y0 + h, tree.z + 0.3 * sway], 1), h
+
+
+def whorl_bough(tree: Pine, root, reach, up, azimuth, rng):
+    """One bough of a whorl, or none: now and then one is missing, one
+    reaches far, one is broken off short. A dead tree has only broken
+    ones."""
+    luck = rng.random()
+    if luck < 0.16:
+        return None, []
+    length = max(reach * rng.uniform(0.55, 1.15), 0.35)
+    droop = (0.18 + 0.32 * (1 - up)) * rng.uniform(0.6, 1.3)
+    broken = tree.dead or luck > 0.93
+    if broken:
+        length *= rng.uniform(0.15, 0.45)
+    elif luck > 0.84:
+        length *= 1.45
+    return bough(root, length, azimuth, droop * (0.4 if broken else 1.0), rng, broken)
 
 
 def dead_stubs(axis, h, crown, rng) -> Stamps:
@@ -750,7 +781,7 @@ def pines() -> tuple[Stamps, list[np.ndarray]]:
     return merge_stamps(stamps), lines
 
 
-def reeds(rng) -> Stamps:
+def reeds(rng) -> tuple[Stamps, list[np.ndarray]]:
     """Clumps of reeds in the shallows: blades from a root, leaning and
     bending, some broken over."""
     clumps = (
@@ -774,7 +805,7 @@ def reeds(rng) -> Stamps:
                 1,
             )
             parts.append(curve(P, np.linspace(0.016, 0.004, 8), REED, 0.2, 0.01))
-    return merge_stamps(parts)
+    return merge_stamps(parts), [p.points for p in parts]
 
 
 # ----------------------------------------------------------------------
@@ -963,7 +994,7 @@ def fittings() -> Mesh:
     return merge_meshes(parts)
 
 
-def rope_and_stake() -> Stamps:
+def rope_and_stake() -> tuple[Stamps, list[np.ndarray]]:
     """The painter: from the stem head, down over the shingle, to an iron
     stake driven in near the water."""
     head = to_world(np.array([[LENGTH + 0.02, 0.0, sheer(1.0) + 0.04]]))[0]
@@ -982,7 +1013,7 @@ def rope_and_stake() -> Stamps:
     rope = curve(path, np.full(len(path), 0.016), ROPE, 0.55, 0.008)
     post = np.array([[stake[0], -0.1, stake[2]], top + np.array([0, 0.06, 0])])
     stake_s = curve(post, np.array([0.03, 0.025]), STAKE, 0.12, 0.01)
-    return merge_stamps([rope, stake_s])
+    return merge_stamps([rope, stake_s]), [path, post]
 
 
 def boat_lines() -> list[np.ndarray]:
@@ -1009,8 +1040,9 @@ def boat_lines() -> list[np.ndarray]:
     return lines
 
 
-def boat() -> tuple[Mesh, Stamps]:
-    return merge_meshes([hull(), fittings()]), rope_and_stake()
+def boat() -> tuple[Mesh, Stamps, list[np.ndarray]]:
+    rope, lines = rope_and_stake()
+    return merge_meshes([hull(), fittings()]), rope, lines
 
 
 # ----------------------------------------------------------------------
@@ -1256,18 +1288,31 @@ class World:
     stamps: list[Stamps]
     pine_lines: list[np.ndarray]
     boat_lines: list[np.ndarray]
+    reed_lines: list[np.ndarray]
+    rope_lines: list[np.ndarray]
+    trees: np.ndarray
 
 
 def build_world() -> World:
     rng = np.random.default_rng(SEED)
     meshes = [ridge_mesh(r, rng) for r in RIDGES]
-    meshes += list(hills(rng))
+    hill_ground, forest_trees, tree_spec = hills(rng)
+    meshes += [hill_ground, forest_trees]
     meshes.append(ground(rng))
     meshes += [rock(*spec, rng) for spec in ROCKS]
-    hull_mesh, rope = boat()
+    hull_mesh, rope, rope_lines = boat()
     meshes.append(hull_mesh)
     trees, lines = pines()
-    return World(meshes, [trees, reeds(rng), rope], lines, boat_lines())
+    reed_stamps, reed_lines = reeds(rng)
+    return World(
+        meshes,
+        [trees, reed_stamps, rope],
+        lines,
+        boat_lines(),
+        reed_lines,
+        rope_lines,
+        tree_spec,
+    )
 
 
 def look(world: World, cam: float) -> View:
@@ -1328,19 +1373,21 @@ def cloud_map(rng) -> np.ndarray:
     return filters.smoothstep(0.6, 0.7, streaks) * filters.smoothstep(0.5, 0.66, patch)
 
 
-def sky_light(d: np.ndarray, cam: float, clouds: np.ndarray) -> np.ndarray:
+def sky_light(d: np.ndarray, cam: float, clouds: np.ndarray):
     """The sky: lightest low down and towards the glow, a few thin clouds
-    lit from below."""
+    lit from below. Returns its light, the clouds' cover, and the light of
+    the sky alone."""
     elev = np.arcsin(np.clip(d[..., 1], -1.0, 1.0))
     sky = 0.5 + 0.3 * np.exp(-np.maximum(elev, 0.0) / 0.11) + 0.12 * glow(d)
     up = np.maximum(d[..., 1], 1e-4)
     t = (CLOUD_HEIGHT - cam) / up
     X, Z = d[..., 0] * t, d[..., 2] * t
     cover = sample_grid(clouds, CLOUD_EXTENT, X, Z)
-    cover *= filters.smoothstep(0.08, 0.13, d[..., 1]) * (
-        1 - filters.smoothstep(0.26, 0.32, d[..., 1])
+    cover *= filters.smoothstep(0.05, 0.08, d[..., 1]) * (
+        1 - filters.smoothstep(0.14, 0.19, d[..., 1])
     )
-    return sky * (1.0 - 0.75 * cover) + (0.98 + 0.02 * glow(d)) * 0.75 * cover, cover
+    lit = sky * (1.0 - 0.75 * cover) + (0.98 + 0.02 * glow(d)) * 0.75 * cover
+    return lit, cover, sky
 
 
 #: The mist, in bands across the view: nearest and furthest distance, how
@@ -1395,8 +1442,10 @@ class Study:
     the darkest graphite's), what each pixel shows (``ident``), what the
     water mirrors there (``mirrored``: the id of the thing reflected, else
     the same as ``ident``), how far it is (metres), how much air and mist
-    veil it (0..1), how much the water is ruffled (0..1) and the direction
-    strokes should follow (radians on the sheet)."""
+    veil it (0..1), how much the water is ruffled (0..1), the direction
+    strokes should follow (radians on the sheet), how much cloud covers the
+    sky, and the grey of the sky alone, without its clouds (0 where
+    something stands in front of it)."""
 
     light: np.ndarray
     grey: np.ndarray
@@ -1406,6 +1455,8 @@ class Study:
     veil: np.ndarray
     ruffle: np.ndarray
     angle: np.ndarray
+    cloud: np.ndarray
+    sky: np.ndarray
 
     @property
     def tone(self) -> np.ndarray:
@@ -1424,17 +1475,17 @@ class Study:
         return np.clip(0.6 * self.veil + 0.6 * far, 0.0, 1.0)
 
 
-def mark_sky(view: View, cam: float, clouds) -> tuple[np.ndarray, np.ndarray]:
-    """Fill what the eye sees of the sky; returns its light and the share of
-    each pixel covered by cloud."""
+def mark_sky(view: View, cam: float, clouds):
+    """Fill what the eye sees of the sky; returns its light, the share of
+    each pixel covered by cloud, and the light of the sky alone."""
     d = directions()
     sky = view.ident < 0
-    L, cover = sky_light(d, cam, clouds)
+    L, cover, clear = sky_light(d, cam, clouds)
     view.ident[sky & (cover > 0.3)] = CLOUD
     view.ident[sky & (cover <= 0.3)] = SKY
     view.z[sky] = FAR
     view.angle[sky] = 0.0
-    return np.where(sky, L, surface_light(view)), cover
+    return np.where(sky, L, surface_light(view)), np.where(sky, cover, 0.0), clear
 
 
 def mirror_image(world: World, clouds, tops) -> tuple[np.ndarray, np.ndarray]:
@@ -1443,7 +1494,7 @@ def mirror_image(world: World, clouds, tops) -> tuple[np.ndarray, np.ndarray]:
     view = look(world, -EYE)
     rows = np.arange(HEIGHT)[:, None]
     view.ident[(view.ident < 0) & (rows >= CY)] = WATER  # (never used)
-    L, _ = mark_sky(view, -EYE, clouds)
+    L, _, _ = mark_sky(view, -EYE, clouds)
     T = veil(view, -EYE, True, tops)
     L = T * L + (1.0 - T) * mist_light(directions())
     # the faint unrest of the surface softens what it mirrors
@@ -1513,12 +1564,14 @@ def study(world: World) -> Study:
     view.ident[water] = WATER
     view.z[water] = FOCAL * EYE / (rows[water] - CY)
     view.angle[water] = np.pi / 2
-    L, _ = mark_sky(view, EYE, clouds)
+    L, cover, clear = mark_sky(view, EYE, clouds)
     mirror, mirror_id = mirror_image(world, clouds, tops)
     wL, seen_id, ruff = water_light(view.z, mirror, mirror_id, rng)
     L = np.where(water, wL, L)
     T = veil(view, EYE, False, tops)
-    L = T * L + (1.0 - T) * mist_light(directions())
+    M = mist_light(directions())
+    L = T * L + (1.0 - T) * M
+    sky_alone = np.where(view.z >= FAR, to_grey(T * clear + (1.0 - T) * M), 0.0)
     return Study(
         L,
         to_grey(L),
@@ -1528,6 +1581,8 @@ def study(world: World) -> Study:
         1.0 - T,
         np.where(water, ruff, 0.0),
         view.angle,
+        cover,
+        sky_alone,
     )
 
 
@@ -1648,6 +1703,434 @@ def write_study(st: Study, folder: Path) -> None:
     write_png(str(folder / "map_angle.png"), np.round(255 * hue * 0.9).astype(np.uint8))
 
 
+# ----------------------------------------------------------------------
+# the drawing: the hand, its marks and its tools
+
+#: A smooth white drawing paper: shallower and finer in the tooth than
+#: cartridge, so that rubbed tones go smooth, and deep enough to take a
+#: real black.
+SHEET_PAPER = papers.CARTRIDGE.with_(
+    color="#f6f4ee", depth=0.55, grain=2.4, bite=0.42, give=0.4, name="drawing paper"
+)
+#: The drawing is shown as it looks scanned or in soft light: heavy
+#: graphite keeps a little of its silver, and the darks stay deep.
+GLOSS = 0.3
+#: The greys the sheet renders flat (no lamp) for bare paper and for the
+#: darkest 8B: the range the study's tones are laid out over.
+WHITE, BLACK = 243.0, 68.0
+#: How the study's tones are laid over that range: above 1 keeps more paper
+#: in the lights.
+LIGHTS = 1.25
+
+
+class Hand:
+    """The draughtsman at work: the sheet, the study it is drawn from, the
+    world's lines, and an eye on what the sheet looks like so far."""
+
+    def __init__(self, st: Study, world: World):
+        self.sheet = Sheet(WIDTH, HEIGHT, paper=SHEET_PAPER, seed=SEED)
+        self.st, self.world = st, world
+        self.rng = np.random.default_rng(SEED + 2)
+        # (a gentle curve keeps the lights generous and the darks deep)
+        self.target = WHITE - st.tone**LIGHTS * (WHITE - BLACK)
+        self.seen = np.full((HEIGHT, WIDTH), WHITE)
+
+    def look(self) -> None:
+        """Step back and look at the sheet (flat, without the lamp)."""
+        self.seen = self.sheet.render(lighting=False).mean(axis=2) * 255.0
+
+    def need(self, mask: np.ndarray, blur: int = 2) -> np.ndarray:
+        """How much darker each pixel of ``mask`` still has to go, 0..1, as
+        last seen."""
+        gap = (self.seen - self.target) / (WHITE - BLACK)
+        if blur:
+            gap = filters.box_blur(gap, blur)
+        return np.clip(gap, 0.0, 1.0) * mask
+
+    def excess(self, mask: np.ndarray, blur: int = 3) -> np.ndarray:
+        """How much too dark each pixel of ``mask`` is, 0..1."""
+        gap = (self.target - self.seen) / (WHITE - BLACK)
+        if blur:
+            gap = filters.box_blur(gap, blur)
+        return np.clip(gap, 0.0, 1.0) * mask
+
+    def mask(self, *ids: int) -> np.ndarray:
+        return np.isin(self.st.ident, ids)
+
+
+def at(field: np.ndarray, x, y):
+    """``field`` at sheet points, linearly between pixels."""
+    y = np.clip(np.asarray(y, float), 0.0, HEIGHT - 1.001)
+    x = np.clip(np.asarray(x, float), 0.0, WIDTH - 1.001)
+    return filters.bilinear(field, y, x)
+
+
+def lookup(field: np.ndarray):
+    """A pressure for shading or rubbing that follows ``field``."""
+    return lambda x, y: at(field, x, y)
+
+
+def box_of(mask: np.ndarray, pad: int = 6) -> tuple[int, int, int, int]:
+    ys, xs = np.nonzero(mask)
+    return (
+        max(int(xs.min()) - pad, 0),
+        max(int(ys.min()) - pad, 0),
+        min(int(xs.max()) + pad, WIDTH - 1),
+        min(int(ys.max()) + pad, HEIGHT - 1),
+    )
+
+
+def lay_tone(hand: Hand, mask, lead, pressure, angle, tilt=1.0, width=None) -> None:
+    """One layer of strokes side by side over ``mask``, pressed as
+    ``pressure`` (a field) asks: with the side of the lead by default."""
+    field = pressure * mask
+    if field.max() > 0.0:
+        hand.sheet.shade(box_of(mask), lead, lookup(field), width, angle, tilt=tilt)
+
+
+def rub_area(hand: Hand, mask, tool, pressure, angle, width=None) -> None:
+    """Rub over ``mask`` with a tool, passes to and fro, as hard as
+    ``pressure`` (a number or a field) asks."""
+    field = pressure * mask
+    if np.max(field) > 0.0:
+        hand.sheet.rub(box_of(mask), tool, lookup(field), width, angle)
+
+
+def fill_down(values: np.ndarray) -> np.ndarray:
+    """Each NaN takes the nearest value above it in its column (or below,
+    at the top)."""
+    rows = np.arange(HEIGHT)[:, None] * np.ones((1, WIDTH), int)
+    good = ~np.isnan(values)
+    idx = np.maximum.accumulate(np.where(good, rows, 0), axis=0)
+    out = np.take_along_axis(values, idx, axis=0)
+    first = np.argmax(good, axis=0)
+    top = values[first, np.arange(WIDTH)]
+    return np.where(np.isnan(out), top[None, :], out)
+
+
+@dataclass(frozen=True)
+class Marks:
+    """One kind of mark as a hand lays it: the lead (or a Stick), the width
+    of its tip, how long the strokes are (pixels), how hard they press
+    where nothing is needed and where all is, how many lie side by side in
+    a bundle and how far apart (in widths), how the pressure runs along
+    each ("taper": light at both ends, "flick": heavy where it lands,
+    "swell": heavy where it ends), how far a bundle turns from the
+    direction asked for (radians) and how much each stroke bends."""
+
+    lead: Medium | Stick
+    width: float | None
+    length: tuple[float, float]
+    pressure: tuple[float, float]
+    bundle: tuple[int, int] = (3, 6)
+    spacing: float = 1.0
+    profile: str = "taper"
+    turn: float = 0.12
+    bend: float = 0.04
+
+    def area(self) -> float:
+        """About how much paper one bundle covers, in pixels."""
+        w = self.width or 3.0
+        n = 0.5 * (self.bundle[0] + self.bundle[1])
+        return n * w * max(self.spacing, 0.6) * 0.5 * sum(self.length)
+
+
+def profile(kind: str, n: int) -> np.ndarray:
+    u = np.linspace(0.0, 1.0, n)
+    if kind == "flick":
+        return 1.0 - 0.85 * u**0.8
+    if kind == "swell":
+        return 0.25 + 0.75 * u**0.7
+    return 0.45 + 0.55 * np.sin(np.pi * u) ** 0.5
+
+
+def pick(rng, weight: np.ndarray, count: int) -> np.ndarray:
+    """``count`` points of the sheet, more where ``weight`` is more."""
+    w = weight.ravel()
+    total = float(w.sum())
+    if count <= 0 or total <= 0.0:
+        return np.zeros((0, 2))
+    idx = rng.choice(w.size, count, p=w / total)
+    y, x = np.divmod(idx, WIDTH)
+    return np.stack([x, y], axis=1) + rng.uniform(-0.5, 0.5, (count, 2))
+
+
+def trace(field, x, y, heading, length, bend, rng, step=2.5) -> np.ndarray:
+    """A stroke's path from (x, y): along ``heading``, or along the
+    directions of ``field`` if one is given, curving a little."""
+    n = max(int(length / step), 1)
+    dx, dy = math.cos(heading), math.sin(heading)
+    curl = rng.normal(0.0, bend)
+    c, s = math.cos(curl), math.sin(curl)
+    pts = [(x, y)]
+    for _ in range(n):
+        if field is not None:
+            a = field[min(max(int(y), 0), HEIGHT - 1), min(max(int(x), 0), WIDTH - 1)]
+            ex, ey = math.cos(a), math.sin(a)
+            if ex * dx + ey * dy < 0.0:
+                ex, ey = -ex, -ey
+            dx, dy = 0.65 * dx + 0.35 * ex, 0.65 * dy + 0.35 * ey
+        dx, dy = c * dx - s * dy, s * dx + c * dy
+        norm = math.hypot(dx, dy) + 1e-12
+        dx, dy = dx / norm, dy / norm
+        x, y = x + step * dx, y + step * dy
+        pts.append((x, y))
+    return np.array(pts)
+
+
+def within(pts: np.ndarray, keep: np.ndarray | None) -> np.ndarray:
+    """The part of a path from its first point inside ``keep`` to where it
+    first leaves it."""
+    if keep is None:
+        return pts
+    xi = np.clip(pts[:, 0].astype(int), 0, WIDTH - 1)
+    yi = np.clip(pts[:, 1].astype(int), 0, HEIGHT - 1)
+    ok = keep[yi, xi]
+    if not ok.any():
+        return pts[:0]
+    start = int(np.argmax(ok))
+    stop = start + int(np.argmin(ok[start:])) if not ok[start:].all() else len(pts)
+    return pts[start:stop]
+
+
+def draw_line(hand: Hand, pts: np.ndarray, lead, pressure, width=None) -> None:
+    """One stroke along ``pts`` (pressure a number or one per point)."""
+    if len(pts) < 2:
+        return
+    if isinstance(lead, Stick):
+        hand.sheet.stroke(pts, lead, pressure)
+    else:
+        hand.sheet.stroke(pts, lead, pressure, width)
+
+
+def lay_bundle(hand: Hand, marks: Marks, centre, heading, firm, field, keep) -> None:
+    rng = hand.rng
+    n = int(rng.integers(marks.bundle[0], marks.bundle[1] + 1))
+    w = marks.width or 3.0
+    along = np.array([math.cos(heading), math.sin(heading)])
+    across = np.array([-along[1], along[0]])
+    for j in range(n):
+        off = (j - 0.5 * (n - 1)) * marks.spacing * w * rng.uniform(0.7, 1.3)
+        length = rng.uniform(*marks.length)
+        shift = rng.uniform(-0.25, 0.25) * length - 0.5 * length
+        x, y = np.asarray(centre) + off * across + shift * along
+        pts = within(trace(field, x, y, heading, length, marks.bend, rng), keep)
+        if len(pts) < 2:
+            continue
+        p = firm * rng.uniform(0.85, 1.15) * profile(marks.profile, len(pts))
+        draw_line(hand, pts, marks.lead, np.clip(p, 0.0, 1.0), marks.width)
+
+
+def lay_marks(hand: Hand, marks: Marks, need, cover=1.0, angle=None, keep=None) -> None:
+    """Bundles of strokes where ``need`` asks, as many as cover that need
+    ``cover`` times over: along the study's directions, or at ``angle``
+    (radians on the sheet)."""
+    count = int(cover * float(need.sum()) / marks.area())
+    field = hand.st.angle if angle is None else None
+    lo, hi = marks.pressure
+    for cx, cy in pick(hand.rng, need, count):
+        here = need[int(cy), int(cx)]
+        heading = hand.st.angle[int(cy), int(cx)] if angle is None else angle
+        heading += hand.rng.normal(0.0, marks.turn)
+        lay_bundle(hand, marks, (cx, cy), heading, lo + (hi - lo) * here, field, keep)
+
+
+def drag(hand: Hand, starts, lengths, tool, pressure, heading=np.pi / 2, width=None):
+    """Pull a stump or a finger from each start, ``lengths`` pixels."""
+    rng = hand.rng
+    for (x, y), length in zip(starts, lengths, strict=True):
+        a = heading + rng.normal(0.0, 0.05)
+        end = (x + length * math.cos(a), y + length * math.sin(a))
+        mid = (0.5 * (x + end[0]) + rng.normal(0, 1.0), 0.5 * (y + end[1]))
+        hand.sheet.smudge([(x, y), mid, end], tool, pressure, width)
+
+
+# ----------------------------------------------------------------------
+# the drawing, far to near
+
+
+def draw_sky(hand: Hand) -> None:
+    """The sky: a 4B laid very lightly on its side, darker towards the top,
+    each layer rubbed in with a finger until its grain is gone; the glow
+    wiped lighter with the chamois; the clouds lifted with the kneaded
+    eraser."""
+    st = hand.st
+    clear = fill_down(np.where(st.sky > 0, st.sky, np.nan))
+    want = np.clip((PAPER - clear) / (PAPER - DARKEST), 0.0, 1.0) ** LIGHTS
+    rows = np.arange(HEIGHT)[:, None] * np.ones((1, WIDTH))
+    region = rows <= CY + 6
+    press = (0.065 + 0.9 * want) * filters.smoothstep(0.004, 0.035, want)
+    for k, (angle, rub) in enumerate(((15.0, 0.0), (75.0, 90.0), (-40.0, 45.0))):
+        lay_tone(hand, region, pencils.B4, press * (1.0 - 0.1 * k), angle)
+        rub_area(hand, region, tools.FINGER, 0.85, rub, width=34.0)
+    for rub in (-45.0, 0.0):
+        rub_area(hand, region, tools.FINGER, 0.85, rub, width=34.0)
+    hand.look()
+    sky = hand.mask(SKY, CLOUD)
+    lift = hand.excess(region & (st.sky > 0), blur=6)
+    rub_area(hand, region, tools.CHAMOIS, np.clip(lift * 6.0, 0.0, 0.8), 0.0, 44.0)
+    lift_clouds(hand, sky)
+
+
+def lift_clouds(hand: Hand, sky: np.ndarray) -> None:
+    """Soft passes of the kneaded eraser along the clouds."""
+    cover = hand.st.cloud * sky
+    rng = hand.rng
+    for cx, cy in pick(rng, cover, int(cover.sum() / 350.0)):
+        length = rng.uniform(50.0, 140.0)
+        a = rng.normal(0.0, 0.03)
+        dx, dy = 0.5 * length * math.cos(a), 0.5 * length * math.sin(a)
+        firm = 0.25 + 0.5 * cover[int(cy), int(cx)]
+        bow = rng.normal(0.0, 2.0)
+        path = [(cx - dx, cy - dy), (cx, cy + bow), (cx + dx, cy + dy)]
+        hand.sheet.erase(path, tools.KNEADED, firm, rng.uniform(12.0, 20.0))
+
+
+#: The ridges, far to near: the lead laid lightly on its side and rubbed to
+#: a haze for the tone, the tool that rubs it, and the hard lead its edge
+#: and its fall lines are drawn with (they do not smear).
+RIDGE_HANDS = (
+    (RIDGE3, pencils.HB, tools.FINGER, pencils.H4),
+    (RIDGE2, pencils.HB, tools.STUMP, pencils.H2),
+    (RIDGE1, pencils.B, tools.STUMP, pencils.H2),
+)
+
+
+def ridge_mask(hand: Hand, ident: int) -> np.ndarray:
+    return hand.mask(ident, SNOW) if ident == RIDGE3 else hand.mask(ident)
+
+
+def draw_ridges(hand: Hand) -> None:
+    """The far ridges: crossed light layers laid with the side of the lead
+    and each rubbed to a haze; then a hard lead for what must stay crisp:
+    each ridge's edge against what is behind it, and on the nearer two a
+    few strokes down their fall lines; the snow lifted back to the
+    paper."""
+    for angle in (70.0, 115.0, 20.0):
+        hand.look()
+        for ident, lead, tool, _ in RIDGE_HANDS:
+            mask = ridge_mask(hand, ident)
+            need = hand.need(mask)
+            press = np.clip(0.06 + 1.8 * need, 0.0, 0.5) * (need > 0.006)
+            lay_tone(hand, mask, lead, press, angle)
+            rub_area(hand, mask, tool, 0.85, angle - 90.0, 24.0)
+    hand.look()
+    for ident, _, _, point in RIDGE_HANDS:
+        mask = ridge_mask(hand, ident)
+        if ident != RIDGE3:
+            marks = Marks(point, 2.0, (10.0, 30.0), (0.12, 0.5), (2, 5), 1.3)
+            lay_marks(hand, marks, hand.need(mask), 0.8, keep=mask)
+        ridge_edge(hand, ident, point)
+    snow = hand.mask(SNOW)
+    rng = hand.rng
+    for cx, cy in pick(rng, snow.astype(float), int(snow.sum() / 60.0)):
+        dab = [(cx - 4, cy + rng.normal()), (cx + 4, cy + rng.normal())]
+        hand.sheet.erase(dab, tools.KNEADED, 0.6, 8.0)
+
+
+def ridge_edge(hand: Hand, ident: int, lead) -> None:
+    """The ridge's edge against what is behind it, in pieces, firmer where
+    the air is clear, lost where the mist is."""
+    line = ridge_lines(hand.st)[ident]
+    rng = hand.rng
+    k = 0
+    while k < len(line) - 4:
+        n = int(rng.integers(25, 110))
+        piece = line[k : k + n : 3]
+        k += n + int(rng.integers(0, 30))
+        if len(piece) < 3:
+            continue
+        clear = 1.0 - hand.st.veil[piece[:, 1].astype(int), piece[:, 0].astype(int)]
+        p = 0.55 * clear * rng.uniform(0.6, 1.1) * profile("taper", len(piece))
+        draw_line(hand, piece + [0.0, 0.8], lead, np.clip(p, 0, 1), 2.0)
+
+
+def draw_middle(hand: Hand) -> None:
+    """The forested hills and the far shore: an HB laid lightly on its side
+    and rubbed with the stump; then the trees, each only suggested by a
+    stroke or two from its tip down, heavier at its foot (HB far off, 2B on
+    the shore), which makes the serrated tree line; and the stump pulled
+    down from their feet into the mist."""
+    mask = hand.mask(HILLS, FOREST)
+    hand.look()
+    need = hand.need(mask)
+    for angle in (10.0, -15.0):
+        press = np.clip(0.06 + 1.2 * need, 0.0, 0.45) * (need > 0.01)
+        lay_tone(hand, mask, pencils.HB, press, angle)
+        rub_area(hand, mask, tools.STUMP, 0.85, angle + 90.0, 16.0)
+    draw_trees(hand)
+    feather_down(hand, mask)
+
+
+def draw_trees(hand: Hand) -> None:
+    """Each tree of the far forest that the eye sees, as one or two strokes
+    from its tip down to its foot."""
+    spec = hand.world.trees
+    tip = np.stack([spec[:, 0] + spec[:, 4] * spec[:, 3], spec[:, 1] + spec[:, 3], spec[:, 2]], 1)
+    foot = np.stack([spec[:, 0], spec[:, 1] + 0.1 * spec[:, 3], spec[:, 2]], 1)
+    T, Fp = project(tip, EYE), project(foot, EYE)
+    xi = np.clip(T[:, 0].astype(int), 0, WIDTH - 1)
+    yi = np.clip(T[:, 1].astype(int) + 1, 0, HEIGHT - 1)
+    seen = (T[:, 0] >= 0) & (T[:, 0] < WIDTH) & np.isin(hand.st.ident[yi, xi], (FOREST, HILLS))
+    seen &= T[:, 2] <= hand.st.depth[yi, xi] * 1.03
+    rng = hand.rng
+    for k in np.nonzero(seen)[0]:
+        clear = 1.0 - hand.st.veil[yi[k], xi[k]]
+        if clear < 0.12:
+            continue
+        lead = pencils.B2 if spec[k, 2] < 1500.0 else pencils.HB
+        wide = float(np.clip(FOCAL * 0.16 * spec[k, 3] / T[k, 2], 1.4, 3.2))
+        p = np.clip(0.95 * clear**0.8 * rng.uniform(0.7, 1.15), 0.0, 1.0)
+        pts = np.array([T[k, :2], 0.5 * (T[k, :2] + Fp[k, :2]), Fp[k, :2]])
+        draw_line(hand, pts, lead, p * profile("swell", 3), wide)
+        if wide > 2.2 and rng.random() < 0.6:
+            side = pts + [rng.choice([-1.0, 1.0]) * 0.6 * wide, 0.25 * (Fp[k, 1] - T[k, 1])]
+            draw_line(hand, side, lead, 0.8 * p * profile("swell", 3), wide)
+
+
+def feather_down(hand: Hand, mask: np.ndarray) -> None:
+    """Pull a stump from the foot of the forest down into the mist below
+    it, so that the trees sink into it."""
+    rows = np.arange(HEIGHT)[:, None]
+    low = np.where(mask, rows, -1).max(axis=0)
+    rng = hand.rng
+    starts, lengths = [], []
+    for x in range(0, WIDTH, 5):
+        if low[x] < 0 or hand.st.veil[min(low[x] + 4, HEIGHT - 1), x] < 0.3:
+            continue
+        starts.append((x + rng.uniform(-2, 2), low[x] - rng.uniform(10.0, 26.0)))
+        lengths.append(rng.uniform(20.0, 40.0))
+    drag(hand, starts, lengths, tools.STUMP, 0.6, width=7.0)
+
+
+def draw_mist(hand: Hand) -> None:
+    """The mist: lifted with the kneaded eraser in long soft passes across
+    the view, wherever what lies behind it came out too dark."""
+    hand.look()
+    rows = np.arange(HEIGHT)[:, None] * np.ones((1, WIDTH))
+    band = (hand.st.veil > 0.2) & (rows > CY - 260) & (rows < CY + 120)
+    band &= ~hand.mask(TRUNK, BOUGH, ROCK, GROUND, SHINGLE, REED)
+    lift = hand.excess(band, blur=5)
+    rng = hand.rng
+    for cx, cy in pick(rng, lift, int(lift.sum() / 120.0)):
+        length = rng.uniform(60.0, 200.0)
+        firm = np.clip(0.2 + 1.8 * lift[int(cy), int(cx)], 0.0, 0.9)
+        bow = rng.normal(0.0, 1.5)
+        path = [(cx - length / 2, cy), (cx, cy + bow), (cx + length / 2, cy - bow)]
+        hand.sheet.erase(path, tools.KNEADED, firm, rng.uniform(10.0, 22.0))
+
+
+def drawing(st: Study, world: World) -> Hand:
+    hand = Hand(st, world)
+    for step in STEPS:
+        step(hand)
+    return hand
+
+
+STEPS = (draw_sky, draw_ridges, draw_middle, draw_mist)
+
+
+
 def main(studies: Path | None = None) -> None:
     world = build_world()
     st = study(world)
@@ -1655,6 +2138,10 @@ def main(studies: Path | None = None) -> None:
         write_study(st, studies)
         write_contours(st, world, studies / "map_contours.png")
         print(f"wrote the study to {studies}")
+    hand = drawing(st, world)
+    out = HERE / "output" / "lake.png"
+    hand.sheet.save(str(out), gloss=GLOSS)
+    print(f"wrote {out}")
 
 
 if __name__ == "__main__":
