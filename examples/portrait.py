@@ -1148,7 +1148,7 @@ def one_lock(phi, layer, rng):
     if 1.2 < abs(phi) < 2.0 and rng.uniform() < 0.25:
         y_end, turn = CURTAIN_END - 0.9, 0.7  # ends that reach the shoulder
     near = abs(phi) - edge < 0.35  # by the face: finer, flatter
-    wave = rng.uniform(0.15, 0.4) * (0.4 if near else 1.0)
+    wave = rng.uniform(0.25, 0.55) * (0.5 if near else 1.0)
     return Lock(
         phi,
         y_end,
@@ -2380,6 +2380,7 @@ class Pass:
     length: tuple = (60, 200)
     count: tuple = (5, 14)
     spacing: tuple = (3.0, 13.0)
+    by_lock: bool = True  # in the hair, keep each stroke to its lock
     shortest: int = 22  # points of 2 px
 
 
@@ -2422,7 +2423,8 @@ class Hatcher:
         coarse = shrink(goal[: h // CELL * CELL, : w // CELL * CELL], CELL)
         laid = np.zeros_like(coarse)
         self.full = np.zeros(goal.shape, np.uint8)
-        sub = self.maps.lock if ps.part == P_HAIR else np.zeros_like(self.maps.lock)
+        hair = ps.part == P_HAIR and ps.by_lock
+        sub = self.maps.lock if hair else np.zeros_like(self.maps.lock)
         for _ in range(limit):
             deficit = coarse - laid
             pick = deficit * self.rng.random(deficit.shape) ** 0.35
@@ -2528,10 +2530,10 @@ BLUSH = [
 ]
 #: Where the shadow is cool, a violet: (x, y, radius, strength), mirrored.
 COOL = [
-    (2.7, 2.7, 0.8, 0.045),
+    (2.7, 2.9, 0.7, 0.03),
     (1.15, 0.6, 0.5, 0.05),
     (0.0, -5.6, 0.8, 0.07),
-    (5.6, 2.5, 1.2, 0.05),
+    (5.6, 2.5, 1.2, 0.02),
 ]
 #: Round the mouth and chin the hatching stays open and warm.
 MOUTH_ZONE = (0.0, -5.2, 2.4)
@@ -2544,6 +2546,17 @@ def spots(local, table):
             d2 = (local[..., 0] - sx) ** 2 + (local[..., 1] - y) ** 2
             out += k * np.exp(-0.5 * d2 / r**2)
     return out
+
+
+def eye_zones(local):
+    """Where the skin round the eyes is kept clear: under the eyes (to
+    paper, nearly), the sockets (a light veil only), and the far temple and
+    forehead by the hair (thinned)."""
+    x, y = np.abs(local[..., 0]), local[..., 1]
+    rest = np.exp(-0.5 * (((x - 3.0) / 1.3) ** 2 + ((y - 1.55) / 0.55) ** 2))
+    veil = np.exp(-0.5 * (((x - 2.9) / 1.3) ** 2 + ((y - 2.9) / 0.8) ** 2))
+    temple = smoothstep(2.0, 3.5, local[..., 0]) * smoothstep(2.2, 3.4, y)
+    return rest, veil, temple
 
 
 def skin_value(m: Maps):
@@ -2579,7 +2592,10 @@ def skin_targets(m: Maps):
     calm = np.where(face, 1 - 0.7 * near_mouth, 1)
     cool = np.where(face, spots(m.local, COOL), 0) * light
     blue = 0.05 * smoothstep(0.38, 0.5, V) + 0.07 * smoothstep(0.56, 0.7, V)
-    blue = (blue + 0.07 * smoothstep(0.76, 0.9, V)) * calm + cool + 0.06 * m.brow
+    blue = (blue + 0.07 * smoothstep(0.76, 0.9, V)) * calm + cool
+    rest, veil, temple = eye_zones(m.local)
+    blue = np.minimum(blue * (1 - 0.85 * rest) * (1 - 0.5 * temple), 0.2 - 0.15 * veil)
+    red = red * (1 - 0.45 * rest)
     black = np.where(face, 0.08 * smoothstep(0.85, 0.97, V), 0)
     return {
         k: np.where(skin, v, 0).astype(np.float32)
@@ -2611,9 +2627,10 @@ def feature_passes():
     lips = {"length": (25, 90), "count": (4, 10), "spacing": (2.2, 6.0), "shortest": 6}
     white = {"length": (14, 40), "count": (3, 6), "spacing": (3.0, 7.0), "shortest": 4}
     return [
-        ("red", Pass(RED, P_LIPS, 0, 0.0, 0.16, 0.45, **lips)),
-        ("red", Pass(RED, P_LIPS, 25, 0.16, 0.16, 0.45, **lips)),
-        ("blue", Pass(BLUE, P_LIPS, 35, 0.0, 0.06, 0.25, **lips)),
+        ("red", Pass(RED, P_LIPS, 80, 0.0, 0.12, 0.45, **lips)),
+        ("red", Pass(RED, P_LIPS, 105, 0.12, 0.1, 0.45, **lips)),
+        ("red", Pass(RED, P_LIPS, 20, 0.22, 0.08, 0.45, **lips)),
+        ("black", Pass(BLACK, P_LIPS, 70, 0.0, 0.04, 0.25, **lips)),
         ("red", Pass(RED, P_WHITE, 0, 0.0, 0.08, 0.15, **white)),
         ("blue", Pass(BLUE, P_WHITE, 40, 0.0, 0.08, 0.18, **white)),
     ]
@@ -2623,11 +2640,10 @@ def feature_targets(m: Maps):
     S, lips, white = m.shade, m.part == P_LIPS, m.part == P_WHITE
     bare = 1 - smoothstep(0.03, 0.09, m.spec)
     upper = lips & (m.local[..., 1] > m.nose["stomion_y"])
-    red = np.where(lips, (0.1 + 0.12 * S) * (0.25 + 0.75 * bare), 0) + 0.025 * upper
-    red = red + np.where(white, 0.03 + 0.08 * smoothstep(0.15, 0.6, S), 0)
-    blue = np.where(lips, 0.06 * smoothstep(0.45, 0.9, S), 0)
-    blue = blue + np.where(white, 0.08 * smoothstep(0.3, 0.8, S), 0)
-    black = np.where(lips, 0.06 * smoothstep(0.7, 1.0, S), 0)
+    red = np.where(lips, (0.1 + 0.1 * S) * (0.2 + 0.8 * bare), 0) + 0.09 * upper
+    red = red + np.where(white, 0.06 * smoothstep(0.3, 0.8, S), 0)
+    blue = np.where(white, 0.05 * smoothstep(0.4, 0.9, S), 0)
+    black = 0.03 * upper + np.where(lips, 0.02 * smoothstep(0.7, 1.0, S), 0)
     return {"red": red, "blue": blue, "black": black}
 
 
@@ -2750,10 +2766,10 @@ def draw_iris(h: Hatcher, centre, r, spot):
     for a in np.arange(0, 2 * np.pi, np.radians(5.0)):
         low = max(math.sin(a), 0.0)  # 1 straight down (y grows downward)
         rays = [
-            (RED, 0.3, 0.97, 0.35),
-            (BLACK, 0.62 + 0.15 * low, 0.98, 0.55),
-            (BLACK, 0.3, 0.98 - 0.4 * low, 0.5 - 0.2 * low),
-            (BLACK, 0.3, 0.9 - 0.5 * low, 0.4),
+            (RED, 0.3, 0.97, 0.4),
+            (BLACK, 0.6 + 0.1 * low, 0.98, 0.6),
+            (BLACK, 0.3, 0.98 - 0.3 * low, 0.55 - 0.15 * low),
+            (BLACK, 0.3, 0.92 - 0.35 * low, 0.5),
         ]
         for pen, r0, r1, p in rays:
             b = a + rng.normal(0, 0.05)
@@ -2788,10 +2804,9 @@ def lid_shadow(h: Hatcher, run):
     """The upper lid's shadow on the top of the eye: short arcs under it."""
     m = h.maps
     eye = np.isin(m.part, (P_WHITE, P_IRIS))
-    for k, off in enumerate(np.arange(1.0, 7.0, 1.6)):
+    for k, off in enumerate(np.arange(1.0, 4.5, 1.6)):
         pts = run + [0, off]
-        p = 0.35 - 0.05 * k
-        clip_stroke(h.sheet, pts, eye, BLUE if k % 2 else BLACK, p)
+        clip_stroke(h.sheet, pts, eye, BLUE, 0.2 - 0.05 * k)
 
 
 def clip_stroke(sheet, pts, mask, pen, p):
@@ -2804,11 +2819,25 @@ def clip_stroke(sheet, pts, mask, pen, p):
         sheet.stroke([tuple(q) for q in run], pen, p)
 
 
+def level_brow(line, arch=4.5):
+    """A brow set in the picture: its inner end (first) the lowest point,
+    level with the outer end's base, rising gently to an arch two thirds
+    of the way out and falling a little to the tail."""
+    pts = resample(line[:, :2], 1.0)
+    t = np.linspace(0, 1, len(pts))
+    a, b = pts[0], pts[-1]
+    base = a + np.outer(t, [b[0] - a[0], 0.0])
+    bump = np.exp(-0.5 * ((t - 0.64) / 0.26) ** 2)
+    bump = bump - bump[0] * (1 - t)
+    lift = arch * bump / bump.max() + 1.2 * np.minimum(t / 0.5, 1.0)
+    return base - np.outer(lift, [0.0, 1.0])
+
+
 def draw_brow(h: Hatcher, line, scale):
     """Fine strokes in the direction of growth: up and out at the head,
     then lying along the brow towards its tail."""
     rng = h.rng
-    pts = resample(line[:, :2], 1.0)
+    pts = level_brow(line)
     n = len(pts)
     for _ in range(420):
         t = rng.uniform(0, 1) ** 0.9
@@ -2850,14 +2879,24 @@ def draw_mouth(h: Hatcher):
     for run in seen_runs(h.maps.lines["mouth"]):
         run = resample(run, 2.0)
         u = np.linspace(-1, 1, len(run))
-        run = run - np.stack([0 * u, 3.0 * np.abs(u) ** 4], 1)  # the corners lift
-        pen_line(h.sheet, run, BLACK, swell(0.15, 0.6, 0.45, 0.2), 2, 0.5, h.rng)
-        pen_line(h.sheet, run + [0, -0.8], RED, swell(0.2, 0.5, 0.5, 0.15), 1)
+        run = run - np.stack([0 * u, 4.0 * np.abs(u) ** 3], 1)  # the corners lift
+        n = len(run)
+        pen_line(h.sheet, run, BLACK, swell(0.05, 0.42, 0.5, 0.3), 1)
+        pen_line(h.sheet, run[n // 3 : -n // 3], BLACK, swell(0.1, 0.3, 0.5, 0.3), 1)
+        pen_line(h.sheet, run + [0, -1.0], RED, swell(0.15, 0.45, 0.5, 0.2), 1)
 
 
 def hair_dark(m: Maps):
-    """How dark the hair is at each pixel: 0 in the shine, 1 in the depths."""
-    return 1 - np.clip(m.tone / 0.2, 0, 1) ** 0.45
+    """How dark the hair is at each pixel: 0 in the shine, 1 in the depths.
+    The study's tone is softened across the locks, and the shine is kept to
+    the crown and the fringe: lower down the hair is no lighter than a
+    warm middle value."""
+    hair = m.part == P_HAIR
+    tone = filters.box_blur(np.where(hair, m.tone, 0.0), 5)
+    tone = tone / np.maximum(filters.box_blur(hair.astype(float), 5), 1e-6)
+    d = 1 - np.clip(tone / 0.2, 0, 1) ** 0.45
+    top = smoothstep(4.0, 5.5, m.local[..., 1])
+    return np.maximum(d, 0.5 * (1 - top))
 
 
 @dataclass
@@ -2874,11 +2913,11 @@ class StrandInk:
 STRAND_INKS = [
     StrandInk(
         RED,
-        0.4,
-        lambda d: 0.15 + 0.85 * np.exp(-0.5 * ((d - 0.5) / 0.2) ** 2),
+        0.7,
+        lambda d: 0.2 + 0.8 * smoothstep(0.08, 0.3, d),
         (0.25, 0.4),
     ),
-    StrandInk(BLACK, 1.3, lambda d: smoothstep(0.2, 0.9, d) ** 1.2, (0.25, 0.7)),
+    StrandInk(BLACK, 1.3, lambda d: 0.88 * smoothstep(0.3, 0.92, d) ** 1.2, (0.25, 0.6)),
     StrandInk(BLUE, 0.25, lambda d: smoothstep(0.78, 1.0, d), (0.3, 0.5)),
 ]
 
@@ -2936,6 +2975,12 @@ def draw_hair(h: Hatcher):
     middles, a few in the shine."""
     m, rng = h.maps, h.rng
     dark = hair_dark(m)
+    base = {"length": (150, 400), "count": (4, 9), "spacing": (3.0, 9.0), "by_lock": False}
+    hair = m.part == P_HAIR
+    red = np.where(hair, 0.07 * smoothstep(0.1, 0.3, dark), 0).astype(np.float32)
+    black = np.where(hair, 0.16 * smoothstep(0.4, 0.95, dark), 0).astype(np.float32)
+    h.lay(Pass(RED, P_HAIR, 0, 0.0, 0.07, 0.3, **base), red)
+    h.lay(Pass(BLACK, P_HAIR, 0, 0.0, 0.16, 0.35, **base), black)
     for k, grid in enumerate(m.strands):
         mid = to_pixels(VIEW, grid[grid.shape[0] // 2])
         width = np.linalg.norm(mid[-1] - mid[0]) if k else grid.shape[1] * 2.0
