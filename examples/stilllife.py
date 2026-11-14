@@ -26,6 +26,8 @@ import numpy as np
 from murex import filters, write_png
 from numba import njit
 
+from fusain import Sheet, papers, pens
+
 HERE = Path(__file__).parent
 WIDTH, HEIGHT = 1400, 1100
 
@@ -250,7 +252,7 @@ def tube(path, radius, obj, mat, n=16, flat=1.0):
 
 CLOTH_Y = 0.15  # the cloth's thickness: where things stand
 TABLE_FRONT = 22.0  # z of the table's front edge
-WALL_Z = -38.0
+WALL_Z = -25.0
 JUG_AT, JUG_YAW = (-14.0, -6.0), -0.35
 BOTTLE_AT = (1.5, -16.0)
 BOWL_AT = (-1.5, 6.5)
@@ -620,7 +622,7 @@ FOOTPRINTS = [
 #: The cloth's free left edge: x at the back and at the front.
 CLOTH_LEFT = (-75.0, -9.0)
 CLOTH_RIGHT = 62.0
-CLOTH_BACK = -36.0
+CLOTH_BACK = -23.0
 HANG = 7.0  # how far it hangs over the front edge
 EDGE_R = 0.9  # radius of the table's edge, under the cloth
 
@@ -690,13 +692,23 @@ def hanging_folds(x, drop):
     grow = np.clip(drop / 3.0, 0, 1) ** 0.8
     out = np.zeros_like(x)
     for cx, a, w in (
-        (-6.0, 2.6, 2.0),
-        (5.0, 1.8, 1.7),
-        (17.0, 3.0, 2.2),
-        (31.0, 2.2, 2.0),
+        (-6.0, 4.0, 1.7),
+        (5.0, 3.0, 1.4),
+        (17.0, 4.6, 1.9),
+        (31.0, 3.4, 1.6),
     ):
         out += a * np.exp(-0.5 * ((x - cx - 0.15 * drop) / w) ** 2)
     return grow * out + 0.25 * grow * np.sin(x / 2.3)
+
+
+def cloth_length():
+    return TABLE_FRONT - CLOTH_BACK + EDGE_R * np.pi / 2 + HANG
+
+
+def cloth_hem(U, V, length):
+    """The hanging edge, uneven: how much shorter the cloth is there."""
+    uneven = 1.6 * np.sin(U * 13.0 + 1.0) + 0.7 * np.sin(U * 37.0)
+    return uneven * np.clip(V - length + 4.0, 0, None) / 4.0
 
 
 def cloth_part(rows=420, cols=520):
@@ -704,8 +716,7 @@ def cloth_part(rows=420, cols=520):
     v = np.linspace(0, length, rows)
     u = np.linspace(0, 1, cols)
     U, V = np.meshgrid(u, v)
-    hem = 0.9 * np.sin(U * 31.0) * np.clip(V - length + 2.5, 0, None) / 2.5
-    p = cloth_point(U, V - hem)
+    p = cloth_point(U, V - cloth_hem(U, V, length))
     t_across = unit_rows(np.gradient(p, axis=1))
     t_along = unit_rows(np.gradient(p, axis=0))
     top = p[..., 2] < TABLE_FRONT - 0.5
@@ -1199,7 +1210,7 @@ def label_pattern(theta, y):
 def stripes(u_cm, v_cm):
     """The cloth's blue stripes: a band of three across it every so often,
     and two lines along its free edge."""
-    p = np.mod(v_cm - 6.0, 17.0)
+    p = np.mod(v_cm - 15.0, 17.0)
     across = (
         band(p, 0.0, 1.3, 0.05) + band(p, 2.0, 2.35, 0.05) + band(p, 3.0, 3.35, 0.05)
     )
@@ -1275,6 +1286,8 @@ def lighting(b: Buffers, region, shadow, ao, cam: Camera) -> Light:
     n = b.normal
     to_eye = unit_rows(cam.eye - b.pos)
     key = np.clip(n @ KEY, 0, 1) * shadow
+    paper = region == R["label"]  # matt: an even light, a little less on the far side
+    key[paper] = (0.55 + 0.3 * np.clip(n @ KEY, 0, 1) * shadow)[paper]
     fill = 0.16 * np.clip(n @ FILL, 0, 1) * ao
     amb = 0.1 * ao * (0.55 + 0.45 * n[..., 1])
     thing = ~np.isin(
@@ -1337,12 +1350,17 @@ class Picture:
     region: np.ndarray
     light: Light
     colour: np.ndarray  # linear RGB
+    raw: np.ndarray  # the same before the edges fade
+    keep: np.ndarray  # where the drawing reaches: 1 inside, 0 beyond
 
 
 def picture(sc: Scene, cam: Camera) -> Picture:
     b = see(sc, cam)
     region = regions(b)
     shadow = shadows(sc, b)
+    wall = b.obj == O_WALL  # the wall far behind: its shadows broad and faint
+    soft = filters.box_blur(np.where(wall, shadow, 1.0), int(cam.focal / 60))
+    shadow = np.where(wall, 0.55 + 0.45 * soft, shadow)
     ao = occlusion(b, cam)
     lt = lighting(b, region, shadow, ao, cam)
     base = albedo(region, b)
@@ -1358,8 +1376,9 @@ def picture(sc: Scene, cam: Camera) -> Picture:
     )
     keep = np.maximum(keep, thing[..., None])
     paper = to_linear(COLOURS["paper"])
+    raw = colour
     colour = np.where(b.seen[..., None], colour * keep + paper * (1 - keep), paper)
-    return Picture(b, region, lt, colour)
+    return Picture(b, region, lt, colour, raw, keep[..., 0])
 
 
 def grey(lin):
@@ -1543,13 +1562,603 @@ def write_maps(pic: Picture, sc: Scene, out: Path, k=2):
     del sc
 
 
-def main(out: Path):
-    out.mkdir(parents=True, exist_ok=True)
-    sc = merge(scene_parts())
-    pic = scaled_picture(sc)
-    write_studies(pic, out)
-    write_maps(pic, sc, out)
+# ------------------------------------------------------------ the pen work
+
+PAPER = papers.BRISTOL.with_(color="#fbfaf7")
+RED = pens.ballpoint(pens.RED.ink.hex, width=2.0)
+BLUE = pens.ballpoint(pens.BLUE.ink.hex, width=2.0)
+BLACK = pens.ballpoint(pens.BLACK.ink.hex, width=2.0)
+BOLD = pens.BLACK  # the 3 px ball, for the strongest lines
+CELL = 4  # pixels per cell of the maps that count the ink laid
+WHITES = ("jug", "jug_inside", "bowl", "cloth", "label", "flesh", "core")
+FRUIT = ("cherry", "apple")
+
+
+@dataclass
+class PenMaps:
+    """What the pen work reads off the study, per pixel of the picture."""
+
+    obj: np.ndarray  # int: each object (each cherry its own)
+    region: np.ndarray  # int: REGIONS
+    shade: np.ndarray  # 0 in full light to 1 turned from it or in shadow
+    dark: np.ndarray  # the study's darkness, 0 white to 1 black
+    spec: np.ndarray  # the highlight
+    dir1: np.ndarray  # (h, w, 2): round the form, along the folds or boards
+    dir2: np.ndarray  # (h, w, 2): along the profile, across the folds
+    keep: np.ndarray  # where the drawing reaches
+    lines: dict  # contours: (n, 3) x, y, seen
+    stems: list  # stems of the cherries and the apple, in pixels
+    dist: np.ndarray  # distance from the eye of what is seen (cm)
+
+
+def stem_lines(parts, cam: Camera, dist):
+    """The centre lines of the stems, as seen polylines in the picture."""
+    out = []
+    for p in parts:
+        if np.isscalar(p.mat) and p.mat == M_STEM:
+            ring = 8 if p.obj != O_APPLE else 10
+            centre = p.v.reshape(-1, ring, 3).mean(axis=1)
+            out.append(seen_line(cam, dist, centre, 0.3))
+    return out
+
+
+def pen_maps(parts, sc: Scene) -> PenMaps:
+    pic = picture(sc, CAMERA)
+    b, cam = pic.b, CAMERA
+    lum = pic.raw @ np.array([0.2126, 0.7152, 0.0722])
+    shade = np.clip(1 - pic.light.diffuse / 0.95, 0, 1)
+    return PenMaps(
+        np.where(b.obj >= O_CHERRY, b.obj, b.obj).astype(np.int32),
+        pic.region.astype(np.int32),
+        shade.astype(np.float32),
+        (1 - to_srgb(lum)).astype(np.float32),
+        pic.light.spec.astype(np.float32),
+        picture_directions(b, cam, b.t1).astype(np.float32),
+        picture_directions(b, cam, b.t2).astype(np.float32),
+        pic.keep.astype(np.float32),
+        contours(pic, cam, 1),
+        stem_lines(parts, cam, b.dist),
+        b.dist.astype(np.float32),
+    )
+
+
+@njit(cache=False)
+def _trace(
+    x, y, dx, dy, field, part, want, target, tmin, turn, step, nmax, out, full
+):  # pragma: no cover
+    """Follow the direction field from (x, y), setting off along (dx, dy)
+    and turned by ``turn`` (radians) from the field, while on the part
+    ``want``, where the target is at least ``tmin`` and no other line of
+    the layer is near (``full``).  Writes the points to ``out`` and returns
+    how many."""
+    h, w = part.shape
+    c, s = math.cos(turn), math.sin(turn)
+    crowd, n = 0, 0
+    for _ in range(nmax):
+        xi, yi = int(x), int(y)
+        if xi < 0 or yi < 0 or xi >= w or yi >= h or part[yi, xi] != want:
+            break
+        if target[yi, xi] < tmin:
+            break
+        crowd = crowd + 1 if full[yi, xi] else 0
+        if crowd > 6:
+            break
+        out[n, 0], out[n, 1] = x, y
+        n += 1
+        fx, fy = field[yi, xi, 0], field[yi, xi, 1]
+        gx, gy = fx * c - fy * s, fx * s + fy * c
+        if gx * dx + gy * dy < 0:
+            gx, gy = -gx, -gy
+        dx, dy = 0.75 * dx + 0.25 * gx, 0.75 * dy + 0.25 * gy
+        norm = math.sqrt(dx * dx + dy * dy) + 1e-12
+        dx, dy = dx / norm, dy / norm
+        x += dx * step
+        y += dy * step
+    return n
+
+
+@njit(cache=False)
+def _stamp(occ, xs, ys, radius):  # pragma: no cover
+    """Mark the pixels within ``radius`` of the points: the room a line
+    keeps from the next one of its layer."""
+    h, w = occ.shape
+    r = int(math.ceil(radius))
+    r2 = radius * radius
+    for i in range(xs.shape[0]):
+        cx, cy = xs[i], ys[i]
+        for y in range(max(int(cy) - r, 0), min(int(cy) + r + 1, h)):
+            for x in range(max(int(cx) - r, 0), min(int(cx) + r + 1, w)):
+                if (x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= r2:
+                    occ[y, x] = 1
+
+
+def line_weight(p):
+    """How much a line of the 2 px ball darkens, times its width (px), at
+    pressure ``p``: measured on hatching."""
+    return 1.25 * np.asarray(p) ** 0.55
+
+
+@dataclass
+class Pass:
+    """One layer of hatching: an ink over the pixels where the target
+    asks for it, at an angle to the form's first direction, up to ``cap``
+    of coverage beyond ``floor``.  Strokes stay on the object (or, with
+    ``by_region``, the region) where they start."""
+
+    pen: pens.Pen
+    angle: float  # degrees from dir1 towards dir2
+    floor: float
+    cap: float
+    pressure: float
+    length: tuple = (60, 200)
+    count: tuple = (5, 12)
+    spacing: tuple = (3.0, 13.0)
+    shortest: int = 14  # points of 2 px
+    by_region: bool = False
+
+
+@dataclass
+class Hatcher:
+    """Lays hatching patch by patch on a sheet, keeping count of the ink."""
+
+    sheet: Sheet
+    maps: PenMaps
+    rng: np.random.Generator
+    strokes: int = 0
+    full: np.ndarray = field(default_factory=lambda: np.zeros((1, 1), np.uint8))
+
+    def field(self, angle):
+        a = math.radians(angle)
+        d = math.cos(a) * self.maps.dir1 + math.sin(a) * self.maps.dir2
+        return unit_rows(d).astype(np.float32)
+
+    def lay(self, ps: Pass, target, limit=3000):
+        """Hatch until what is laid comes near ``target`` (coverage) between
+        the pass's floor and floor + cap."""
+        goal = np.clip(target - ps.floor, 0, ps.cap).astype(np.float32)
+        part = self.maps.region if ps.by_region else self.maps.obj
+        field = self.field(ps.angle)
+        h, w = goal.shape
+        coarse = shrink(goal[: h // CELL * CELL, : w // CELL * CELL], CELL)
+        laid = np.zeros_like(coarse)
+        self.full = np.zeros(goal.shape, np.uint8)
+        for _ in range(limit):
+            deficit = coarse - laid
+            pick = deficit * self.rng.random(deficit.shape) ** 0.35
+            i = int(np.argmax(pick))
+            cy, cx = divmod(i, coarse.shape[1])
+            if deficit[cy, cx] < 0.3 * ps.cap:
+                break
+            centre = (np.array([cx, cy]) + self.rng.random(2)) * CELL
+            if not self.bundle(ps, centre, goal, field, part, laid):
+                laid[cy, cx] += ps.cap  # nothing could be laid here
+
+    def bundle(self, ps: Pass, centre, goal, field, part, laid):
+        """A bundle of near-parallel strokes across the patch at ``centre``."""
+        rng = self.rng
+        x, y = int(centre[0]), int(centre[1])
+        if goal[y, x] <= 0:
+            return False
+        turn = math.radians(rng.normal(0, 6))
+        fan = math.radians(rng.uniform(-2.0, 2.0))
+        c, s = math.cos(turn), math.sin(turn)
+        f = field[y, x]
+        d = np.array([f[0] * c - f[1] * s, f[0] * s + f[1] * c])
+        across = np.array([-d[1], d[0]])
+        p = ps.pressure * rng.uniform(0.85, 1.15)
+        gap = float(np.clip(line_weight(p) / max(goal[y, x], 1e-3), *ps.spacing))
+        n = int(rng.integers(*ps.count))
+        length = rng.uniform(*ps.length)
+        want = part[y, x]
+        laid_any = False
+        for k in range(n):
+            off = (k - (n - 1) / 2) * gap * rng.uniform(0.85, 1.15)
+            start = centre + across * off + d * rng.normal(0, 0.15 * length)
+            spread = turn + fan * (k - (n - 1) / 2)
+            pts = self.trace(ps, start, d, spread, field, goal, part, want, length)
+            if pts is not None:
+                self.draw(ps, pts, p, goal, laid)
+                _stamp(self.full, pts[:, 0], pts[:, 1], 0.62 * gap)
+                laid_any = True
+        return laid_any
+
+    def trace(self, ps: Pass, start, d, turn, field, goal, part, want, length):
+        half = [length * self.rng.uniform(0.35, 0.65)]
+        half.append(length - half[0])
+        out = np.zeros((600, 2))
+        ways = []
+        for sign, ln in zip((1, -1), half, strict=True):
+            k = _trace(start[0], start[1], sign * d[0], sign * d[1], field, part,
+                       want, goal, 0.12 * ps.cap, turn, 2.0, int(ln / 2), out,
+                       self.full)  # fmt: skip
+            ways.append(out[:k].copy())
+        pts = np.vstack([ways[1][::-1], ways[0][1:]])
+        return pts if len(pts) >= ps.shortest else None
+
+    def draw(self, ps: Pass, pts, p, goal, laid):
+        """One stroke, tapering at both ends and following the target."""
+        u = np.linspace(0, 1, len(pts))
+        taper = np.clip(np.sin(np.pi * u) * 1.6, 0, 1) ** 0.7
+        xi, yi = pts[:, 0].astype(int), pts[:, 1].astype(int)
+        here = goal[yi, xi] / max(ps.cap, 1e-6)
+        press = p * taper * np.clip(0.55 + 0.6 * here, 0.5, 1.15)
+        keep = slice(None, None, 2 if len(pts) < 20 else 3)
+        path = pts[keep]
+        if len(path) < 3:
+            return
+        self.sheet.stroke([tuple(q) for q in path], ps.pen, list(press[keep] + 0.01))
+        self.strokes += 1
+        cy = np.minimum(yi // CELL, laid.shape[0] - 1)
+        cx = np.minimum(xi // CELL, laid.shape[1] - 1)
+        np.add.at(laid, (cy, cx), line_weight(press) * 2.0 / CELL**2)
+
+
+# --------------------------------------------------------------- tone targets
+
+
+def steps(x, edges, heights):
+    """A tone in a few separate steps: ``heights[k]`` added past ``edges[k]``."""
+    out = np.zeros_like(x)
+    for e, a in zip(edges, heights, strict=True):
+        out = out + a * smoothstep(e - 0.05, e + 0.05, x)
+    return out
+
+
+def masks(m: PenMaps, names):
+    return np.isin(m.region, [R[n] for n in names])
+
+
+def near_fruit(m: PenMaps):
+    """How near the red fruit each pixel is: where shadows turn violet."""
+    fruit = masks(m, FRUIT).astype(float)
+    return np.clip(filters.box_blur(fruit, 28) * 3.0, 0, 1)
+
+
+def white_targets(m: PenMaps):
+    """Shadows on white things: open blue in steps, a little black at the
+    darkest, violet near the fruit; bare paper in the lights."""
+    S = m.shade
+    white = masks(m, WHITES + ("stripe", "jug_blue"))
+    bare = 1 - smoothstep(0.04, 0.12, m.spec)
+    blue = steps(S, (0.22, 0.45, 0.68), (0.04, 0.06, 0.07)) * bare
+    red = 0.6 * near_fruit(m) * blue
+    black = 0.05 * smoothstep(0.8, 0.95, S)
+    k = np.where(white, m.keep, 0)
+    return blue * k, red * k, black * k
+
+
+def fruit_targets(m: PenMaps):
+    """Red on the fruit, closer in shadow, with black and a little blue in
+    the core of the shadow; the highlight bare paper."""
+    S = m.shade
+    fruit = masks(m, FRUIT)
+    bare = 1 - smoothstep(0.08, 0.25, m.spec)
+    red = (0.07 + steps(S, (0.3, 0.6), (0.08, 0.09))) * bare
+    black = steps(S, (0.55, 0.8), (0.05, 0.07)) * bare
+    blue = 0.04 * smoothstep(0.65, 0.85, S) * bare
+    return red * fruit, black * fruit, blue * fruit
+
+
+def dark_targets(m: PenMaps):
+    """The bottle, the knife's handle and the table: black over blue (or
+    red for the wood), the highlights left as paper."""
+    D = m.dark
+    bottle = masks(m, ("bottle", "handle"))
+    bare = 1 - smoothstep(0.1, 0.3, m.spec)
+    black = np.where(bottle, (0.12 + 0.35 * smoothstep(0.45, 0.9, D)) * bare, 0)
+    blue = np.where(bottle, 0.1 + 0.12 * smoothstep(0.3, 0.7, D), 0) * bare
+    table = masks(m, ("table",))
+    black = black + np.where(table, 0.06 + 0.12 * smoothstep(0.6, 0.9, D), 0) * m.keep
+    red = np.where(table, 0.1, 0) * m.keep
+    return black, blue, red
+
+
+def wall_targets(m: PenMaps):
+    """The wall in open blue, black where it is darkest; its patches end
+    raggedly where the drawing stops."""
+    D = m.dark
+    wall = masks(m, ("wall",))
+    ragged = smoothstep(0.35, 0.6, m.keep)
+    blue = np.where(wall, 0.04 + steps(D, (0.45, 0.6), (0.04, 0.05)), 0) * ragged
+    black = np.where(wall, 0.05 * smoothstep(0.55, 0.7, D), 0) * ragged
+    return blue, black
+
+
+def small_targets(m: PenMaps):
+    """Label lettering, seeds, the blade: black, and blue on the steel."""
+    ink = masks(m, ("label_ink", "seed")) * 0.45
+    blade = masks(m, ("blade",))
+    steel = blade * (0.05 + 0.15 * smoothstep(0.3, 0.7, m.dark)) * (m.spec < 0.3)
+    return ink.astype(np.float32), steel.astype(np.float32)
+
+
+# ----------------------------------------------------- lines on the surfaces
+
+
+def sample(a, pts):
+    xi = np.clip(np.asarray(pts)[:, 0].astype(int), 0, a.shape[1] - 1)
+    yi = np.clip(np.asarray(pts)[:, 1].astype(int), 0, a.shape[0] - 1)
+    return a[yi, xi]
+
+
+def seen_runs(line, min_len=3):
+    """The runs of a polyline (k, 3: x, y, seen) that are seen."""
+    seen = np.append(line[:, 2] > 0.5, False)
+    out, start = [], None
+    for i, ok in enumerate(seen):
+        if ok and start is None:
+            start = i
+        elif not ok and start is not None:
+            if i - start >= min_len:
+                out.append(line[start:i, :2])
+            start = None
+    return out
+
+
+def surface_line(h: Hatcher, pts3d, pen, lo, hi, tol=0.25, fade=True):
+    """Draw a line lying on a surface: only where it is seen, its pressure
+    from ``lo`` in the light to ``hi`` in shadow, tapering at its ends."""
+    m = h.maps
+    line = seen_line(CAMERA, m.dist, pts3d, tol)
+    for run in seen_runs(line, 4):
+        S = sample(m.shade, run)
+        k = sample(m.keep, run) if fade else np.ones(len(run))
+        u = np.linspace(0, 1, len(run))
+        taper = np.clip(np.minimum(u, 1 - u) * len(run) / 6, 0, 1)
+        press = (lo + (hi - lo) * S) * taper * smoothstep(0.25, 0.6, k)
+        if press.max() < 0.03:
+            continue
+        step = 2 if len(run) < 40 else 3
+        h.sheet.stroke([tuple(q) for q in run[::step]], pen, list(press[::step] + 0.005))
+
+
+def jug_outside():
+    prof = catmull_rom(np.asarray(JUG_PROFILE, float), 320)
+    top = int(np.argmax(prof[:, 1]))
+    return prof[: top + 1]
+
+
+def jug_point(theta, y, lift=0.04):
+    """A point on the jug's outer surface at angle ``theta`` and height y."""
+    prof = jug_outside()
+    r = np.interp(y, prof[:, 1], prof[:, 0]) + lift
+    r, yy = spout(theta, r, y)
+    local = np.stack([r * np.sin(theta), yy, r * np.cos(theta)], -1)
+    return place(local, (JUG_AT[0], CLOTH_Y, JUG_AT[1]), JUG_YAW)
+
+
+JUG_BANDS = [(1.25, 1.55), (6.15, 6.45), (6.75, 6.9), (11.1, 11.25), (11.55, 11.85),
+             (16.3, 16.5), (20.9, 21.3)]  # fmt: skip
+
+
+def draw_jug_pattern(h: Hatcher):
+    """The painted blue: each band filled with rings close together, the
+    vine as a swelling line, the leaves as small filled ovals."""
+    th = np.linspace(-np.pi, np.pi, 720)
+    for lo, hi in JUG_BANDS:
+        for y in np.arange(lo + 0.03, hi, 0.07):
+            surface_line(h, jug_point(th, np.full_like(th, y)), BLUE, 0.3, 0.55)
+    for off in (-0.05, 0.0, 0.05):
+        surface_line(h, jug_point(th, 9.0 + np.sin(7 * th) + off), BLUE, 0.35, 0.6)
+    for k in range(14):
+        tk = (k + 0.25) * 2 * np.pi / 14
+        side = 1.0 if k % 2 == 0 else -1.0
+        cy = 9.0 + np.sin(7 * tk) + side * 0.95
+        a = np.linspace(0, 2 * np.pi, 40)
+        for scale in (1.0, 0.75, 0.5, 0.25):
+            t = tk + scale * 0.6 / 7.8 * np.cos(a)
+            y = cy + scale * 0.34 * np.sin(a)
+            surface_line(h, jug_point(t, y), BLUE, 0.35, 0.6)
+
+
+def stripe_bands():
+    """The stripes across the cloth: (from, to) along its length, cm."""
+    out = []
+    for j in range(5):
+        base = 15.0 + 17.0 * (j - 1)
+        out += [(base, base + 1.3), (base + 2.0, base + 2.35), (base + 3.0, base + 3.35)]
+    return [(a, b) for a, b in out if 0 < a and b < cloth_length()]
+
+
+def cloth_line(u, v):
+    length = cloth_length()
+    return cloth_point(u, v - cloth_hem(u, v, length)) + [0, 0.03, 0]
+
+
+def draw_stripes(h: Hatcher):
+    """The cloth's stripes as lines along them, close together, bending
+    over every fold."""
+    u = np.linspace(0, 1, 900)
+    for lo, hi in stripe_bands():
+        for v in np.arange(lo + 0.04, hi, 0.09):
+            surface_line(h, cloth_line(u, np.full_like(u, v)), BLUE, 0.3, 0.55)
+    v = np.linspace(0, cloth_length(), 700)
+    z = np.minimum(CLOTH_BACK + v, TABLE_FRONT)
+    width = CLOTH_RIGHT - np.interp(z, [CLOTH_BACK, TABLE_FRONT], CLOTH_LEFT)
+    for lo, hi in ((2.0, 2.6), (3.2, 3.45)):
+        for uc in np.arange(lo + 0.04, hi, 0.09):
+            surface_line(h, cloth_line(uc / width, v), BLUE, 0.3, 0.55)
+
+
+# ----------------------------------------------------------- the hatching
+
+LONG = {"length": (90, 240), "count": (5, 11)}
+SMALL = {"length": (14, 40), "count": (3, 6), "spacing": (2.5, 7.0), "shortest": 5}
+FRUIT_KW = {"length": (40, 110), "count": (4, 9), "spacing": (2.5, 9.0), "shortest": 8}
+
+
+def hatch_whites(h: Hatcher):
+    blue, red, black = white_targets(h.maps)
+    for ink, t, layers in (
+        (BLUE, blue, ((0, 0.0, 0.04, 0.22), (62, 0.04, 0.06, 0.25), (-48, 0.1, 0.07, 0.28))),
+        (RED, red, ((28, 0.0, 0.04, 0.2), (-75, 0.04, 0.05, 0.22))),
+        (BLACK, black, ((80, 0.0, 0.05, 0.25),)),
+    ):
+        for angle, lo, cap, p in layers:
+            h.lay(Pass(ink, angle, lo, cap, p, **LONG), t)
+
+
+def hatch_fruit(h: Hatcher):
+    red, black, blue = fruit_targets(h.maps)
+    cherry = masks(h.maps, ("cherry",))
+    for sel, kw in ((cherry, SMALL), (~cherry, FRUIT_KW)):
+        for ink, t, layers in (
+            (RED, red, ((0, 0.0, 0.07, 0.3), (58, 0.07, 0.08, 0.32), (-38, 0.15, 0.09, 0.35))),
+            (BLACK, black, ((70, 0.0, 0.05, 0.3), (-20, 0.05, 0.07, 0.35))),
+            (BLUE, blue, ((110, 0.0, 0.04, 0.28),)),
+        ):
+            for angle, lo, cap, p in layers:
+                h.lay(Pass(ink, angle, lo, cap, p, **kw), np.where(sel, t, 0))
+
+
+def hatch_darks(h: Hatcher):
+    black, blue, red = dark_targets(h.maps)
+    for ink, t, layers in (
+        (BLUE, blue, ((0, 0.0, 0.1, 0.3), (75, 0.1, 0.12, 0.35))),
+        (BLACK, black, ((90, 0.0, 0.12, 0.35), (15, 0.12, 0.14, 0.4),
+                        (-50, 0.26, 0.2, 0.45))),
+        (RED, red, ((35, 0.0, 0.1, 0.3),)),
+    ):
+        for angle, lo, cap, p in layers:
+            h.lay(Pass(ink, angle, lo, cap, p, **LONG), t)
+
+
+def hatch_wall(h: Hatcher):
+    blue, black = wall_targets(h.maps)
+    kw = {"length": (150, 340), "count": (6, 12), "spacing": (5.0, 16.0)}
+    h.lay(Pass(BLUE, 0, 0.0, 0.05, 0.22, **kw), blue)
+    h.lay(Pass(BLUE, 90, 0.05, 0.05, 0.24, **kw), blue)
+    h.lay(Pass(BLACK, 30, 0.0, 0.05, 0.25, **kw), black)
+
+
+def hatch_small(h: Hatcher):
+    ink, steel = small_targets(h.maps)
+    kw = {"length": (8, 30), "count": (3, 6), "spacing": (1.8, 4.0), "shortest": 3,
+          "by_region": True}  # fmt: skip
+    h.lay(Pass(BLACK, 0, 0.0, 0.45, 0.5, **kw), ink)
+    h.lay(Pass(BLUE, 90, 0.0, 0.1, 0.3, **SMALL), steel)
+    h.lay(Pass(BLACK, 0, 0.08, 0.1, 0.3, **SMALL), steel)
+
+
+# ------------------------------------------------------------------- lines
+
+#: Ink and weight of each object's outline: (pens, weight in shadow).
+OUTLINES = {"jug": ((BLUE, BLACK), 0.45), "bowl": ((BLUE, BLACK), 0.4),
+            "bottle": ((BLACK,), 0.6), "apple": ((BLACK, RED), 0.5),
+            "half_apple": ((BLACK, RED), 0.45), "cherries": ((BLACK,), 0.5),
+            "knife": ((BLACK,), 0.45)}  # fmt: skip
+
+
+def resample(pts, step=2.0):
+    pts = np.asarray(pts, float)
+    d = np.concatenate([[0], np.cumsum(np.linalg.norm(np.diff(pts, axis=0), axis=1))])
+    n = max(int(d[-1] / step), 2)
+    t = np.linspace(0, d[-1], n)
+    return np.stack([np.interp(t, d, pts[:, 0]), np.interp(t, d, pts[:, 1])], 1)
+
+
+def inward(line, inside):
+    """Unit normals of a polyline pointing into the shape ``inside``."""
+    t = unit_rows(np.gradient(line, axis=0))
+    n = np.stack([t[:, 1], -t[:, 0]], 1)
+    flip = ~sample(inside, line + 3 * n)
+    return np.where(flip[:, None], -n, n)
+
+
+def weighted_runs(line, weight, low=0.08, min_len=6):
+    on = np.append(weight > low, False)
+    out, start = [], None
+    for i, ok in enumerate(on):
+        if ok and start is None:
+            start = i
+        elif not ok and start is not None:
+            if i - start >= min_len:
+                out.append((line[start:i], weight[start:i]))
+            start = None
+    return out
+
+
+def draw_contour(h: Hatcher, line, weight, pens_):
+    """A living line: its pressure follows ``weight`` along it, swelling and
+    thinning, broken where the weight falls; restated where strong."""
+    for run, w in weighted_runs(line, weight):
+        n = len(run)
+        u = np.linspace(0, 1, n)
+        taper = np.clip(np.minimum(u, 1 - u) * n / 8, 0, 1) ** 0.7
+        noise = 0.8 + 0.4 * value_noise(np.arange(n) / 9.0 + h.rng.uniform(0, 99), 4)
+        press = w * taper * noise
+        for k, pen in enumerate(pens_):
+            if k and press.max() < 0.3:
+                break
+            off = h.rng.normal(0, 0.5, 2) if k else 0
+            h.sheet.stroke([tuple(q) for q in run[::2] + off], pen,
+                           list(press[::2] * (1 - 0.3 * k) + 0.005))  # fmt: skip
+
+
+def draw_outlines(h: Hatcher):
+    m = h.maps
+    for name, line in m.lines.items():
+        if not name.startswith("outline_"):
+            continue
+        what = name[len("outline_") : name.rindex("_")]
+        pens_, strength = OUTLINES[what]
+        pts = resample(line[:, :2], 2.0)
+        inside = np.isin(m.obj, np.unique(sample(m.obj, pts + 0.0)))
+        n = inward(pts, inside)
+        S = sample(m.shade, pts + 3 * n)
+        w = strength * smoothstep(0.15, 0.6, S) + 0.05
+        draw_contour(h, pts, w, pens_)
+
+
+def draw_rims_and_stems(h: Hatcher):
+    m = h.maps
+    for name, pen, lo, hi in (("rim_jug", BLUE, 0.25, 0.5), ("rim_bowl", BLUE, 0.2, 0.45),
+                              ("rim_bottle", BLACK, 0.3, 0.5),
+                              ("foot_jug", BLUE, 0.2, 0.45),
+                              ("foot_bowl", BLUE, 0.2, 0.45)):  # fmt: skip
+        for run in seen_runs(m.lines[name], 4):
+            run = resample(run, 2.0)
+            S = sample(m.shade, run)
+            draw_contour(h, run, lo + (hi - lo) * S, (pen,))
+    for stem in m.stems:
+        for run in seen_runs(stem, 3):
+            run = resample(run, 1.5)
+            u = np.linspace(0, 1, len(run))
+            w = 0.25 + 0.4 * np.sin(np.pi * u)
+            h.sheet.stroke([tuple(q) for q in run], BLACK, list(w))
+            h.sheet.stroke([tuple(q + [0.6, 0.3]) for q in run], RED, list(0.6 * w))
+
+
+def drawing(m: PenMaps, seed=7) -> Sheet:
+    sheet = Sheet(WIDTH, HEIGHT, paper=PAPER, seed=seed)
+    h = Hatcher(sheet, m, np.random.default_rng(seed))
+    hatch_whites(h)
+    draw_jug_pattern(h)
+    draw_stripes(h)
+    hatch_fruit(h)
+    hatch_darks(h)
+    hatch_wall(h)
+    hatch_small(h)
+    draw_outlines(h)
+    draw_rims_and_stems(h)
+    return sheet
+
+
+def main(studies: Path | None = None):
+    """Draw the still life to ``examples/output/stilllife.png``; with a
+    folder, also write the lit studies and the maps there."""
+    parts = scene_parts()
+    sc = merge(parts)
+    if studies is not None:
+        studies.mkdir(parents=True, exist_ok=True)
+        pic = scaled_picture(sc)
+        write_studies(pic, studies)
+        write_maps(pic, sc, studies)
+    sheet = drawing(pen_maps(parts, sc))
+    out = HERE / "output" / "stilllife.png"
+    write_png(str(out), np.round(sheet.render() * 255).astype(np.uint8))
+    print(f"wrote {out}")
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]))
+    main(Path(sys.argv[1]) if len(sys.argv) > 1 else None)
