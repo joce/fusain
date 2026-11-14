@@ -23,12 +23,14 @@ class Medium:
         and goes on darkening.
     binding:
         0..1: the share of what it lays that is held by the paper at once,
-        the rest lying on it as dust that can still be moved.
+        the rest lying on it as dust that can still be moved (or, for a
+        medium that is waxy and soft, as paste, which only smears).
     wax:
         0..1: the share of it that is wax (or oil). Wax films over the tooth
         and makes it slick: later layers take less and less, and a firm pass
         polishes the film flat, which closes up the white specks of the
-        paper (burnishing). Graphite, charcoal and soft pastel have none.
+        paper (burnishing). Laid over dust, the film lies on the dust and
+        binds part of it. Graphite, charcoal and soft pastel have none.
     sheen:
         0..1: how much of it mirrors the light once the paper holds it, as
         graphite does. A thick layer of it shines under a lamp, so that it

@@ -20,7 +20,8 @@ class Tool:
     lift_loose, lift_held:
         How strongly it lifts the dust, and the pigment the paper holds
         (0 = not at all; 1 takes about two thirds in a pass; more, nearly
-        all).
+        all). Dust that is set, by fixative or under a film of wax, and the
+        film itself come off as what the paper holds does.
     lay:
         The share of what it carries that it lays back down over each of its
         own widths (0 for an eraser, which keeps it).
@@ -28,7 +29,10 @@ class Tool:
         How strongly it presses the dust into the paper, where it is held.
     smear:
         How strongly it pushes the dust on the high ground into the low,
-        which greys the white specks of the paper.
+        which greys the white specks of the paper. A tool that smears (1 or
+        more) also moves the paste of an oil pastel as it moves dust; one
+        that does not, an eraser, lifts paste only as it lifts what the
+        paper holds.
     width:
         Its usual width in pixels.
     name:
@@ -68,7 +72,8 @@ TORTILLON = STUMP.with_(width=5.0, name="tortillon")
 FINGER = Tool(1.2, 0.01, lay=0.5, press=0.8, smear=2.5, width=22.0, name="finger")
 #: A chamois: it wipes most of the dust away and spreads the rest thin.
 CHAMOIS = Tool(1.6, 0.04, lay=0.12, press=0.1, smear=1.0, width=30.0, name="chamois")
-#: A kneaded eraser: it lifts the dust, and a little of what is held.
+#: A kneaded eraser: it lifts the dust, and a little of what is held; so
+#: only a little of an oil pastel, which is paste.
 KNEADED = Tool(2.5, 0.3, width=12.0, name="kneaded eraser")
 #: A vinyl eraser: it rubs off nearly everything.
 ERASER = Tool(4.0, 2.5, width=10.0, name="vinyl eraser")

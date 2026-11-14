@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ._engine import IV, LOOSE
+from ._engine import HELD, IV, LOOSE
 from .stick import _width
 from .tools import Tool
 
@@ -43,8 +43,9 @@ class Smudger:
         self.tool = tool
         self.width = _width("width", tool.width if width is None else width)
         # what it has lifted, the dust on its face and the held graphite it
-        # is pushing along, each packed as the dust of a sheet is
-        self._carried = np.zeros((3, LOOSE))
+        # is pushing along, each packed as the dust of a sheet is, with the
+        # volume of it that is paste after
+        self._carried = np.zeros((3, HELD))
 
     @property
     def load(self) -> float:
@@ -55,7 +56,7 @@ class Smudger:
     def carried(self) -> np.ndarray:
         """What it carries, packed as the dust of a sheet is: [K (N bands),
         S, volume, sheen]."""
-        return self._carried.sum(axis=0)
+        return self._carried[:, :LOOSE].sum(axis=0)
 
     def clean(self) -> float:
         """Clean it (a stump on sandpaper, a finger on a rag): it carries
