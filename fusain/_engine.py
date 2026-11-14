@@ -61,7 +61,10 @@ JITTER = 0.3
 #: half a pixel) at the rim.
 RIM = 0.35
 #: A pencil held on its side marks with the side of its lead: at full tilt
-#: the mark is this many times wider than the point's, no more.
+#: the mark is as wide as the length of lead that lies on the paper. For the
+#: exposed lead of a sharpened pencil that is this many times its point; a
+#: medium says its own (:attr:`fusain.Medium.side`), and a stick in the hand
+#: can give the length in pixels.
 SIDE = 5.0
 #: Its weight is then spread over more paper: the share of its reach into
 #: the tooth it loses at full tilt, and how much more of the tip (the share
@@ -511,9 +514,10 @@ def lay_stroke(
     ``tip`` is [the width of its flat, the full width of the lead (the flat
     never gets wider), how fast it wears (:data:`WEAR`, or 0 for a tip that
     keeps its width), the volume it has worn since it was sharpened, how many
-    times wider than its flat it marks (1 for a point, more on its side), its
-    tilt (0..1)]. It is an ellipse, as long along the stroke as its flat is
-    wide.
+    the length of its side in pixels (what it marks across the stroke held
+    flat), its tilt (0..1)]. Its mark is an ellipse, as long along the stroke
+    as its flat is wide, and across it as wide as the flat, and the share
+    ``tilt`` of what its side adds to that.
 
     ``medium`` is [scattering per unit volume, softness, binding, the share
     of wax in it, its sheen] (its absorption per band is ``k``) and ``paper`` is
@@ -534,7 +538,7 @@ def lay_stroke(
     dragged off the sheet.
     """
     height, width = tooth.shape
-    flat, lead, wear, worn, spread, tilt = (
+    flat, lead, wear, worn, side, tilt = (
         tip[0],
         tip[1],
         tip[2],
@@ -570,7 +574,8 @@ def lay_stroke(
     lying = 0.0  # what the pass leaves lying on the sheet, to settle
     # where the tip last bore, and how wide it was there
     at_x, at_y, at_tx, at_ty = xs[0], ys[0], 1.0, 0.0
-    wide, long = 0.5 * flat * spread + 0.5, 0.5 * flat + 0.5
+    wide = 0.5 * (flat + max(side - flat, 0.0) * tilt) + 0.5
+    long = 0.5 * flat + 0.5
     for i in range(xs.shape[0]):
         pressure = pressures[i]
         step = steps[i]
@@ -581,7 +586,8 @@ def lay_stroke(
         at_x, at_y, at_tx, at_ty = x, y, tx, ty
         if wear > 0.0:  # the flat grows with what the tip has laid
             flat = min((start + wear * max(worn + total, 0.0)) ** (1.0 / 3.0), lead)
-        wide, long = 0.5 * flat * spread + 0.5, 0.5 * flat + 0.5
+        wide = 0.5 * (flat + max(side - flat, 0.0) * tilt) + 0.5
+        long = 0.5 * flat + 0.5
         bound = max(wide, long)
         reached = max(reached, bound)
         # a pixel on the path of the tip's centre gets one pass's worth in

@@ -245,6 +245,9 @@ pencil = Stick(pencils.B6, width=2)      # a sharp point, which wears as it draw
 sheet.stroke([(100, 400), (700, 420)], pencil)
 print(pencil.width)                       # wider than 2 now
 pencil.sharpen()
+
+vine = Stick(charcoal.VINE, width=6, lead=6, side=90)   # a piece of charcoal 90 pixels long
+sheet.stroke([(100, 500), (700, 500)], vine, tilt=1)    # laid flat: a band 90 pixels wide
 ```
 
 ![A point that wears](examples/output/tips.png)

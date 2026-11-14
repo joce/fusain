@@ -6,6 +6,18 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- The side of a stick is as long as the stick. A `Medium` says how many
+  times its point the side of a stick of it marks held flat (`side`: 5 for
+  pencils, as before, and for soft pastel; 6 for compressed charcoal and
+  hard pastel; 8 for vine charcoal), and a `Stick` can give the length of
+  its side in pixels (`Stick(charcoal.VINE, width=6, lead=6, side=90)` lays
+  a band 90 pixels wide at `tilt=1`). By default a stick's side is its
+  medium's `side` times its sharp point, and no longer grows as the point
+  wears; part way over, a stick marks its tip and that share of what the
+  side adds. `repr(Stick)` shows the side.
+
 ### Changed
 
 - `Sheet.rub` carries what the tool picks up from one pass to the next, and

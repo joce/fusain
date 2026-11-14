@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, replace
 
 from murex import Pigment
+
+from ._engine import SIDE
 
 
 @dataclass(frozen=True)
@@ -35,6 +38,13 @@ class Medium:
         0..1: how much of it mirrors the light once the paper holds it, as
         graphite does. A thick layer of it shines under a lamp, so that it
         never looks quite black. Charcoal, pastel and wax have none.
+    side:
+        How many times as wide as its point the side of a stick of it
+        marks, held flat (at full tilt): what length of it lies on the
+        paper. The exposed lead of a sharpened pencil marks a band five
+        times its point (the default); a piece of charcoal or a pastel laid
+        flat marks a band as wide as the piece is long. A
+        :class:`fusain.Stick` can give the length in pixels instead.
     name:
         Optional label.
     """
@@ -44,6 +54,7 @@ class Medium:
     binding: float = 0.85
     wax: float = 0.0
     sheen: float = 0.0
+    side: float = SIDE
     name: str = ""
 
     def __post_init__(self):
@@ -54,6 +65,10 @@ class Medium:
                 raise ValueError(
                     f"{field} must be between 0 and 1, got {getattr(self, field)!r}"
                 )
+        if not (math.isfinite(self.side) and self.side >= 1.0):
+            raise ValueError(
+                f"side must be at least 1 (as wide as the point), got {self.side!r}"
+            )
 
     def with_(self, **changes) -> Medium:
         """A copy with some fields changed."""

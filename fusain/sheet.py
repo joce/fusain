@@ -230,8 +230,9 @@ class Sheet:
         has its own, so it takes none). A pencil point is a few times wider
         than the paper's grain; one narrower than the grain draws a dotted
         line. ``tilt`` (0 to 1) is how far over the stick is held: 0 draws
-        with its point, 1 with its side, which marks a band several times
-        wider than the point, across the stroke: broader, lighter and
+        with its point, 1 with its side, which marks a band across the
+        stroke as wide as the side is long (the medium's ``side`` times the
+        width of the tip; a stick's own ``side``): broader, lighter and
         grainier, with soft edges.
 
         ``medium`` can also be a :class:`fusain.Pen`, a ballpoint: it has its
@@ -257,10 +258,10 @@ class Sheet:
             if width is not None:
                 raise TypeError("a Stick has its own width: give none with it")
             medium, tip = stick.medium, (stick.point, stick.lead, eng.WEAR, stick.worn)
-            width = stick.width
+            width, side = stick.width, stick.side
         elif isinstance(medium, Medium):
             width = 4.0 if width is None else width
-            tip = (width, width, 0.0, 0.0)
+            tip, side = (width, width, 0.0, 0.0), medium.side * width
         else:
             raise TypeError(
                 "medium must be a Medium, such as pencils.HB, a Stick or a Pen: "
@@ -284,7 +285,7 @@ class Sheet:
                 ys,
                 bearing,
                 steps,
-                np.array([*tip, _spread(tilt), tilt], dtype=np.float64),
+                np.array([*tip, side, tilt], dtype=np.float64),
                 np.ascontiguousarray(pigment.K, dtype=np.float64),
                 np.array(
                     [
@@ -663,7 +664,7 @@ class Sheet:
         if not 0.0 <= tilt <= 1.0:
             raise ValueError(f"tilt must be between 0 (point) and 1 (side): {tilt!r}")
         outline = hatching.as_outline(area)
-        broad = width * _spread(tilt)  # how wide a stroke's mark is
+        broad = _breadth(medium, width, tilt)  # how wide a stroke's mark is
         apart = PEN_SPACING if isinstance(medium, Pen) else hatching.SPACING
         gap = apart * broad if spacing is None else spacing
         _check_hatching(width, gap, angle, hand)
@@ -707,9 +708,15 @@ def _in_hand(tool: Tool | Smudger, width: float | None) -> Smudger:
     return Smudger(tool, width)
 
 
-def _spread(tilt: float) -> float:
-    """How many times wider than its point a stick marks at this tilt."""
-    return 1.0 + (eng.SIDE - 1.0) * float(tilt)
+def _breadth(medium: Medium | Stick | Pen, width: float, tilt: float) -> float:
+    """How wide a tip ``width`` wide of ``medium`` marks at this tilt."""
+    if isinstance(medium, Stick):
+        side = medium.side
+    elif isinstance(medium, Medium):
+        side = medium.side * width
+    else:
+        return width  # (a pen has no side)
+    return width + max(side - width, 0.0) * float(tilt)
 
 
 def _size(name: str, value) -> int:

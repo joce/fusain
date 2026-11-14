@@ -139,9 +139,15 @@ spectra.
 A tool is a tip plus, usually, a medium.
 
 - **Tilt** (built). A stick held on its side marks with the side of its lead:
-  an ellipse across the stroke, up to five times wider than the point, whose
-  weight is spread over more paper, so the mark is lighter, grainier and soft
-  at the edges.
+  an ellipse across the stroke, as wide as the length of the side that lies
+  on the paper, whose weight is spread over more paper, so the mark is
+  lighter, grainier and soft at the edges. How long the side is depends on
+  the stick: the lead a pencil's sharpening bared is about five times its
+  point, a piece of vine charcoal laid flat eight times its end. A medium
+  says it as a multiple of the point (`Medium.side`), and a `Stick` can give
+  it in pixels (`Stick(charcoal.VINE, width=6, lead=6, side=90)`), for a
+  band as wide as the stick is long. Part way over, the mark is the point
+  and that share of what the side adds.
 - **Wear** (built). A `Stick` is a medium in the hand, with the state of its
   tip. A point is a cone, which loses volume as the cube of where it is cut:
   the cube of the flat's width grows with the volume the tip has laid, up to

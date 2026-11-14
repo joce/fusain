@@ -85,9 +85,8 @@ CAST = np.array([-TO_SUN[0], 0.0, -TO_SUN[2]]) / TO_SUN[1]
 #: What is seen at a pixel that no building covers.
 SKY, ROAD, WALK = 0, 1, 2
 GROUND = (ROAD, WALK)
-#: The widest mark of the end of a stick, in pixels, and the narrowest; the
-#: side of a stick marks a band this many times wider than its end.
-STICK, THIN, SIDE = 13.0, 2.2, 5.0
+#: The widest mark of the end of a stick, in pixels, and the narrowest.
+STICK, THIN = 13.0, 2.2
 #: Points lit at a time (bounds the working memory).
 CHUNK = 8000
 
@@ -1022,8 +1021,8 @@ class Easel:
         press = np.broadcast_to(np.asarray(press, dtype=np.float64), (len(path),))
         if press.max() < 0.06:
             return
-        tip = float(max(width, THIN) / (1.0 + (SIDE - 1.0) * tilt))
         chalk = stick(colour, hard)
+        tip = float(max(width, THIN) / (1.0 + (chalk.side - 1.0) * tilt))
         self.sheet.stroke(Polyline(path), chalk, press.tolist(), tip, tilt)
 
     def rail(

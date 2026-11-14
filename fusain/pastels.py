@@ -17,7 +17,8 @@ from .medium import Medium
 
 def soft(color: ColorLike, name: str | None = None) -> Medium:
     """A soft pastel of that colour: crumbly, it fills the tooth fast and
-    leaves almost nothing but dust."""
+    leaves almost nothing but dust. Laid flat, a half stick marks a band
+    five times as wide as its end."""
     pigment = Pigment(color, name=name)
     return Medium(
         pigment, softness=0.95, binding=0.15, name=name or f"{pigment.hex} pastel"
@@ -26,10 +27,12 @@ def soft(color: ColorLike, name: str | None = None) -> Medium:
 
 def hard(color: ColorLike, name: str | None = None) -> Medium:
     """A hard pastel of that colour: more gum in it, for lines and first
-    layers. It lays less, and more of it stays where it is put."""
+    layers. It lays less, and more of it stays where it is put. A thin
+    square stick: laid flat, it marks a band six times as wide as its
+    end."""
     pigment = Pigment(color, name=name)
     label = name or f"{pigment.hex} hard pastel"
-    return Medium(pigment, softness=0.6, binding=0.35, name=label)
+    return Medium(pigment, softness=0.6, binding=0.35, side=6.0, name=label)
 
 
 def oil(color: ColorLike, name: str | None = None) -> Medium:
