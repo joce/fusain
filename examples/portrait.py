@@ -92,15 +92,15 @@ def profile(knots):
 #: each height, its half-width, the depth of its widest point and how far it
 #: reaches out in front of that.
 FACE_WIDE = profile(
-    [(-0.45, 0.0), (-0.425, 0.08), (-0.39, 0.13), (-0.33, 0.195), (-0.25, 0.25),
-     (-0.16, 0.278), (-0.05, 0.295), (0.08, 0.29), (0.2, 0.26)]
+    [(-0.44, 0.0), (-0.415, 0.075), (-0.38, 0.12), (-0.32, 0.18), (-0.25, 0.232),
+     (-0.16, 0.27), (-0.05, 0.29), (0.08, 0.29), (0.2, 0.26)]
 )
 FACE_AT = profile(
-    [(-0.46, 0.17), (-0.41, 0.15), (-0.33, 0.10), (-0.25, 0.04), (-0.16, 0.02),
+    [(-0.45, 0.17), (-0.40, 0.15), (-0.32, 0.10), (-0.25, 0.04), (-0.16, 0.02),
      (-0.05, 0.02), (0.08, 0.02), (0.2, 0.0)]
 )
 FACE_FRONT = profile(
-    [(-0.46, 0.03), (-0.435, 0.10), (-0.40, 0.14), (-0.35, 0.17), (-0.29, 0.22),
+    [(-0.45, 0.03), (-0.425, 0.10), (-0.39, 0.14), (-0.34, 0.17), (-0.29, 0.22),
      (-0.24, 0.26), (-0.16, 0.28), (-0.05, 0.285), (0.08, 0.30), (0.2, 0.30)]
 )
 
@@ -114,7 +114,7 @@ def face_sdf(p):
     n = 2.3
     g = (np.abs(p[:, 0] / a) ** n + np.abs((p[:, 2] - c) / b) ** n) ** (1.0 / n)
     d = (g - 1.0) * np.minimum(a, b)
-    d = smax(d, -0.455 - y, 0.02)
+    d = smax(d, -0.445 - y, 0.02)
     return smax(d, y - 0.2, 0.08)
 
 
@@ -125,10 +125,10 @@ def head_sdf(p):
     d = smin(d, face_sdf(p), 0.06)
     # cheekbones and the chin
     d = smin(d, ellipsoid(q, (0.165, -0.05, 0.15), (0.09, 0.06, 0.10)), 0.08)
-    d = smin(d, ellipsoid(p, (0.0, -0.385, 0.185), (0.065, 0.05, 0.07)), 0.06)
+    d = smin(d, ellipsoid(p, (0.0, -0.375, 0.185), (0.06, 0.05, 0.07)), 0.06)
     # brow ridge, sockets, eyeballs and lids
     d = smin(d, ellipsoid(q, (0.11, 0.07, 0.25), (0.08, 0.03, 0.05)), 0.05)
-    d = smax(d, -ellipsoid(q, (EYE[0], 0.0, 0.29), (0.068, 0.046, 0.05)), 0.03)
+    d = smax(d, -ellipsoid(q, (EYE[0], 0.0, 0.29), (0.072, 0.048, 0.05)), 0.03)
     d = smin(d, sphere(q, EYE, EYE_R), 0.01)
     d = smin(d, lids_sdf(q), 0.008)
     # nose
@@ -143,15 +143,15 @@ def head_sdf(p):
 
 
 #: The centre of the right eyeball (mirrored for the left) and its radius.
-EYE = (0.12, 0.0, 0.216)
-EYE_R = 0.066
+EYE = (0.122, 0.0, 0.212)
+EYE_R = 0.07
 
 
 #: The opening of the lids, as angles on the eyeball (radians) seen from the
 #: front of the head: the inner and outer corners, and (as knots over the
 #: angle across) the heights of the upper and lower lids.
 CORNERS = (-1.0, 1.15)
-UPPER = ((-1.0, -0.02), (-0.6, 0.22), (-0.1, 0.31), (0.45, 0.31), (0.9, 0.22), (1.15, 0.1))
+UPPER = ((-1.0, -0.02), (-0.6, 0.24), (-0.1, 0.33), (0.45, 0.32), (0.9, 0.22), (1.15, 0.1))
 LOWER = ((-1.0, -0.02), (-0.6, -0.26), (0.0, -0.36), (0.55, -0.3), (0.95, -0.12), (1.15, 0.1))
 LID = 0.006
 
@@ -182,7 +182,7 @@ def lids_sdf(q):
 #: The hair: where the fringe ends (its edge rises toward the temples), how
 #: far the face shows between the locks either side of it and where the ends
 #: of the hair hang.
-FRINGE = (0.10, 0.025)
+FRINGE = (0.105, 0.025)
 OPENING = profile([(-0.7, 0.26), (-0.4, 0.245), (-0.1, 0.235), (0.1, 0.235), (0.3, 0.2)])
 HAIR_WIDE = profile([(-0.7, 0.29), (-0.6, 0.335), (-0.45, 0.35), (-0.2, 0.35), (0.1, 0.345), (0.3, 0.34)])
 
@@ -192,14 +192,14 @@ def hair_sdf(p):
     x, y, z = p[:, 0], p[:, 1], p[:, 2]
     top = ellipsoid(p, (0.0, 0.11, -0.09), (0.345, 0.43, 0.44))
     a = HAIR_WIDE(y)
-    g = np.sqrt((x / a) ** 2 + ((z + 0.08) / 0.46) ** 2)
-    curtain = (g - 1.0) * np.minimum(a, 0.46)
+    g = np.sqrt((x / a) ** 2 + ((z + 0.09) / 0.45) ** 2)
+    curtain = (g - 1.0) * np.minimum(a, 0.45)
     phi = np.arctan2(x, z + 0.08)
     ends = ENDS - 0.04 * z / 0.4 + 0.03 * (x / 0.4) ** 2 + 0.025 * np.sin(7 * phi + 1.0)
     ends += 0.015 * np.sin(17 * phi)
     curtain = smax(curtain, ends - y, 0.03)
-    curtain = smax(curtain, y - 0.15, 0.05)
-    d = smin(top, curtain, 0.06)
+    curtain = smax(curtain, y - 0.2, 0.1)
+    d = smin(top, curtain, 0.08)
     edge = fringe_edge(x)
     face = smax(np.abs(x) - OPENING(y), -0.02 - z, 0.03)
     face = smin(face, 0.07 - z, 0.03)
@@ -267,6 +267,7 @@ class Model:
     occlusion: np.ndarray
     shadow: np.ndarray
     under: np.ndarray
+    behind: np.ndarray
 
 
 def grid_coords():
@@ -282,6 +283,11 @@ def grid_coords():
 def skin_sdf(c):
     """Distance to the head alone, as if it had no hair."""
     return head_sdf(to_head(c)), None
+
+
+def torso_sdf(c):
+    """Distance to the body alone."""
+    return body_sdf(to_body(c)), None
 
 
 def march(x, y, sdf=scene_sdf):
@@ -357,7 +363,7 @@ def build_model() -> Model:
     head = idx[part[idx] != 1]
     sh[head] = soft_shadow(c[head], n[head])
     body = idx[part[idx] == 1]
-    sh[body] = soft_shadow(c[body], n[body], hair=False, spread=0.3)
+    sh[body] = 0.4 + 0.6 * soft_shadow(c[body], n[body], hair=False, spread=0.6)
     lam = np.clip((n @ LIGHT + 0.25) / 1.25, 0.0, 1.0)
     light = lam * (0.35 + 0.65 * sh)
     # the skin under the hair, near where the hair shows
@@ -366,6 +372,10 @@ def build_model() -> Model:
     zu, hu = march(xf[idx], yf[idx], skin_sdf)
     cu = np.stack([xf[idx], yf[idx], zu], axis=-1)
     under[idx[hu]] = to_head(cu[hu])
+    behind = np.full(c.shape, np.nan)
+    zb, hb = march(xf[idx], yf[idx], torso_sdf)
+    cb = np.stack([xf[idx], yf[idx], zb], axis=-1)
+    behind[idx[hb]] = to_body(cb[hb])
     return Model(
         hit.reshape(shape),
         part.reshape(shape),
@@ -377,6 +387,7 @@ def build_model() -> Model:
         ao.reshape(shape),
         sh.reshape(shape),
         under.reshape(*shape, 3),
+        behind.reshape(*shape, 3),
     )
 
 
@@ -588,7 +599,7 @@ class Layer:
     offset: int
     threshold: float
     ramp: float = 0.25
-    firm: float = 0.26
+    firm: float = 0.3
     lift: float = 0.45
 
 
@@ -720,6 +731,7 @@ class Maps:
     hair: np.ndarray
     cloth: np.ndarray
     skin: np.ndarray
+    body: np.ndarray
     dark: np.ndarray
     red: np.ndarray
     blue: np.ndarray
@@ -742,11 +754,19 @@ def lip_mask(model: Model) -> np.ndarray:
     return inside(h[..., :2], outline) & (h[..., 2] > 0.2) & (model.part == 0) & model.hit
 
 
+def body_seen(model: Model):
+    """The body-space point of the body at each cell, whether seen or behind
+    the hair, and where there is one."""
+    body = np.where((model.part == 2)[..., None], model.behind, model.body)
+    there = model.hit & ((model.part == 1) | np.isfinite(model.behind[..., 0]))
+    return np.nan_to_num(body), there
+
+
 def cloth_mask(model: Model) -> np.ndarray:
     """The top she wears: below a wide, low neckline."""
-    b = model.body
+    b, there = body_seen(model)
     neckline = -0.74 + 0.35 * (b[..., 0] / 0.3) ** 2
-    return model.hit & (model.part == 1) & (b[..., 1] < neckline)
+    return there & (b[..., 1] < neckline)
 
 
 def head_extras(h: np.ndarray):
@@ -754,7 +774,7 @@ def head_extras(h: np.ndarray):
     cheeks, nose, chin and lids (red), the cool of the sockets and temples
     (blue), and where the face is kept warm and open (round the mouth)."""
     q = mirrored(h)
-    flush = 0.45 * blob(q, (0.15, -0.14, 0.22), (0.075, 0.06, 0.2))
+    flush = 0.6 * blob(q, (0.15, -0.13, 0.22), (0.085, 0.07, 0.2))
     flush += 0.3 * blob(h, (0.0, -0.16, 0.36), (0.035, 0.03, 0.1))
     flush += 0.25 * blob(h, (0.0, -0.40, 0.25), (0.05, 0.035, 0.1))
     sockets = blob(q, (EYE[0] - 0.01, 0.025, 0.28), (0.075, 0.045, 0.2))
@@ -770,7 +790,7 @@ def veiled(model: Model) -> np.ndarray:
     u = model.under
     with np.errstate(invalid="ignore"):
         edge = fringe_edge(u[..., 0])
-        near = (u[..., 1] < edge + 0.09) & (np.abs(u[..., 0]) < 0.26) & (u[..., 2] > 0.05)
+        near = (u[..., 1] < edge + 0.12) & (np.abs(u[..., 0]) < 0.32) & (u[..., 2] > 0.0)
     return model.hit & (model.part == 2) & np.isfinite(u[..., 0]) & near
 
 
@@ -780,23 +800,26 @@ def design(model: Model) -> Maps:
     eyes, lips, cloth, veil = eye_mask(model), lip_mask(model), cloth_mask(model), veiled(model)
     face = (hit & (part == 0) & ~eyes & ~lips) | veil
     skin = np.where(veil[..., None], model.under, model.head)
-    neck = hit & (part == 1) & ~cloth
+    body, there = body_seen(model)
+    neck = there & ~cloth
     hair = hit & (part == 2)
     dark = skin_dark(model)
     below = skin[..., 1] - fringe_edge(np.clip(skin[..., 0], -0.3, 0.3))
     shade = filters.smoothstep(-0.05, 0.0, below) * (skin[..., 2] > 0.1)
-    dark = np.where(face, np.maximum(dark, 0.75 * shade), dark)
-    dark = np.where(veil, 0.85, dark)
+    dark = np.where(face, np.maximum(dark, 0.6 * shade), dark)
+    tuck = filters.box_blur(hair.astype(float), 8) * face * (np.abs(skin[..., 0]) > 0.15)
+    dark = np.minimum(dark + 0.8 * tuck, 1.0)
+    dark = np.where(veil, 0.5, np.where(hair & neck, 0.85, dark))
     flush, cool, mouth = head_extras(skin)
     on_head = face.astype(float)
     half = LIGHT + np.array([0.0, 0.0, 1.0])
     half /= np.linalg.norm(half)
-    gleam = np.clip(model.normal @ half, 0.0, 1.0) ** 40 * model.shadow
+    gleam = np.clip(model.normal @ half, 0.0, 1.0) ** 40 * model.shadow * on_head
     red = (0.24 + 0.76 * dark + flush * on_head) * (1.0 - 0.9 * gleam)
-    blue = filters.smoothstep(0.42, 1.0, dark) + (cool + 0.4 * shade) * on_head
+    blue = filters.smoothstep(0.42, 1.0, dark) + (cool + 0.4 * shade + tuck) * on_head
     blue *= 1.0 - 0.75 * mouth * on_head
     black = filters.smoothstep(0.8, 1.05, dark) * (1.0 - 0.9 * mouth * on_head)
-    return Maps(face, eyes, lips, neck, hair, cloth, skin, dark, red, blue, black)
+    return Maps(face, eyes, lips, neck, hair, cloth, skin, body, dark, red, blue, black)
 
 
 # ----------------------------------------------------------------------
@@ -915,12 +938,12 @@ def iris_strokes(d: Drawing, side: int) -> None:
     )
     for pen, radius, angle, gap, inner in sets:
         for pts, keep in disc_chords(side, radius, angle + d.rng.normal(0, 0.1), gap, inner):
-            dirs = (pts - centre) / EYE_R
+            dirs = (pts - centre) / np.linalg.norm(pts - centre, axis=-1, keepdims=True)
             top = (dirs @ v) / max(np.sin(IRIS), 1e-6)
             firm = 0.4 + 0.25 * np.clip(top, 0, 1) if pen is BLACK else 0.45
             if radius == PUPIL:
                 firm = 0.9
-            ok = in_opening(pts) & (np.arccos(np.clip(dirs @ shine, -1, 1)) > 0.065) & keep
+            ok = in_opening(pts) & (np.arccos(np.clip(dirs @ shine, -1, 1)) > 0.07) & keep
             press = firm * np.ones(len(pts))
             for a0, b0 in runs_of(ok):
                 if b0 - a0 >= 2:
@@ -994,7 +1017,7 @@ def lashes(d: Drawing, side: int) -> None:
 
 #: The brow's spine (head-space x, y) from its head by the nose to its tail,
 #: for the right (far) brow; the left one is its mirror.
-BROW = ((0.035, 0.07), (0.07, 0.087), (0.12, 0.097), (0.165, 0.09), (0.205, 0.068))
+BROW = ((0.035, 0.064), (0.07, 0.08), (0.12, 0.088), (0.165, 0.082), (0.205, 0.062))
 
 
 def brow(d: Drawing, side: int) -> None:
@@ -1030,7 +1053,7 @@ def nose(d: Drawing) -> None:
     bridge = on_head(curve(((0.02, 0.02), (0.021, -0.06), (0.026, -0.12), (0.03, -0.15)), 16))
     line(d, bridge, BLUE, swell(0.3, 0.7), 0.01)
     line(d, bridge, RED, swell(0.3, 0.6), 0.01)
-    wing = ((-0.052, -0.155), (-0.055, -0.168), (-0.046, -0.18), (-0.032, -0.185))
+    wing = ((-0.054, -0.163), (-0.052, -0.174), (-0.044, -0.182), (-0.032, -0.186))
     for pen, firm in ((RED, 0.5), (BLUE, 0.35), (RED, 0.4)):
         line(d, on_head(curve(wing, 12), 0.002), pen, swell(firm, 0.4), 0.02)
     tip = ((0.032, -0.155), (0.02, -0.176), (0.0, -0.181), (-0.014, -0.179))
@@ -1119,8 +1142,10 @@ def hair_frame(h: np.ndarray):
     its fall each is (0 at the crown, 1 at the ends)."""
     x, y, z = h[..., 0], h[..., 1], h[..., 2]
     phi = np.arctan2(x - CROWN_AXIS[0], z - CROWN_AXIS[1])
+    edge = fringe_edge(np.clip(x, -0.3, 0.3))
     front = filters.smoothstep(0.3, 0.2, np.abs(x)) * filters.smoothstep(-0.05, 0.1, z)
-    end = front * fringe_edge(np.clip(x, -0.3, 0.3)) + (1 - front) * ENDS
+    front *= y > edge - 0.03
+    end = front * edge + (1 - front) * ENDS
     t = np.clip((CROWN_TOP - y) / (CROWN_TOP - end), 0.0, 1.0)
     return phi, t
 
@@ -1140,7 +1165,7 @@ def make_locks(rng) -> Locks:
     bounds = bounds[bounds < np.pi]
     bounds = np.append(bounds, np.pi)
     n = len(bounds) - 1
-    return Locks(bounds, rng.uniform(-0.12, 0.12, n))
+    return Locks(bounds, rng.uniform(-0.18, 0.15, n))
 
 
 def strand_field(phi, t, locks: Locks, ends_high):
@@ -1151,7 +1176,7 @@ def strand_field(phi, t, locks: Locks, ends_high):
     k = np.clip(np.searchsorted(locks.bounds, phi) - 1, 0, len(locks.tone) - 1)
     lo, hi = locks.bounds[k], locks.bounds[k + 1]
     centre = 0.5 * (lo + hi)
-    tip = np.where(ends_high, 0.75, 0.9)
+    tip = np.where(ends_high, 0.8, 0.9)
     gather = 1.0 + 3.0 * np.clip((t - tip) / (1.0 - tip), 0.0, 1.0) ** 1.4
     sway = 0.05 * np.sin(1.3 * np.pi * t + 2.0 * phi) + 0.025 * np.sin(2.9 * np.pi * t + 5.0 * phi)
     u = (phi - centre) / (0.5 * (hi - lo))
@@ -1166,7 +1191,7 @@ def hair_tangent(h: np.ndarray) -> np.ndarray:
     return v / np.maximum(np.linalg.norm(v, axis=-1, keepdims=True), 1e-9)
 
 
-def hair_dark(model: Model, u: np.ndarray) -> np.ndarray:
+def hair_dark(model: Model, u: np.ndarray, t: np.ndarray) -> np.ndarray:
     """How dark the hair is wanted: dark hair, darkest in the hollows between
     locks and away from the light, with a band of shine where the strands
     cross the light's reflection."""
@@ -1180,8 +1205,13 @@ def hair_dark(model: Model, u: np.ndarray) -> np.ndarray:
     across = np.sqrt(np.clip(1.0 - (tang @ half) ** 2, 0.0, 1.0))
     lit = np.clip((n @ (LIGHT @ HEAD) + 0.3) / 1.3, 0, 1) * (0.3 + 0.7 * model.shadow)
     shine = across**500 * lit * (1.0 - 0.6 * np.abs(u) ** 2)
-    dark = 0.62 + 0.4 * (1.0 - lit) + 0.35 * np.abs(u) ** 2 + 0.4 * (1.0 - model.occlusion)
-    return np.clip(dark - 0.9 * shine, 0.0, 1.2)
+    shine += np.exp(-(((n[..., 1] - 0.62) / 0.13) ** 2)) * lit * (1.0 - 0.5 * np.abs(u))
+    h = model.head
+    edge = fringe_edge(np.clip(h[..., 0], -0.3, 0.3))
+    front = (np.abs(h[..., 0]) < 0.3) & (h[..., 2] > 0.0) & (h[..., 1] > -0.1)
+    fine = filters.smoothstep(edge + 0.09, edge + 0.04, h[..., 1]) * front
+    dark = 0.78 + 0.2 * (1.0 - lit) + 0.35 * np.abs(u) ** 2 + 0.4 * (1.0 - model.occlusion)
+    return np.clip(dark - 0.9 * shine, 0.0, 1.2) * (1.0 - fine) - 0.5 * fine
 
 
 #: The hair's strokes: (which of every six strands, ink, how dark the hair
@@ -1196,27 +1226,79 @@ HAIR_LAYERS = (
 )
 
 
-def draw_hair(d: Drawing, maps: Maps, locks: Locks) -> None:
-    """The hair in long strokes down each lock, black among red."""
+def hair_grid(d: Drawing, maps: Maps, locks: Locks, split: int, gap: float):
+    """The field whose level lines are the strands, NaN where none is
+    drawn, and how dark each place of the hair is wanted. The inside of the
+    far curtain, seen behind the neck, hangs straight and is in shadow."""
     m = d.model
     phi, t = hair_frame(m.head)
     field, u, k, spread = strand_field(phi, t, locks, m.head[..., 1] > -0.1)
-    dark = np.where(maps.hair, hair_dark(m, u) + locks.tone[k], 0.0)
-    gap, split = 12.0, 6
-    radius = 0.35 * SCALE
+    dark = np.where(maps.hair, hair_dark(m, u, t) + locks.tone[k], 0.0)
+    field = field * 0.35 * SCALE / gap * split
+    n = m.normal @ HEAD
+    out = m.head[..., [0, 2]] - np.array(CROWN_AXIS)
+    inner = maps.hair & (np.sum(n[..., [0, 2]] * out, -1) < -0.02) & (m.head[..., 1] < 0.0)
+    gx = np.arange(m.hit.shape[1])[None, :] * COARSE + 0.0 * m.head[..., 1]
+    field = np.where(inner, 5000.0 + (gx + 6.0 * np.sin(m.head[..., 1] * 9.0)) / gap * split, field)
+    dark = np.where(inner, 0.95 + 0.2 * np.abs(u), dark)
     seam = np.zeros(k.shape, bool)
     seam[:, 1:] |= k[:, 1:] != k[:, :-1]
     seam[1:, :] |= k[1:, :] != k[:-1, :]
     seam &= spread > 1.02
-    facing = (m.normal @ HEAD)[..., 1] > -0.45
-    shown = maps.hair & ~seam & (spread < 1.0) & facing
-    grid = np.where(shown, field * radius / gap * split, np.nan)
+    border = near(inner, 1) * near(~inner, 1) > 0
+    facing = n[..., 1] > -0.4
+    shown = maps.hair & ~seam & ~border & ((spread < 1.0) | inner) & facing
+    return np.where(shown, field, np.nan), dark
+
+
+def draw_hair(d: Drawing, maps: Maps, locks: Locks) -> None:
+    """The hair in long strokes down each lock, black among red."""
+    split = 6
+    grid, dark = hair_grid(d, maps, locks, split, 12.0)
     pens_ = {"red": RED, "black": BLACK, "blue": BLUE}
     lines = level_lines(grid, jump=1e9)
     for offset, ink, threshold in HAIR_LAYERS:
         firm = 0.5 if ink == "black" else 0.42
         layer = Layer(pens_[ink], 0, split, offset, threshold, 0.2, firm, 0.12)
         d.hatch(lines, layer, dark, reach=420.0)
+
+
+def fringe_lock(d: Drawing, centre: float, half: float, dark: float) -> None:
+    """One lock of the fringe: a bundle of strokes from under the hair above
+    down over the forehead, drawing together into a few fine points at
+    about brow height."""
+    rng = d.rng
+    edge = float(fringe_edge(np.array([centre]))[0])
+    top = edge + 0.15
+    count = max(int(2 * half / 0.003), 3)
+    lean = rng.normal(0.0, 0.01)
+    tips = centre + half * np.sort(rng.uniform(-0.55, 0.55, int(rng.integers(2, 4))))
+    for k in range(count):
+        s = (k + rng.uniform(0.2, 0.8)) / count * 2.0 - 1.0
+        x0 = centre + half * s
+        tip = tips[np.argmin(np.abs(tips - x0))]
+        t = np.linspace(0.0, 1.0, 14)
+        x = x0 + (tip - x0) * t**3 + lean * t**2
+        end = edge - rng.uniform(-0.006, 0.014) + 0.012 * abs(s)
+        y = top + (end - top) * t
+        pts = on_head(np.stack([x, y], -1), 0.012 + 0.012 * (1.0 - t))
+        pen = BLACK if rng.random() < 0.5 + 0.4 * dark else RED
+        firm = rng.uniform(0.5, 0.7) * (0.75 + 0.4 * dark)
+        press = firm * np.clip(t / 0.25, 0.0, 1.0) * np.clip((1.0 - t) / 0.3, 0.05, 1.0) ** 0.8
+        line(d, pts, pen, press, 0.06)
+
+
+def fringe(d: Drawing) -> None:
+    """The fringe as separate locks across the brow, with slivers of
+    forehead between them; darker on the side away from the light."""
+    rng = d.rng
+    x = -0.3
+    while x < 0.3:
+        half = rng.uniform(0.024, 0.04)
+        centre = x + half
+        dark = float(np.clip(0.4 + 1.2 * centre, 0.0, 1.0))
+        fringe_lock(d, centre, half, dark)
+        x = centre + half + rng.uniform(-0.012, 0.003)
 
 
 def strays(d: Drawing, maps: Maps, count: int = 34) -> None:
@@ -1236,7 +1318,7 @@ def strays(d: Drawing, maps: Maps, count: int = 34) -> None:
             continue
         a = int(rng.integers(0, len(pts) - n))
         seg = pts[a : a + n]
-        if sample(ground, seg).min() < 0.5:
+        if sample(ground, seg).min() < 0.5 or seg[:, 1].mean() > CENTRE[1] - 60:
             continue
         out = seg - centre
         out /= np.linalg.norm(out, axis=-1, keepdims=True)
@@ -1266,6 +1348,9 @@ FACE_LAYERS = (
 #: the neck, down it, and across both.
 BODY_FAMILIES = ((0.0, 0.85, 0.5), (0.9, -0.2, 0.4), (-0.75, -0.5, 0.45))
 INKS = {"red": RED, "blue": BLUE, "black": BLACK}
+#: How much the depth of the face is exaggerated for its hatching, so that
+#: the lines bend more over its forms.
+RELIEF = 1.5
 
 
 def lay_layers(d: Drawing, families, layers, maps: Maps, reach: float) -> None:
@@ -1277,11 +1362,11 @@ def lay_layers(d: Drawing, families, layers, maps: Maps, reach: float) -> None:
 
 def draw_skin(d: Drawing, maps: Maps) -> None:
     """The face and the neck, hatched along the sections of their forms."""
-    skin = np.nan_to_num(maps.skin)
+    skin = np.nan_to_num(maps.skin) * np.array([1.0, 1.0, RELIEF])
     coords = smooth_within(skin, maps.face, 6)
     fams = [family_lines(coords, maps.face, n, 8.5, 4) for n in HEAD_FAMILIES]
     lay_layers(d, fams, FACE_LAYERS, maps, 110.0)
-    coords = smooth_within(d.model.body, maps.neck, 6)
+    coords = smooth_within(maps.body, maps.neck, 6)
     fams = [family_lines(coords, maps.neck, n, 7.5, 4) for n in BODY_FAMILIES]
     lay_layers(d, fams, FACE_LAYERS, maps, 130.0)
 
@@ -1290,14 +1375,17 @@ def cloth_dark(d: Drawing, maps: Maps) -> np.ndarray:
     """How dark the top is wanted: lit from the left, with folds, and fading
     out toward the bottom and the sides of the sheet."""
     m = d.model
-    b = m.body
+    b = maps.body
     lam = np.clip(m.normal @ LIGHT, -1.0, 1.0)
     lit = np.clip((lam + 0.3) / 1.3, 0.0, 1.0) * (0.35 + 0.65 * m.shadow)
     folds = 0.5 + 0.5 * np.sin(14.0 * (b[..., 0] * 0.8 - b[..., 1] * 0.6) + 3.0 * b[..., 0] ** 2)
     dark = 0.15 + 0.75 * (1.0 - lit) + 0.25 * folds**3
+    dark = np.where(maps.hair, 0.75, dark)
     gy, gx = np.mgrid[0 : m.hit.shape[0], 0 : m.hit.shape[1]] * COARSE
-    fade = filters.smoothstep(HEIGHT - 20, HEIGHT - 260, gy)
-    fade *= filters.smoothstep(0, 140, gx) * filters.smoothstep(WIDTH, WIDTH - 140, gx)
+    across = 50.0 * np.sin(gx * 0.011 + 1.0) + 25.0 * np.sin(gx * 0.029)
+    down = 40.0 * np.sin(gy * 0.013) + 20.0 * np.sin(gy * 0.037 + 2.0)
+    fade = filters.smoothstep(HEIGHT - 20, HEIGHT - 260, gy + across)
+    fade *= filters.smoothstep(20, 180, gx + down) * filters.smoothstep(WIDTH - 20, WIDTH - 180, gx - down)
     return np.where(maps.cloth, dark * fade, 0.0)
 
 
@@ -1324,7 +1412,7 @@ def draw_cloth(d: Drawing, maps: Maps) -> None:
     """The top, in blue: large sweeping arcs that follow the body under it,
     crossed into an open lattice and hatched again in the folds."""
     dark = cloth_dark(d, maps)
-    fams = cloth_lines(d.model.body, maps.cloth, 14.0, 2)
+    fams = cloth_lines(maps.body, maps.cloth, 14.0, 2)
     for family, offset, threshold in CLOTH_LAYERS:
         layer = Layer(BLUE_LINE, family, 2, offset, threshold, 0.3, 0.33)
         d.hatch(fams[family], layer, dark, 240.0)
@@ -1397,6 +1485,7 @@ def draw(model: Model, seed: int = 1911) -> Drawing:
     lips(d)
     draw_contours(d, maps)
     draw_hair(d, maps, make_locks(np.random.default_rng(seed)))
+    fringe(d)
     strays(d, maps)
     return d
 
