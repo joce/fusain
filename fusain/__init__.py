@@ -14,6 +14,7 @@ from .medium import Medium
 from .paper import Paper
 from .pens import Pen
 from .sheet import Sheet
+from .smudger import Smudger
 from .stick import Stick
 from .tools import Tool
 
@@ -22,6 +23,7 @@ __all__ = [
     "Paper",
     "Pen",
     "Sheet",
+    "Smudger",
     "Stick",
     "Tool",
     "__version__",

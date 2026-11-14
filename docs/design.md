@@ -121,6 +121,16 @@ A tool is a tip plus, usually, a medium.
   (carry `loose` along and press part of it in, and slide held graphite),
   kneaded eraser (lifts `loose`), hard eraser (also abrades `held`),
   burnisher.
+- **A tool in the hand** (built). A `Smudger` is to a `Tool` what a `Stick`
+  is to a medium: the tool as it is held, with what it carries, which it
+  keeps from one pass to the next until `clean()`. It lands with its load,
+  so once loaded it gives back about as much as it takes: a tone can be
+  rubbed again and again without wearing away, no pass leaves a pale dot
+  where it lands, and a stump loaded on a dark patch draws a pale tone on
+  bare paper (one load fades out over twenty or so of its widths). A bare
+  `Tool` is clean each time it is put to the paper and takes away what it
+  still carries; `Sheet.rub` keeps the load across its own passes either
+  way.
 - **Fixative** (built) acts on the whole sheet. It does not move the dust into
   `held`, which would mix a light pastel into the dark one under it: the dust
   stays in its two layers, and `fixed` records how much of each is set (it
@@ -178,8 +188,12 @@ smears, it also spreads the dust under it from grain to grain, within a few
 pixels: that is what evens a rubbed tone, and it goes faster than the
 pressing in. It presses some dust into the paper and pushes the dust on the
 high ground into the low, so `cover` rises and the white specks grey over. An eraser lays nothing back.
-What a tool still carries at the end of a pass is returned, so nothing is
-lost.
+What a tool carries is in three parts: what it has lifted, which it lays
+back at its own rate; the dust on its face, which it lays back within a few
+pixels; and the held graphite it is pushing along. All three stay on a tool
+in the hand (a `Smudger`) when it is lifted, and it lands with them; what a
+bare tool still carries at the end is counted and returned. Either way
+nothing is lost.
 
 These are numba kernels under the same rules as oilpaint's (no `fastmath`, no
 `parallel`), so a drawing repeats exactly. Their constants are in
@@ -272,7 +286,7 @@ heavy ink.
 ## Sketch of the API
 
 ```python
-from fusain import Sheet, papers, pencils, pastels, tools
+from fusain import Sheet, Smudger, papers, pencils, pastels, tools
 
 sheet = Sheet(1200, 800, paper=papers.CARTRIDGE, seed=1)
 sheet.stroke([(100, 300), (300, 220), (500, 320)], pencils.HB, pressure=0.4)
@@ -282,6 +296,10 @@ sheet.stroke(path, pastels.soft("#c0392b"), pressure=(0.2, 0.8), side=True)
 sheet.smudge(path, tools.STUMP)
 sheet.erase(path, tools.KNEADED)
 sheet.rub(area, tools.FINGER)        # a whole area, to and fro
+stump = Smudger(tools.STUMP)         # in the hand: it keeps what it picks up
+sheet.rub(area, stump)
+sheet.smudge(path, stump)            # loaded, it tones bare paper
+stump.clean()
 sheet.fix()
 sheet.save("drawing.png")
 ```

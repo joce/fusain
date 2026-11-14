@@ -49,6 +49,7 @@ def test_only_the_area_is_rubbed():
 
 
 def test_the_pressure_may_be_a_map_and_the_tool_is_lifted_where_it_is_nothing():
+    # (and it keeps what it carries while it is lifted)
     sheet = Sheet(300, 200, paper=papers.CARTRIDGE, seed=1)
     laid = sheet.shade((30, 30, 200, 170), charcoal.VINE, 0.6, 9)
     before = sheet.pigment().copy()
@@ -62,8 +63,9 @@ def test_the_pressure_may_be_a_map_and_the_tool_is_lifted_where_it_is_nothing():
     after = sheet.pigment()
     assert not np.array_equal(before[:, 40:90], after[:, 40:90])
     assert np.array_equal(before[:, 115:230], after[:, 115:230])
-    # lifted over the gap, the stump brings no dust to the bare paper beyond
-    assert after[:, 230:].sum() == 0.0
+    # lifted over the gap, the stump lands on the bare paper beyond with the
+    # dust it carries, and tones it
+    assert after[:, 245:].sum() > 0.03 * laid
     assert _total(sheet) + taken == pytest.approx(laid, rel=1e-5)
 
 

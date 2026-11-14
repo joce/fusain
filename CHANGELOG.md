@@ -6,6 +6,25 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- `Sheet.rub` carries what the tool picks up from one pass to the next, and
+  over the stretches where the pressure is nothing and the tool is lifted.
+  Each pass used to start clean and take its load away, which lifted a pale
+  dot where every pass landed (dotted rows along the edges of a rubbed area)
+  and wore a tone away: eight rubs of a stump over a firm layer of 8B took
+  four tenths of the graphite off the sheet, and now take under three
+  hundredths. A stump lifted over a gap now lands beyond it with the dust it
+  carries. Pictures that rub an area change: `examples/lake.py` no longer
+  presses its tones several times too hard to make up for what the rubbing
+  took (it presses for the darkening wanted, by a measured table), and its
+  ridges, water and reflections come out even; `examples/broadway.py` pulls
+  its haze down from the sky with a finger wiped before each pull.
+- `Sheet.smudge`, `Sheet.erase` and `Sheet.rub` return what the tool took
+  off the sheet less what it laid back, which is less than nothing for a
+  loaded `Smudger` that leaves more than it takes. For a bare tool that is
+  what they returned before.
+
 ### Fixed
 
 - Soft graphite smudges. A stump, a finger or a chamois hardly changed a
@@ -39,6 +58,18 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   small grain is blotchy. A light tone of charcoal on it is a net of dark
   around pale pits; meant for a grain of 3 to 5 pixels. The other textures and
   papers draw as before.
+- `Smudger(tool, width=None)`: a stump, a finger or a chamois in the hand,
+  as a `Stick` is a medium in the hand, for `Sheet.smudge`, `Sheet.erase`
+  and `Sheet.rub`. It keeps what it picks up from one pass to the next
+  (`load`, `carried`) until `clean()`: once loaded it gives back about as
+  much as it takes, so a tone can be rubbed over and over without lightening
+  (200 drags of a finger through a dark tone left it as dark; wiped clean
+  before each, they took it from 64 to 107 out of 255), and a stump loaded
+  on a dark patch draws a pale tone on bare paper, which a bare tool, clean
+  every time, could not. It has its own width, as a `Stick` has. The
+  examples that rub to and fro hold their finger or stump this way
+  (`charcoal.py`, which now also draws with the loaded stump, `colour.py`,
+  `crayons.py`, `fixative.py`, `lake.py`).
 - Four drawings as examples, each a script and the image it writes: an art
   deco tower in charcoal (`examples/deco.py`), Broadway in SoHo in pastel
   (`examples/broadway.py`), a great green macaw in coloured pencil

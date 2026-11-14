@@ -16,6 +16,7 @@ from ._engine import HELD, IS, IV, IX, LOOSE, N
 from .medium import Medium
 from .paper import Paper
 from .pens import Pen
+from .smudger import Smudger
 from .stick import Stick
 from .tools import KNEADED, STUMP, Tool
 
@@ -393,26 +394,36 @@ class Sheet:
     def smudge(
         self,
         path,
-        tool: Tool = STUMP,
+        tool: Tool | Smudger = STUMP,
         pressure: Profile = 0.5,
         width: float | None = None,
     ) -> float:
         """Rub one pass of a stump, a finger or another :class:`fusain.Tool`
         along ``path``: it drags the dust along, presses some of it into the
         paper and pushes it into the valleys of the tooth, which softens and
-        greys what was drawn. What the paper holds hardly moves.
+        greys what was drawn. What the paper holds hardly moves, but for
+        graphite, which slides.
 
         ``path`` and ``pressure`` are as for :meth:`stroke`; ``width`` is the
         width of the tool in pixels (by default the tool's own).
 
-        Returns the volume of pigment left on the tool at the end.
+        A bare tool is clean when it lands, so it leaves the paper lighter
+        where it does, and it takes away what it still carries when it lifts.
+        A :class:`fusain.Smudger` is a tool in the hand: it lands with what
+        it picked up before and keeps what it carries, so that once loaded it
+        gives back about as much as it takes, and tones bare paper. It has
+        its own width, so it takes none.
+
+        Returns the volume of pigment the tool took off the sheet, less what
+        it laid back: for a bare tool, what was left on it at the end; for a
+        ``Smudger`` that left more than it took, less than nothing.
         """
-        return self._rub(path, tool, pressure, width)
+        return self._rub(path, _in_hand(tool, width), pressure)
 
     def erase(
         self,
         path,
-        tool: Tool = KNEADED,
+        tool: Tool | Smudger = KNEADED,
         pressure: Profile = 0.5,
         width: float | None = None,
     ) -> float:
@@ -421,16 +432,17 @@ class Sheet:
         the paper holds; a vinyl one (``tools.ERASER``) takes nearly all.
 
         ``path`` and ``pressure`` are as for :meth:`stroke`; ``width`` is the
-        width of the eraser in pixels (by default the tool's own).
+        width of the eraser in pixels (by default the tool's own; a
+        :class:`fusain.Smudger` has its own and takes none).
 
         Returns the volume of pigment taken off the sheet.
         """
-        return self._rub(path, tool, pressure, width)
+        return self._rub(path, _in_hand(tool, width), pressure)
 
     def rub(
         self,
         area,
-        tool: Tool = STUMP,
+        tool: Tool | Smudger = STUMP,
         pressure: hatching.Pressure = 0.5,
         width: float | None = None,
         angle: float = 0.0,
@@ -447,18 +459,25 @@ class Sheet:
         :meth:`shade`; ``width`` the width of the tool (by default its own);
         ``angle`` the direction of the passes in degrees; ``spacing`` how far
         apart they are (by default half a width); ``hand`` how unsteady the
-        hand is. Where the pressure is nothing for a stretch, the tool is
-        lifted: it rubs on from clean, and what it carried is counted with
-        what it took.
+        hand is.
 
-        Returns the volume of pigment the tool took off the sheet in all.
+        The tool keeps what it carries from one pass to the next, and over
+        the stretches where the pressure is nothing and it is lifted: it
+        lands with it, so past the first few widths it gives back about as
+        much as it takes, and the tone is blended, not worn away. A bare
+        tool starts clean and takes away what it carries at the end; a
+        :class:`fusain.Smudger` (which has its own width and takes none)
+        starts with what it picked up before, and keeps it.
+
+        Returns the volume of pigment the tool took off the sheet in all,
+        less what it laid back (less than nothing for a ``Smudger`` that
+        left more than it took).
 
         Raises ValueError or TypeError, before anything is rubbed, as
         :meth:`shade` does.
         """
-        if not isinstance(tool, Tool):
-            raise TypeError(f"tool must be a Tool, such as tools.STUMP, got {tool!r}")
-        width = tool.width if width is None else width
+        smudger = _in_hand(tool, width)
+        width = smudger.width
         outline = hatching.as_outline(area)
         gap = 0.5 * width if spacing is None else spacing
         _check_hatching(width, gap, angle, hand)
@@ -479,7 +498,7 @@ class Sheet:
                 continue
             for run in np.split(marks, np.nonzero(np.diff(marks) > 1)[0] + 1):
                 if run.size >= 2:
-                    taken += self._rub(points[run], tool, touch[run].tolist(), width)
+                    taken += self._rub(points[run], smudger, touch[run].tolist())
         return taken
 
     def fix(self, amount: float = 1.0) -> float:
@@ -510,12 +529,13 @@ class Sheet:
             total += float(newly.sum(dtype=np.float64))
         return total
 
-    def _rub(self, path, tool: Tool, pressure: Profile, width: float | None) -> float:
-        if not isinstance(tool, Tool):
-            raise TypeError(f"tool must be a Tool, such as tools.STUMP, got {tool!r}")
-        width = tool.width if width is None else width
+    def _rub(self, path, smudger: Smudger, pressure: Profile) -> float:
+        """One pass of a tool in the hand along ``path``. Returns the volume
+        it took off the sheet, less what it laid back."""
+        tool, width = smudger.tool, smudger.width
         xs, ys, bearing, steps = self._sampled(path, pressure, width)
-        load = eng.rub_stroke(
+        before = smudger.load
+        eng.rub_stroke(
             self.cover,
             self.held,
             self.under,
@@ -531,9 +551,10 @@ class Sheet:
             float(tool.lay),
             float(tool.press),
             float(tool.smear),
+            smudger._carried,
             int(self._rng.integers(1 << 31)),
         )
-        return float(load[IV])
+        return smudger.load - before
 
     def _sampled(self, path, pressure: Profile, width: float):
         """``path`` sampled for a tip of ``width``: what the kernels take (see
@@ -631,6 +652,20 @@ def _check_hatching(width: float, gap: float, angle: float, hand: float) -> None
         raise ValueError(f"angle must be a finite number of degrees: {angle!r}")
     if not (math.isfinite(hand) and hand >= 0):
         raise ValueError(f"hand must be 0 (ruler-straight) or more, got {hand!r}")
+
+
+def _in_hand(tool: Tool | Smudger, width: float | None) -> Smudger:
+    """``tool`` as it is held: itself if it is a :class:`fusain.Smudger`
+    (which takes no ``width``), or a clean one of this bare tool."""
+    if isinstance(tool, Smudger):
+        if width is not None:
+            raise TypeError("a Smudger has its own width: give none with it")
+        return tool
+    if not isinstance(tool, Tool):
+        raise TypeError(
+            f"tool must be a Tool, such as tools.STUMP, or a Smudger: {tool!r}"
+        )
+    return Smudger(tool, width)
 
 
 def _spread(tilt: float) -> float:
