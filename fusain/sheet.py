@@ -287,7 +287,7 @@ class Sheet:
             )
         square = _square(ends)
         known = medium.medium if isinstance(medium, Stick) else medium
-        line, points, u, knot, spacing = _sample(path, width)
+        line, points, u, knot, spacing, pace = _sample(path, width)
         bearing = _profile("pressure", pressure, line, u, knot)
         xs, ys, bearing, steps = eng.as_kernel_arrays(
             points, np.clip(bearing, 0.0, 1.0), spacing
@@ -319,7 +319,7 @@ class Sheet:
                 bearing,
                 steps,
                 shapes,
-                np.array([*tip, spacing, *square], dtype=np.float64),
+                np.array([*tip, spacing, *square, pace], dtype=np.float64),
                 np.ascontiguousarray(pigment.K, dtype=np.float64),
                 np.array(
                     [
@@ -635,7 +635,7 @@ class Sheet:
     def _sampled(self, path, pressure: Profile, width: float):
         """``path`` sampled for a tip of ``width``: what the kernels take (see
         :func:`fusain._engine.as_kernel_arrays`), or ValueError."""
-        line, points, u, knot, spacing = _sample(path, width)
+        line, points, u, knot, spacing, _ = _sample(path, width)
         bearing = _profile("pressure", pressure, line, u, knot)
         return eng.as_kernel_arrays(points, np.clip(bearing, 0.0, 1.0), spacing)
 
@@ -736,8 +736,10 @@ def _square(ends: Ends) -> tuple[float, float]:
 def _sample(path, width: Profile):
     """``path`` sampled finely enough for a tip of ``width`` (a number, or a
     profile along it, for which the narrowest counts): the path, the points,
-    where they are along it (u, and as knots) and how far apart they are.
-    ValueError unless the width is a finite number of pixels above 0."""
+    where they are along it (u, and as knots), how far apart they are, and
+    how far apart they would be on a path long enough (the pace of the tip
+    where it lands and lifts). ValueError unless the width is a finite
+    number of pixels above 0."""
     line = spline.as_path(path)
     if isinstance(width, int | float | np.number):
         narrowest = float(width)
@@ -746,11 +748,11 @@ def _sample(path, width: Profile):
         narrowest = float(np.min(_profile("width", width, line, u, knot)))
     if not (math.isfinite(narrowest) and narrowest > 0):
         raise ValueError(f"width must be a number of pixels above 0, got {width!r}")
-    spacing = max(0.25, narrowest / 8.0)
+    pace = spacing = max(0.25, narrowest / 8.0)
     points, _, u, knot = line.sample(spacing)
     if len(points) > 1:
         spacing = line.length / (len(points) - 1)
-    return line, points, u, knot, spacing
+    return line, points, u, knot, spacing, pace
 
 
 def _profile(name: str, profile: Profile, line, u, knot) -> np.ndarray:

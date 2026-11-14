@@ -26,7 +26,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - `Sheet.stroke(ends=...)` and `Sheet.shade(ends=...)`: `"round"` (the
   default), in the outline of the tip, or `"flat"`, cut square across at
   the ends of the path, so that a stroke is as long as its path; or a pair,
-  one for each end.
+  one for each end. A cut applies only within the tip's reach of its end,
+  so a path that comes back across the line through one of its ends is not
+  cut there.
 
 ### Fixed
 
@@ -38,7 +40,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   hand) reached a third of it and a dot a fifth. Now the paper the tip
   covers where it lands and where it lifts is laid as though it had slid
   onto it and off it, and the ends of a stroke are the outline of its tip at
-  the tone of the stroke. The strokes of `Sheet.shade` end half a tip short
+  the tone of the stroke. Where it lands and lifts the tip goes at the pace a tip
+  of its width is sampled at, however short the stroke, so a stroke of
+  almost no length costs and lays what a dot does. The strokes of `Sheet.shade` end half a tip short
   of the edge of the area when their ends are round, so that a shading stays
   inside it (it used to spill out by half a tip, faintly).
 

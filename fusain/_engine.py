@@ -736,6 +736,21 @@ def ends_of(xs, ys, square_start, square_end):
 
 
 @njit(cache=True, error_model="numpy")
+def ends_near(ends, near, after, before, reach):
+    """Fill ``near`` with the square cuts of ``ends`` (see
+    :func:`ends_of`) that apply to a tip ``after`` pixels along the stroke
+    from its start and ``before`` pixels from its end: a cut only where the
+    tip is within ``reach`` of it, so that a stroke that comes back across
+    the line through one of its ends is not cut there."""
+    for part in range(10):
+        near[part] = ends[part]
+    if after > reach:
+        near[4] = 0.0
+    if before > reach:
+        near[9] = 0.0
+
+
+@njit(cache=True, error_model="numpy")
 def lay_stroke(
     tooth,
     press,
@@ -766,10 +781,13 @@ def lay_stroke(
     tip that keeps its width), the volume it has worn since it was
     sharpened, the spacing of the points, whether the stroke is cut square
     at its start (1) or ends there in the round of the tip (0), the same at
-    its end]. Its mark is an ellipse, as long along the stroke as its flat is
-    wide, and across it as wide as the flat, and the share ``tilt`` of what
-    its side adds to that. Where it lands and where it lifts, all the paper
-    under it gets a full pass (:func:`put_down`).
+    its end, the spacing a tip this wide is sampled at (where it lands and
+    lifts it goes at that pace, however short the stroke)]. A square cut
+    applies only within the tip's reach of its end. Its mark is an ellipse,
+    as long along the stroke as its flat is wide, and across it as wide as
+    the flat, and the share ``tilt`` of what its side adds to that. Where it
+    lands and where it lifts, all the paper under it gets a full pass
+    (:func:`put_down`).
 
     ``medium`` is [scattering per unit volume, softness, binding, the share
     of wax in it, its sheen] (its absorption per band is ``k``) and ``paper`` is
@@ -790,8 +808,12 @@ def lay_stroke(
     dragged off the sheet.
     """
     lead, wear, worn, spacing = tip[0], tip[1], tip[2], tip[3]
+    # (where it lands and lifts, the tip goes at its own pace, however short
+    # the stroke: a stroke of no length is a dot)
+    landing = spacing if spacing >= 0.5 * tip[6] else tip[6]
     law, reach = law_of(medium, paper)
     ends = ends_of(xs, ys, tip[4], tip[5])
+    near = np.empty(10)  # (the cuts that apply where the tip is now)
     count = xs.shape[0]
     reached = 0.0  # the furthest the tip has been from its path
     # what a tip that polishes drags along
@@ -808,16 +830,16 @@ def lay_stroke(
         flat = shapes[i, 0]
         if wear > 0.0:  # the flat grows with what the tip has laid
             flat = min((flat**3 + wear * max(worn + total, 0.0)) ** (1.0 / 3.0), lead)
-        reached = max(
-            reached, tip_at(now, shapes[i], flat, reach, i, xs, ys, pressures)
-        )
+        bound = tip_at(now, shapes[i], flat, reach, i, xs, ys, pressures)
+        reached = max(reached, bound)
+        ends_near(ends, near, i * spacing, (count - 1 - i) * spacing, bound + spacing)
         lands = i == 0 or pressures[i - 1] <= 0.0
         lifts = i == count - 1 or pressures[i + 1] <= 0.0
         # (the first and the last point take half a spacing, which is the
         # half of the tip ahead of them, behind them; what lands or lifts
         # there takes the other half too)
         if count > 1 and ((lands and i == 0) or (lifts and i == count - 1)):
-            step += 0.5 * spacing
+            step += 0.5 * landing
         for way in (-1.0, 0.0, 1.0):
             if way == 0.0:
                 dv, rest = bear(
@@ -834,7 +856,7 @@ def lay_stroke(
                     law,
                     now,
                     step,
-                    ends,
+                    near,
                     salt,
                 )
             elif (way < 0.0 and lands) or (way > 0.0 and lifts):
@@ -851,9 +873,9 @@ def lay_stroke(
                     k,
                     law,
                     now,
-                    ends,
+                    near,
                     salt,
-                    spacing,
+                    landing,
                     way,
                 )
             else:

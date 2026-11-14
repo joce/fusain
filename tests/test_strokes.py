@@ -1,10 +1,12 @@
 """The geometry of a stroke: how strong it is at its ends, round or flat
 ends, and a width and a tilt that change along it, measured."""
 
+import time
 from typing import Any
 
 import numpy as np
 import pytest
+from murex import Polyline
 
 from fusain import Paper, Sheet, Stick, charcoal, papers, pastels, pencils, pens
 
@@ -110,6 +112,36 @@ def test_a_flat_end_follows_the_way_the_stroke_goes():
     ys, xs = np.nonzero(sheet.pigment())
     along = ((xs + 0.5 - 60) + (ys + 0.5 - 40)) / np.sqrt(2.0)
     assert along.min() > -0.75 and along.max() < 100 * np.sqrt(2.0) + 0.75
+
+
+def test_a_flat_end_cuts_only_near_its_end():
+    # a path that comes back across the line through its start: the cut
+    # there is for the start, not for the stroke that comes back past it
+    path = Polyline(np.array([(40, 40), (60, 40), (60, 80), (20, 80), (20, 100)]))
+    flat, round_ = _sheet(), _sheet()
+    laid = flat.stroke(path, PASTEL, 0.6, 6.0, ends="flat")
+    round_.stroke(path, PASTEL, 0.6, 6.0)
+    back = (slice(76, 97), slice(17, 39))  # (the stroke along y = 80 and down)
+    assert flat.pigment()[back].sum() == pytest.approx(
+        round_.pigment()[back].sum(), rel=0.05
+    )
+    # and the start is still cut square
+    assert not flat.pigment()[34:47, :40].any()
+    _laid_is_on_the_sheet(flat, laid)
+
+
+@pytest.mark.parametrize("length", [1e-3, 1e-6])
+def test_a_stroke_of_almost_no_length_is_a_dot(length):
+    dot = _sheet()
+    alone = dot.stroke([(100, 80)], PASTEL, 0.6, 24.0)
+    sheet = _sheet()
+    start = time.perf_counter()
+    laid = sheet.stroke([(100, 80), (100 + length, 80)], PASTEL, 0.6, 24.0)
+    # (it used to step as finely as its two points are apart where it
+    # landed and lifted: millions of steps for a dab)
+    assert time.perf_counter() - start < 0.5
+    assert laid == pytest.approx(alone, rel=0.05)
+    _laid_is_on_the_sheet(sheet, laid)
 
 
 def test_flat_ends_shade_inside_the_area():
