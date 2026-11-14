@@ -60,10 +60,10 @@ BROW = [
 #: then back along its cutting edge (with the notch) to the gape.
 CULMEN = [
     (360, 230), (318, 233), (283, 252), (258, 290), (247, 336), (249, 382),
-    (259, 422), (274, 452), (290, 476),
+    (258, 420), (271, 452), (285, 474), (296, 486),
 ]  # fmt: skip
 TOMIUM = [
-    (290, 476), (298, 470), (301, 450), (304, 430), (309, 414), (317, 409),
+    (296, 486), (299, 476), (301, 456), (304, 432), (309, 414), (317, 409),
     (322, 398), (340, 384), (364, 374), (388, 368),
 ]  # fmt: skip
 UPPER_BILL = CULMEN + TOMIUM[1:] + [(386, 320), (375, 282), (367, 250)]
@@ -557,10 +557,11 @@ def body_shading(p: dict[str, np.ndarray]) -> np.ndarray:
     shade += 0.4 * band(yy, 420, 1000) + 0.15 * band(xx, 480, 720)
     head = p["skull"] | p["face"] | p["brow"] | p["upper"] | p["lower"]
     cast = soft(shift(head, int(14 * SCALE), int(34 * SCALE)), 22) * (1.0 - soft(head, 6))
-    cast = cast * band(xx, 500.0, 430.0)
+    cast = cast * band(xx, 480.0, 400.0)
     t, _ = frame(WING_AXIS)
     slot = soft(p["wing_all"], 16) * ~p["wing_all"] * band(t, 0.15, 0.35)
-    shade += 0.8 * cast + 0.9 * slot + 0.45 * band(yy, 840, 990)
+    under = band(soft(p["whole"], 14), 0.95, 0.5) * band(yy, 640, 900)
+    shade += 0.8 * cast + 0.9 * slot + 0.45 * band(yy, 840, 990) + 0.6 * under
     shade += 0.5 * soft(p["thigh"] | p["toes"], 10) * ~p["thigh"]
     return stretch(shade, p["body"] | p["head"])
 
@@ -678,7 +679,7 @@ OCHRE, STRAW = "#c8a040", "#eee4a0"
 SKY, TURQ, COBALT, ULTRA, NAVY = "#8cc4e2", "#3ab0bf", "#2a6db8", "#2b3c94", "#1d2452"
 ORANGE, VERMILION, MADDER, OXBLOOD = "#e8823a", "#d04a2c", "#982a26", "#5a1e1e"
 BLUSH, ROSE, MAUVE, COOL = "#f4d6ce", "#e8a6a2", "#b6a0aa", "#a9a8b8"
-LINE, WINE = "#36161c", "#6c2028"
+LINE, WINE = "#241216", "#55202a"
 SCARLET, CRIMSON, FLAME = "#e3352c", "#a51b26", "#f2683a"
 HORN, SILVER, GREY, SLATE, CHAR, BLACK = (
     "#c4b9a6", "#a9a9ae", "#76767e", "#474a55", "#202026", "#121214",
@@ -1044,28 +1045,47 @@ def draw_face_row(hand: Hand, face: np.ndarray, cols, row, dark: float) -> None:
             for _ in range(int(hand.rng.integers(1, 4))):
                 tx, ty = x + hand.rng.uniform(-2.0, 2.0), y + hand.rng.normal(0.0, 0.8)
                 ln = hand.rng.uniform(2.5, 6.0)
-                b = a - 0.35 + hand.rng.normal(0.0, 0.2)
+                b = a - 0.3 + hand.rng.normal(0.0, 0.1)
                 tick = [(tx, ty), (tx + ln * math.cos(b), ty + ln * math.sin(b))]
                 firm = dark * hand.rng.uniform(0.45, 0.85)
-                colour = LINE if hand.rng.random() < 0.6 else WINE
+                colour = LINE if hand.rng.random() < 0.7 else WINE
                 hand.line(colour, tick, [firm, firm * 0.4], hand.rng.uniform(1.8, 2.4), 0.2, face)
-        x += hand.rng.uniform(3.0, 7.0) * (1.3 - 0.45 * crowd)
+        x += hand.rng.uniform(2.5, 6.0) * (1.3 - 0.45 * crowd)
 
 def draw_fringe(hand: Hand, bird: Bird) -> None:
     """The small green feathers at the edge of the bare face and of the
     bill, lying over it irregularly."""
     face, head = bird.part["face"], bird.part["head"]
-    rim = grow(head, 5) & ~head & (face | bird.part["upper"])
+    _, yy = grid()
+    near = grow(face | bird.part["upper"], 7) & head
     angle = flow(HEAD_FLOW)
     s = bird.shade["body"]
-    for x, y in hand.seeds(rim * 1.0, 420):
-        a = float(angle[int(y), int(x)]) + math.pi + hand.rng.normal(0.0, 0.35)
-        size = hand.rng.uniform(5.0, 13.0)
+    for x, y in hand.seeds(near * 1.0, 260):
+        a = float(angle[int(y), int(x)]) + hand.rng.normal(0.0, 0.3)
+        size = hand.rng.uniform(6.0, 15.0)
+        start = (x - 0.4 * size * math.cos(a), y - 0.4 * size * math.sin(a))
         tip = (x + size * math.cos(a), y + size * math.sin(a))
-        start = (x - 3.0 * math.cos(a), y - 3.0 * math.sin(a))
         shade = float(s[min(int(y), HEIGHT - 1), min(int(x), WIDTH - 1)])
-        colour = MOSS if shade < 0.45 else LEAF if shade < 0.7 else PINE
-        hand.sheet.stroke([start, tip], hand.pencil(colour), [0.6, 0.25], 2.6)
+        colour = OLIVE if shade < 0.3 else LEAF if shade < 0.6 else PINE
+        hand.sheet.stroke([start, tip], hand.pencil(colour), [0.2, 0.6, 0.15], 2.4)
+    del yy
+
+
+def draw_nape(hand: Hand, bird: Bird) -> None:
+    """A few small feathers standing off the back of the head and the nape,
+    so that the silhouette there is ruffled, not cut."""
+    back = outline(HEAD_BODY, 2.0)
+    back = back[(back[:, 0] > 470) & (back[:, 1] < 420)]
+    angle = flow(HEAD_FLOW)
+    for _ in range(26):
+        x, y = back[int(hand.rng.integers(0, len(back)))]
+        px, py = pixel(x, y)
+        a = float(angle[py, px]) + hand.rng.normal(-0.25, 0.2) - math.radians(TURN)
+        size = hand.rng.uniform(8.0, 16.0)
+        root = (x - 0.6 * size * math.cos(a), y - 0.6 * size * math.sin(a))
+        tip = (x + 0.5 * size * math.cos(a), y + 0.5 * size * math.sin(a))
+        colour = LEAF if float(bird.shade["body"][py, px]) < 0.5 else PINE
+        hand.line(colour, [root, tip], [0.55, 0.15], 2.4, 0.3)
 
 
 def draw_eye(hand: Hand) -> None:
@@ -1199,8 +1219,8 @@ def draw_feet(hand: Hand, bird: Bird) -> None:
             ring = [pts[k] - n[k] * half[k, 0], pts[k] + d[k] * 1.6, pts[k] + n[k] * half[k, 0]]
             hand.line(CHAR, ring, [0.0, 0.5, 0.0], 1.6, 0.3, mask)
         end = pts[-1]
-        claw = [end - 2 * d[-1], end + 8 * d[-1] - 2 * n[-1], end + 12 * d[-1] - 8 * n[-1]]
-        hand.line(BLACK, claw, [0.9, 0.8, 0.3], 4.0, 0.2)
+        claw = [end - 2 * d[-1], end + 7 * d[-1] - 1 * n[-1], end + 13 * d[-1] - 6 * n[-1], end + 14 * d[-1] - 12 * n[-1]]
+        hand.line(BLACK, claw, [0.95, 0.85, 0.6, 0.2], 4.6, 0.15)
     del bird
 
 
@@ -1234,7 +1254,9 @@ def main() -> None:
     hand = Hand(sheet, rng)
     bird = build(rng)
     xx, yy = grid()
+    rows = np.mgrid[:HEIGHT, :WIDTH][0]
     hand.finish = 1.0 - 0.35 * band(np.hypot(xx - EYE[0], yy - EYE[1]), 380.0, 1400.0)
+    hand.finish *= 1.0 - 0.6 * band(rows, HEIGHT - 260.0, HEIGHT - 10.0)
     draw_sketch(hand)
     draw_bill(hand, bird)
     draw_tail(hand, bird)
@@ -1244,6 +1266,7 @@ def main() -> None:
     draw_wing(hand, bird)
     draw_face(hand, bird)
     draw_fringe(hand, bird)
+    draw_nape(hand, bird)
     draw_brow(hand, bird)
     draw_eye(hand)
     draw_feet(hand, bird)
