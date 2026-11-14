@@ -18,7 +18,10 @@ soft, hard and oil pastels, wax crayons, ballpoint pens, stumps and erasers. Ton
 how many layers are laid, as on real paper. Charcoal and pastel leave dust
 that a stump drags about and an eraser lifts; coloured pencils are waxy and
 translucent, so their layers mix to the eye; a light pastel covers a dark one.
-Crayons and oil pastels leave a film of wax that dry media hardly take over.
+Crayons and oil pastels leave a film of wax that dry media hardly take over,
+even one firm line of it (wax resist); drawn over dust, they lie on it and
+bind part of it. An oil pastel is a paste, which a finger smears and a
+kneaded eraser does not lift.
 A point wears as it draws, until it is sharpened. Heavy graphite shines under
 the lamp. Fixative sets the dust. The plan for the rest is in
 [docs/design.md](docs/design.md).
@@ -199,6 +202,9 @@ from fusain import crayons
 
 sheet.shade((100, 60, 300, 200), crayons.wax("#c0392b"), pressure=0.6, width=9)
 sheet.shade((100, 260, 300, 400), pastels.oil("#e67e22"), pressure=0.7, width=14)
+# wax resist: draw in crayon, one firm line is enough, and shade charcoal over it
+sheet.stroke([(100, 460), (300, 480)], crayons.wax("#f4f1ea"), pressure=0.9, width=7)
+sheet.shade((80, 430, 320, 510), charcoal.COMPRESSED, pressure=0.4, width=12)
 ```
 
 ![Wax crayons and oil pastels](examples/output/crayons.png)
@@ -206,10 +212,16 @@ sheet.shade((100, 260, 300, 400), pastels.oil("#e67e22"), pressure=0.7, width=14
 Top, wax crayons on cartridge paper. Left: red, yellow and blue, lighter to
 firmer. Middle: the same three laid over one another. Right: a white crayon
 over a black one, which it does not cover, and lines drawn lighter to firmer.
-Bottom, oil pastels on tan paper. Left: light colours over a dark blue ground,
+Middle, oil pastels on tan paper. Left: light colours over a dark blue ground,
 which they half cover. Middle: orange and blue side by side, and the same with
 the join rubbed with a finger. Right: white oil pastel over black, and lines
 drawn lighter to firmer.
+Bottom, what lies over what. Left: a sun and waves in one firm line of crayon
+each, and charcoal shaded over all of it, which skips the wax. Middle: crayon
+lines drawn over rubbed charcoal and over soft pastel lie on the dust, and a
+stump dragged down through them moves the dust and not the lines. Right: a
+kneaded eraser pulled through soft pastel, which it lifts, and through oil
+pastel, which it does not.
 
 ```python
 from fusain import pens
