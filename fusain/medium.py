@@ -37,7 +37,9 @@ class Medium:
     sheen:
         0..1: how much of it mirrors the light once the paper holds it, as
         graphite does. A thick layer of it shines under a lamp, so that it
-        never looks quite black. Charcoal, pastel and wax have none.
+        never looks quite black. Charcoal, pastel and wax have none. (Wax
+        has a gloss of another kind, which is not the medium's but its
+        polish's: see :meth:`fusain.Sheet.shine`.)
     side:
         How many times as wide as its point the side of a stick of it
         marks, held flat (at full tilt): what length of it lies on the

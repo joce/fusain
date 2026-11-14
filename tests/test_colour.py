@@ -228,16 +228,17 @@ def test_a_waxed_tooth_takes_badly():
     assert _layers(waxy, lead, 5) < 0.95 * _layers(dry, lead.with_(wax=0.0), 5)
 
 
-def test_a_firm_pass_polishes_wax_and_nothing_else():
+def test_a_firm_pass_polishes_wax_and_a_soft_dry_tip_presses_next_to_nothing():
     waxed = _sheet()
     _layers(waxed, pencils.coloured(RED), 3, pressure=0.5)
     assert waxed.press[INSIDE].mean() < 0.02  # a light touch does not polish
     waxed.shade(BOX, pencils.coloured(RED), 1.0)
     assert waxed.press[INSIDE].mean() > 0.3
-    for medium in (pencils.B6, pastels.soft(RED)):
+    # (a hard dry tip flattens the tooth: see test_surface.py)
+    for medium, least in ((pencils.B6, 0.05), (pastels.soft(RED), 1e-3)):
         sheet = _sheet()
         _layers(sheet, medium, 3, pressure=1.0)
-        assert not sheet.press.any(), medium.name
+        assert sheet.press[INSIDE].mean() < least, medium.name
 
 
 def test_burnishing_closes_the_white_specks():

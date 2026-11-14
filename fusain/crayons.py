@@ -5,7 +5,8 @@ wax makes the tooth slick at once, so the grain of the paper shows through
 until the crayon is pressed hard; and it is not opaque enough to cover: a
 light crayon over a dark one mixes with it. One firm line of it is slick
 enough for charcoal shaded over it to skip it (wax resist). Drawn over
-charcoal or pastel dust, it lies on the dust and binds part of it.
+charcoal or pastel dust, it lies on the dust and binds part of it. Pressed
+hard it is polished, and has a waxy gloss under a lamp.
 """
 
 from __future__ import annotations

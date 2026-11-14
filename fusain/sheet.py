@@ -12,7 +12,7 @@ from murex.spline import Profile
 
 from . import _engine as eng
 from . import hatching
-from ._engine import FILM, HELD, IS, IV, IX, KINDS, LOOSE, PASTE, SET, N
+from ._engine import FILM, HELD, IS, IV, IW, IX, KINDS, LOOSE, PASTE, SET, N
 from .medium import Medium
 from .paper import Paper
 from .pens import Pen
@@ -30,15 +30,43 @@ DEFAULT_LIGHT = (-0.6, -0.8, 2.4)
 AMBIENT = 0.3
 #: Height of the deepest tooth of a paper of depth 1, as a share of its grain.
 TOOTH_HEIGHT = 0.12
-#: Shine: what a film as shiny as it gets adds to the light a pixel sends
-#: back (linear, the paper's white being 1) when it mirrors the lamp squarely.
+#: Three things shine under a lamp, each in its own way: graphite, polished
+#: wax and heavy ballpoint ink.
+SHINES = ("graphite", "wax", "ink")
+#: Graphite's shine: what a film as shiny as it gets adds to the light a
+#: pixel sends back (linear, the paper's white being 1) when it mirrors the
+#: lamp squarely.
 SHEEN = 0.06
 #: A held film of this much sheen per covered area is as shiny as it gets,
 #: and matte dust this thick over it hides all but 1/e of its shine.
 SHEEN_FULL = 0.6
 SHEEN_HIDE = 0.1
+#: On a tooth pressed flat the graphite lies flat: a film this much thinner
+#: is then as shiny as it gets. A hard lead pressed firmly, which lays
+#: little and flattens the tooth, shines by this; a soft one by how much it
+#: lays.
+SHEEN_FLAT = 0.6
 #: How narrow the mirrored light is: graphite is satin, not a mirror.
 SHININESS = 12.0
+#: The gloss of wax: what a film of wax as slick as it gets
+#: (:data:`fusain._engine.WAX_FULL`), polished flat, adds to the light when
+#: it mirrors the lamp squarely, and how narrow that light is. Less than
+#: graphite and wider: a soft, even gloss, where graphite's is metallic.
+#: A film half polished still scatters most of the light: the gloss goes as
+#: how far the surface is pressed flat, to the power WAX_POLISH.
+WAX_SHEEN = 0.025
+WAX_SHININESS = 5.0
+WAX_POLISH = 2.0
+#: The bronze of ink: what ink as heavy as it gets adds, in its own colour
+#: (it mirrors most the light it absorbs most, so blue ink shines copper).
+#: Ink as thick as INK_FROM firm passes of the ball begins to bronze, and
+#: ink as thick as INK_FULL of them is as bronzed as it gets. A film of dry
+#: ink is smooth, and the light it mirrors narrow: the bronze shows with
+#: the lamp near overhead and hardly under the default one.
+INK_SHEEN = 0.05
+INK_FROM = 1.5
+INK_FULL = 4.5
+INK_SHININESS = 120.0
 #: The lines of a pen's hatching are this many of its widths apart: side by
 #: side, where a pencil's strokes overlap.
 PEN_SPACING = 1.6
@@ -62,7 +90,10 @@ class Sheet:
         Random seed for the paper's tooth and for the marks.
 
     Per pixel the sheet holds the height of the tooth (``tooth``, 0 valley to
-    1 peak), how far it has been crushed or polished (``press``, 0 to 1), the
+    1 peak), how far it has been flattened or polished (``press``, 0 to 1:
+    a firm hard tip levels the tooth, with its peaks), how far it has been
+    indented (``dent``: the depth of a groove below the peaks of the tooth,
+    in depths of the tooth of a paper of depth 1), the
     pigment fixed to the paper (``held``) and the pigment lying on it, in two
     layers, ``loose`` on top and ``under`` beneath it, so that what was laid
     last is seen over what was laid before. Most of that is dust, which is
@@ -70,7 +101,7 @@ class Sheet:
     holds how much of each layer is not: dust that is set (:attr:`fixed`), a
     film of wax laid over the dust (:attr:`film`) and greasy paste
     (:attr:`paste`). ``cover`` is the share of the pixel that carries
-    pigment: the rest shows bare paper. Memory: about 0.36 KB per pixel.
+    pigment: the rest shows bare paper. Memory: about 0.37 KB per pixel.
 
     Raises ValueError or TypeError unless ``width`` and ``height`` are whole
     numbers above 0.
@@ -90,6 +121,7 @@ class Sheet:
         self.ground = self.paper.reflectance()
         self.tooth = self.paper.tooth(H, W, self._rng)
         self.press = np.zeros((H, W), np.float32)
+        self.dent = np.zeros((H, W), np.float32)
         self.cover = np.zeros((H, W), np.float32)
         self.held = np.zeros((H, W, HELD), np.float32)
         self.under = np.zeros((H, W, LOOSE), np.float32)
@@ -113,8 +145,8 @@ class Sheet:
         new.__dict__.update(self.__dict__)
         new._rng = np.random.default_rng()
         new._rng.bit_generator.state = self._rng.bit_generator.state
-        names = ("tooth", "press", "cover", "held", "under", "loose", "_fresh")
-        for name in (*names, "bonded"):
+        names = ("tooth", "press", "dent", "cover", "held", "under", "loose")
+        for name in (*names, "_fresh", "bonded"):
             setattr(new, name, getattr(self, name).copy())
         if self.ink is not None and self.inked is not None:
             new.ink, new.inked = self.ink.copy(), self.inked.copy()
@@ -148,16 +180,79 @@ class Sheet:
         """Volume of pigment at each pixel, held and loose, (H, W)."""
         return self.held[..., IV] + self.under[..., IV] + self.loose[..., IV]
 
-    def shine(self) -> np.ndarray:
-        """How much of each pixel mirrors the light, 0..1, (H, W): where the
-        paper holds a film of a medium with sheen (graphite), the more the
-        thicker it is, and the less the more dust of another kind lies over
-        it."""
+    def shine(self, of: str | None = None) -> np.ndarray:
+        """How much of each pixel mirrors the light, 0..1, (H, W). Three
+        things do, and ``of`` names one of them:
+
+        ``"graphite"``: where the paper holds a film of a medium with sheen,
+        the more the thicker it is (a thinner film is enough on a tooth
+        pressed flat, where it lies flat), and the less the more dust of
+        another kind lies over it.
+
+        ``"wax"``: where a film of wax has been polished: as far as the wax
+        is thick enough to be slick and the surface is pressed flat
+        (``press``; half pressed, it has a quarter of its gloss), wherever
+        the wax lies, on the paper or as a film over dust, and the less the
+        more dust lies over it. A coloured pencil burnished, a crayon or an
+        oil pastel pressed hard.
+
+        ``"ink"``: where the ink of a ballpoint is heavy, layer over layer,
+        and nothing covers it: it bronzes.
+
+        By default, all three together: the share of the pixel that mirrors
+        the light in one way or another.
+
+        Raises ValueError for another ``of``.
+        """
+        if of is None:
+            dull = np.ones((self.height, self.width), np.float32)
+            for kind in SHINES:
+                dull *= 1.0 - self.shine(kind)
+            return 1.0 - dull
+        if of == "graphite":
+            return self._graphite_sheen()
+        if of == "wax":
+            return self._wax_gloss()
+        if of == "ink":
+            return self._ink_bronze()
+        raise ValueError(f"of must be one of {SHINES} or None, got {of!r}")
+
+    def _graphite_sheen(self) -> np.ndarray:
+        """The sheen of graphite; see :meth:`shine`."""
         cover = np.maximum(self.cover, np.float32(1e-6))
-        film = np.minimum(self.held[..., IX] / cover / np.float32(SHEEN_FULL), 1.0)
+        full = np.float32(SHEEN_FULL) * (1.0 - np.float32(SHEEN_FLAT) * self.press)
+        film = np.minimum(self.held[..., IX] / cover / full, 1.0)
         dust = self.under[..., IV] + self.loose[..., IV]
         matte = np.maximum(dust - self.under[..., IX] - self.loose[..., IX], 0.0)
         return self.cover * film * np.exp(-matte / cover / np.float32(SHEEN_HIDE))
+
+    def _wax_gloss(self) -> np.ndarray:
+        """The gloss of polished wax; see :meth:`shine`. Seen from above,
+        the topmost wax is a film in the layer on top, or else one in the
+        layer underneath, under the dust on top, or else what the paper
+        holds, under the dust of both."""
+        cover = np.maximum(self.cover, np.float32(1e-6))
+        slick = np.minimum(self.held[..., IW] / cover / np.float32(eng.WAX_FULL), 1.0)
+        seen = np.ones_like(cover)  # (how much of the wax held shows)
+        for which, layer in enumerate((self.under, self.loose)):
+            film = self.film[..., which] + self.paste[..., which]
+            dust = np.maximum(layer[..., IV] - film, 0.0)
+            over = np.minimum(film / cover / np.float32(eng.COVERS), 1.0)
+            seen *= np.exp(-dust / cover / np.float32(SHEEN_HIDE))
+            seen = over + (1.0 - over) * seen
+        return self.cover * slick * self.press ** np.float32(WAX_POLISH) * seen
+
+    def _ink_bronze(self) -> np.ndarray:
+        """The bronze of heavy ink; see :meth:`shine`."""
+        if self.ink is None or self.inked is None:
+            return np.zeros((self.height, self.width), np.float32)
+        inked = np.maximum(self.inked, np.float32(1e-6))
+        passes = self.ink[..., IV] / inked / np.float32(eng.BALL_INK)
+        heavy = np.clip((passes - INK_FROM) / (INK_FULL - INK_FROM), 0.0, 1.0)
+        # (what the paper carries lies over the ink, on its share of the pixel)
+        cover = np.maximum(self.cover, np.float32(1e-6))
+        hidden = self.cover * (1.0 - np.exp(-self.pigment() / cover / SHEEN_HIDE))
+        return (self.inked * heavy * (1.0 - hidden)).astype(np.float32)
 
     def reflectance(self) -> np.ndarray:
         """Reflectance spectrum of the drawing, (H, W, N_BANDS) float32: what
@@ -256,6 +351,17 @@ class Sheet:
         its line is nearly as dark
         at a light touch as at a firm one, and its ink is a stain in the
         paper (:attr:`ink`), under everything else, which no tool takes off.
+        Its ball gathers ink as it rolls and leaves a blob where the line
+        turns sharply and, now and then, where it starts; and it presses a
+        groove into the paper (``dent``), as :meth:`indent` does, the
+        deeper the firmer the pen.
+
+        A dry tip pressed firmly (harder than about 0.6) flattens the tooth
+        (``press``), the more the harder the tip: a hard pencil does, a
+        soft one hardly, charcoal and pastel next to not at all. What is
+        drawn there afterwards lies evenly, and the paper bites it less.
+        Where the paper is indented, a tip lays only what it reaches down
+        to (:meth:`indent`).
 
         What the paper holds of the medium goes under the dust that lies
         there, in the tooth; but a waxy medium (a coloured pencil, a crayon,
@@ -308,6 +414,7 @@ class Sheet:
             eng.lay_stroke(
                 self.tooth,
                 self.press,
+                self.dent,
                 self.cover,
                 self.held,
                 self.under,
@@ -360,6 +467,7 @@ class Sheet:
             eng.roll_stroke(
                 self.tooth,
                 self.press,
+                self.dent,
                 self.cover,
                 self.held,
                 self.under,
@@ -397,15 +505,17 @@ class Sheet:
         faintly, as on a scan. ``relief`` scales the apparent depth of the
         tooth. With ``lighting=False`` the sheet is rendered flat.
 
-        The lamp also shows the shine of graphite: seen from straight above,
-        a heavy layer mirrors a high lamp and looks silvery, and hardly
-        mirrors a raking one. ``gloss`` scales that shine: 0 renders the
-        drawing matte, as a scanner sees it.
+        The lamp also shows what shines (:meth:`shine`). Seen from straight
+        above, a heavy layer of graphite mirrors a high lamp and looks
+        silvery, and hardly mirrors a raking one; polished wax has a softer,
+        wider gloss; and heavy ballpoint ink bronzes, in the colour it
+        absorbs most. ``gloss`` scales all of it: 0 renders the drawing
+        matte, as a scanner sees it.
 
         When lit, raises ValueError unless ``light`` is three finite numbers
         with z > 0 and ``relief`` and ``gloss`` are finite and not negative.
         """
-        shade = glint = None
+        shade = glint = bronze = None
         if lighting:
             lamp = _check_light(DEFAULT_LIGHT if light is None else light)
             for name, value in (("relief", relief), ("gloss", gloss)):
@@ -413,8 +523,8 @@ class Sheet:
                     raise ValueError(f"{name} must be finite and >= 0, got {value!r}")
             slopes = self._slopes(float(relief))
             shade = self._shade(lamp, slopes)
-            if gloss > 0 and self.held[..., IX].any():
-                glint = self._glint(lamp, slopes) * np.float32(SHEEN * gloss)
+            if gloss > 0:
+                glint, bronze = self._glint(lamp, slopes, float(gloss))
         out = np.empty((self.height, self.width, 3), np.float32)
         for rows in self._row_chunks():
             lin = sp.reflectance_to_linear_rgb(self._reflectance_rows(rows))
@@ -422,15 +532,23 @@ class Sheet:
                 lin *= shade[rows][..., None]
             if glint is not None:
                 lin += glint[rows][..., None]
+            if bronze is not None:
+                self._add_bronze(lin, bronze[rows], rows)
             out[rows] = sp.linear_to_srgb(np.clip(lin, 0.0, 1.0))
         return out
 
     def surface_height(self, relief: float = 1.0) -> np.ndarray:
         """Height of the paper's surface in pixels, (H, W), as it is lit: its
-        tooth, level with its peaks where it has been pressed flat."""
-        scale = TOOTH_HEIGHT * self.paper.grain * self.paper.depth * relief
+        tooth, level with its peaks where it has been pressed flat, and no
+        higher than the floor of a groove where it has been indented. The
+        peaks of an untouched tooth are at ``TOOTH_HEIGHT`` times the
+        paper's grain and depth (times ``relief``), and its valleys at 0."""
+        grain, depth = self.paper.grain, self.paper.depth
+        if depth <= 0.0:  # (a level paper: nothing but its grooves)
+            return -self.dent * np.float32(TOOTH_HEIGHT * grain * relief)
         ground = self.tooth + (1.0 - self.tooth) * self.press
-        return ground * np.float32(scale)
+        ground = np.minimum(ground, 1.0 - self.dent / np.float32(depth))
+        return ground * np.float32(TOOTH_HEIGHT * grain * depth * relief)
 
     def _slopes(self, relief: float) -> tuple[np.ndarray, np.ndarray]:
         """The slope of the surface along x and along y, each (H, W)."""
@@ -452,14 +570,82 @@ class Sheet:
         lit = self._facing(lamp, slopes) / lamp[2]
         return (AMBIENT + (1.0 - AMBIENT) * lit).astype(np.float32)
 
-    def _glint(self, lamp: np.ndarray, slopes) -> np.ndarray:
-        """How much of the lamp each pixel mirrors to an eye straight above
-        the sheet, 0..1: its shine, times how squarely its surface faces
-        halfway between the lamp and the eye."""
+    def _glint(self, lamp: np.ndarray, slopes, gloss: float):
+        """The light of the lamp each pixel mirrors to an eye straight above
+        the sheet: what shines there, times how squarely its surface faces
+        halfway between the lamp and the eye. Two parts, each (H, W) or
+        None if there is none of it: the white light, off graphite and off
+        polished wax, and the bronze of ink, which has the ink's colour
+        (:meth:`_add_bronze`)."""
         halfway = lamp + np.array([0.0, 0.0, 1.0])
         halfway /= np.linalg.norm(halfway)
-        mirrored = self._facing(halfway, slopes) ** SHININESS
-        return (self.shine() * mirrored).astype(np.float32)
+        facing = self._facing(halfway, slopes)
+        white = None
+        lobes = (
+            ("graphite", IX, SHEEN, SHININESS),
+            ("wax", IW, WAX_SHEEN, WAX_SHININESS),
+        )
+        for kind, part, sheen, shininess in lobes:
+            if not self.held[..., part].any():
+                continue
+            mirrored = self.shine(kind) * facing**shininess * (sheen * gloss)
+            white = mirrored if white is None else white + mirrored
+        if white is not None:
+            white = white.astype(np.float32)
+        bronze = None
+        if self.ink is not None:
+            heavy = self._ink_bronze()
+            if heavy.any():
+                bronze = heavy * facing**INK_SHININESS * (INK_SHEEN * gloss)
+                bronze = bronze.astype(np.float32)
+        return white, bronze
+
+    def _add_bronze(self, lin: np.ndarray, bronze: np.ndarray, rows: slice) -> None:
+        """Add the bronze of the ink of these rows to their light (``lin``,
+        linear RGB). Ink mirrors most the light it absorbs most, as the
+        square of its absorption: blue ink, which absorbs the reds, shines
+        copper."""
+        shining = bronze > 0
+        if self.ink is None or not shining.any():
+            return
+        absorbed = self.ink[rows][shining][:, :N].astype(np.float64)
+        absorbed /= np.maximum(absorbed.max(axis=1), 1e-12)[:, None]
+        colour = np.maximum(sp.reflectance_to_linear_rgb(absorbed**2), 0.0)
+        lin[shining] += bronze[shining][:, None] * colour
+
+    def indent(self, path, pressure: Profile = 0.7, width: float = 3.0) -> None:
+        """Press a groove into the paper along ``path`` with a stylus: a
+        hard round point ``width`` pixels wide that lays nothing, such as
+        an embossing tool, a knitting needle or a pen that has run dry.
+
+        ``path`` and ``pressure`` are as for :meth:`stroke`. The groove is
+        as deep as the stylus is pressed hard and as the paper gives
+        (``dent``), and round across: deepest under the middle of the
+        point. A pencil, a crayon or a stick of charcoal shaded over it
+        afterwards rides on the paper either side and skips it, unless it
+        is soft enough and pressed hard enough to reach its floor: a line
+        indented firmly stays the colour of the paper under a tone, which
+        is how whiskers and fine highlights are kept; one indented lightly
+        fills in under a firm soft pencil. What was drawn there before
+        goes down with the paper, and no eraser takes a groove out. Under
+        a raking light it shows as a line of shadow.
+
+        Raises ValueError, before anything is pressed, unless ``width`` is
+        a finite number of pixels above 0 and the pressures are finite.
+        """
+        xs, ys, bearing, steps = self._sampled(path, pressure, width)
+        paper = self.paper
+        eng.indent_stroke(
+            self.dent,
+            xs,
+            ys,
+            bearing,
+            steps,
+            0.5 * float(width),
+            np.array(
+                [paper.depth, paper.bite, paper.give, paper.hold], dtype=np.float64
+            ),
+        )
 
     def smudge(
         self,

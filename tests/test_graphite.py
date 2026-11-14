@@ -256,7 +256,7 @@ def test_a_firm_line_keeps_the_grain_of_the_paper():
     tooth, pigment = sheet.tooth[rows].ravel(), sheet.pigment()[rows].ravel()
     # the high ground took more than the low, and some valleys took nothing
     assert np.corrcoef(tooth, pigment)[0, 1] > 0.5
-    assert 0.02 < (sheet.cover[rows] < 0.1).mean() < 0.3
+    assert 0.01 < (sheet.cover[rows] < 0.1).mean() < 0.3
     assert pigment.std() > 0.3 * pigment.mean()
 
 

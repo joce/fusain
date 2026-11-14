@@ -5,10 +5,14 @@
 A graphite lead is graphite fired with clay. More clay makes it harder: it
 wears less, stays on the peaks of the tooth and leaves a paler grey. Graphite
 mirrors the light, so a heavy layer of a soft lead shines under a lamp. A
+hard lead pressed firmly flattens the tooth instead: what is shaded over it
+lies evenly, the paper bites it less, and the little graphite there has a
+sheen. A
 coloured lead is pigment in wax: translucent, so that layers of two colours
 mix to the eye, and waxy, so that the tooth turns slick as it fills. Laid
 lightly, ten or so layers go on building; a layer pressed hard fills and
-polishes the tooth, and little takes over it.
+polishes the tooth, little takes over it, and it has a soft gloss under a
+lamp.
 """
 
 from __future__ import annotations

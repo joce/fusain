@@ -22,9 +22,11 @@ Crayons and oil pastels leave a film of wax that dry media hardly take over,
 even one firm line of it (wax resist); drawn over dust, they lie on it and
 bind part of it. An oil pastel is a paste, which a finger smears and a
 kneaded eraser does not lift.
-A point wears as it draws, until it is sharpened. Heavy graphite shines under
-the lamp. Fixative sets the dust. The plan for the rest is in
-[docs/design.md](docs/design.md).
+A point wears as it draws, until it is sharpened. A hard pencil pressed
+firmly flattens the tooth, and a stylus indents a line that a tone shaded
+over it skips. Heavy graphite shines under the lamp, polished wax has a soft
+gloss and heavy ballpoint ink bronzes. Fixative sets the dust. The plan for
+the rest is in [docs/design.md](docs/design.md).
 
 ```python
 from fusain import Sheet, papers, pencils
@@ -125,13 +127,30 @@ scribbled over them, the paper left for every white.*
 ![Graphite pencils on cartridge paper](examples/output/pencils.png)
 
 Top: 4H, 2H, HB, 2B, 4B, 6B and 8B, each shaded with the pressure rising from
-left to right. Bottom left: HB at a light pressure in 1, 2, 4 and 8 layers.
-Bottom middle: a 4B held on its side (`tilt=1`), which marks a broad, soft,
-grainy band. Bottom right: 2B lines drawn lightly, firmly and hard, and
-cross-hatching.
+left to right. Middle left: HB at a light pressure in 1, 2, 4 and 8 layers.
+Middle: a 4B held on its side (`tilt=1`), which marks a broad, soft,
+grainy band. Middle right: 2B lines drawn lightly, firmly and hard, and
+cross-hatching. Bottom, what the pencil does to the paper. Left: five lines
+indented with a stylus, lightest to firmest, under a 2B shaded lightly (left
+half) and hard (right half). Middle: blades of grass indented first, which
+stay white under a 4B. Right: a 2H pressed hard over the left half, then one
+light layer of 4B over all of it, grainy on the tooth left alone and even on
+the flattened one.
 
 Sizes are in pixels, and the paper's `grain` sets the scale: a pencil line is
 two or three grains wide.
+
+```python
+sheet.indent([(100, 300), (400, 320)], pressure=0.7)   # a stylus: it lays nothing, and leaves a groove
+sheet.shade((80, 260, 420, 360), pencils.B2, pressure=0.5)   # the groove stays the white of the paper
+```
+
+A tip rides on the paper either side of a groove and marks only what it
+reaches down to: indent whiskers, grass or a highlight firmly before shading
+and they stay white; a groove indented lightly fills in under a soft pencil
+pressed hard. A firm ballpoint line is such a groove too. And a hard pencil
+pressed firmly flattens the tooth (`Sheet.press`): what is shaded over it
+afterwards lies evenly, without the grain, and the paper bites it less.
 
 ```python
 from fusain import Smudger, charcoal, tools
@@ -238,7 +257,11 @@ Left: lines from the lightest touch to the firmest, and loops as a hand writes
 them. Middle: hatching in one to four layers, and one layer pressed lighter to
 firmer. Right: a pencil sketch inked over, its right half then rubbed with an
 eraser, which takes the pencil and leaves the ink; and a red pen skidding
-across a patch of wax crayon.
+across a patch of wax crayon. Bottom left: the ball gathers ink as it rolls,
+and leaves a blob where the line turns sharply and, now and then, where it
+starts. Bottom middle: the ball presses a groove, which a soft pencil shaded
+over it skips where the pen was firm. Bottom right: loops written with a pen
+that has run dry (`sheet.indent`), shaded over.
 
 ```python
 from fusain import Stick
@@ -283,14 +306,22 @@ flat-ended blocks.
 image = sheet.render()                    # under the default lamp, graphite shines a little
 image = sheet.render(light=(0, 0, 1))     # lamp overhead: heavy graphite turns silvery
 image = sheet.render(gloss=0)             # matte, as a scanner sees it
+shiny = sheet.shine("wax")                # how much of each pixel shines: "graphite", "wax", "ink"
 ```
 
-![Graphite's shine under three lamps](examples/output/shine.png)
+![What shines, under three lamps](examples/output/shine.png)
 
 One drawing under a raking lamp, the default lamp and a lamp straight
-overhead. Left: an HB, a 4B and an 8B, lighter to firmer. Right: three firm
-layers of 8B beside three of compressed charcoal. The higher the lamp, the
-more the heavy graphite mirrors it; the charcoal stays black.
+overhead. Top row. Left: an HB, a 4B and an 8B, lighter to firmer. Right:
+three firm layers of 8B beside three of compressed charcoal. The higher the
+lamp, the more the heavy graphite mirrors it; the charcoal stays black.
+Bottom row: a 2H laid lightly and pressed hard, which flattens the tooth so
+that the little graphite it lays has a sheen; a coloured pencil, its right
+half burnished; a crayon and an oil pastel pressed hard; and blue, black and
+red ballpoint hatched eight times over. Three things shine, each in its own
+way: graphite like metal; wax softly, once it is polished (the harder it was
+pressed, the more), under any lamp; and heavy ink like bronze, in the colour
+it absorbs most, with the lamp overhead.
 
 ![The papers under a raking light](examples/output/papers.png)
 
