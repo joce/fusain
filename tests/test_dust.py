@@ -124,7 +124,7 @@ def test_a_stump_leaves_streaks_along_its_way():
     assert across > 2 * along
 
 
-def test_what_the_paper_holds_hardly_moves():
+def test_what_the_paper_holds_is_hardly_dragged_out():
     def dragged_out(medium, width) -> float:
         sheet = _drawn(medium, width)
         before = float(sheet.pigment()[BAND].sum())
@@ -132,11 +132,58 @@ def test_what_the_paper_holds_hardly_moves():
         return float(sheet.pigment()[:, 200:].sum()) / before
 
     assert dragged_out(charcoal.VINE, 14.0) > 3 * dragged_out(pencils.B4, 7.0)
-    # and the grain of a pencil shading survives the stump
-    sheet = _drawn(pencils.B4, 7.0)
+
+
+def _grain_kept(medium, tool=tools.STUMP, fixed=False) -> float:
+    """The share of a pencil shading's grain that is left after one pass of
+    a tool along it."""
+    sheet = _drawn(medium, 7.0)
     grain = _luminance(sheet).std()
-    sheet.smudge(ALONG, tools.STUMP, 0.7, 20.0)
-    assert _luminance(sheet).std() > 0.8 * grain
+    if fixed:
+        sheet.fix()
+    sheet.smudge(ALONG, tool, 0.7, 20.0)
+    return float(_luminance(sheet).std() / grain)
+
+
+def test_a_stump_evens_a_soft_pencil_and_hardly_a_hard_one():
+    # graphite slides under a tool that smears, the more of it a lead has
+    kept = [_grain_kept(pencils.grade(name)) for name in ("4H", "HB", "4B", "8B")]
+    assert kept == sorted(kept, reverse=True)
+    assert kept[0] > 0.75 and kept[2] < 0.65 and kept[3] < 0.45
+    # no other pigment that the paper holds does: a coloured pencil keeps
+    # its grain as a hard lead does
+    assert _grain_kept(pencils.coloured("#c0392b")) > 0.75
+
+
+def test_rubbing_a_pencil_tone_again_smooths_it_without_wiping_it_away():
+    sheet = _drawn(pencils.B4, 7.0)
+    tone, grain = _luminance(sheet).mean(), _luminance(sheet).std()
+    for angle in (0.0, 90.0):
+        sheet.rub(PATCH, tools.STUMP, 0.8, angle=angle)
+    assert _luminance(sheet).std() < 0.4 * grain
+    assert abs(_luminance(sheet).mean() - tone) < 0.06
+
+
+@pytest.mark.parametrize("tool", [tools.STUMP, tools.FINGER, tools.CHAMOIS])
+def test_graphite_that_slides_is_all_somewhere(tool):
+    sheet = _drawn(pencils.B8, 7.0)
+    total = _total(sheet)
+    carried = sheet.smudge(ALONG, tool, 0.7, 20.0)
+    assert carried > 0
+    np.testing.assert_allclose(_total(sheet) + carried, total, rtol=1e-5)
+
+
+def test_an_eraser_does_not_slide_graphite_about():
+    # (it lifts; it does not smear)
+    sheet = _drawn(pencils.B8, 7.0)
+    outside = float(sheet.pigment()[:, 200:].sum())
+    sheet.erase(ALONG, tools.KNEADED, 0.7, 20.0)
+    assert float(sheet.pigment()[:, 200:].sum()) == outside
+
+
+def test_fixed_graphite_does_not_slide():
+    assert _grain_kept(pencils.B4, fixed=True) > 0.75
+    assert _grain_kept(pencils.B4, fixed=True) > _grain_kept(pencils.B4) + 0.15
 
 
 # --------------------------------------------------------------------------

@@ -151,6 +151,17 @@ SPREADS = 3.0
 #: A tool that rubs reaches the dust underneath less than the dust on top:
 #: the share of its lift it has there.
 UNDER_LIFT = 0.7
+#: Graphite slides. A tool that smears moves, in one pass at full pressure,
+#: this share (times how strongly it smears) of the graphite the paper
+#: holds; the clay of a lead holds the rest back, and the less graphite a
+#: lead has, the less of it slides (its share raised to this power). So a
+#: stump evens a soft pencil's tone and drags it out, and hardly moves a hard
+#: one's. Set dust lying over it keeps it where it is.
+SLIDE = 1.0
+SLIDE_POWER = 5.0
+#: Of the graphite that slides, the share that comes loose as dust, which the
+#: tool can carry off; the rest is pushed from grain to grain and stays held.
+SLIDE_LOOSE = 0.15
 
 
 @njit(cache=True, error_model="numpy")
@@ -512,6 +523,34 @@ def spread_dust(loose, near, iy, ix, take, back):
 
 
 @njit(cache=True, error_model="numpy")
+def slide_graphite(held, loose, slid, fixed, cover, iy, ix, rubbed, back):
+    """Slide the graphite that the paper holds at a pixel under a tool that
+    has ``rubbed`` it (how strongly it smears, times its share of a pass):
+    part comes loose as dust on top, the rest goes onto the face of the tool
+    (``slid``, packed as dust is), which lays the share ``back`` of what is
+    on its face down again, held. Other pigments do not slide. Returns the
+    volume laid down."""
+    there = held[iy, ix, IV]
+    slip = 0.0
+    if rubbed > 0.0 and there > 0.0 and held[iy, ix, IX] > 0.0:
+        graphite = min(held[iy, ix, IX] / there, 1.0)
+        slip = min(SLIDE * rubbed * graphite**SLIDE_POWER, 1.0)
+        barrier = fixed[iy, ix, 0] + fixed[iy, ix, 1]
+        if barrier > 0.0:
+            sealed = barrier / max(cover[iy, ix], 1e-6) / COVERS
+            slip *= 1.0 - min(sealed, 1.0)
+    if slip <= 0.0 and slid[IV] <= 0.0:
+        return 0.0  # (no graphite here or on the tool: every other medium)
+    for part in range(LOOSE):
+        moved = held[iy, ix, part] * slip * SLIDE_LOOSE
+        held[iy, ix, part] -= moved
+        loose[iy, ix, part] += moved
+    rest = slip * (1.0 - SLIDE_LOOSE) / max(1.0 - slip * SLIDE_LOOSE, 1e-9)
+    given, _ = spread_dust(held, slid, iy, ix, min(rest, 1.0), back)
+    return given
+
+
+@njit(cache=True, error_model="numpy")
 def rub_stroke(
     cover,
     held,
@@ -556,6 +595,7 @@ def rub_stroke(
     per_near = SPREAD / (2.0 * bound * math.pi * bound * bound)
     load = np.zeros(LOOSE)
     near = np.zeros(LOOSE)  # the dust on the face of the tool, soon laid back
+    slid = np.zeros(LOOSE)  # held graphite it is pushing along, likewise
     for i in range(xs.shape[0]):
         pressure = pressures[i]
         step = steps[i]
@@ -598,6 +638,10 @@ def rub_stroke(
                     held[iy, ix, part] -= taken
                     load[part] += taken
                 held[iy, ix, IW] -= held[iy, ix, IW] * up_held
+                back = min(per_near * local * step, 1.0)
+                pushed = slide_graphite(
+                    held, loose, slid, fixed, cover, iy, ix, smear * share, back
+                )
                 # lay, as dust all over the pixel
                 before = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
                 down = min(per_pixel * local * step, 1.0)
@@ -609,7 +653,6 @@ def rub_stroke(
                 # spread, from grain to grain
                 take = min(SPREADS * smear * share, 1.0)
                 take *= free_share(fixed, loose, iy, ix, 1)
-                back = min(per_near * local * step, 1.0)
                 given, taken = spread_dust(loose, near, iy, ix, take, back)
                 laid += given
                 after = before + laid - taken
@@ -617,7 +660,7 @@ def rub_stroke(
                     cover[iy, ix] = 0.0  # rubbed clean
                     continue
                 bare = 1.0 - cover[iy, ix]
-                cover[iy, ix] += bare * min(laid / after, 1.0)
+                cover[iy, ix] += bare * min((laid + pushed) / after, 1.0)
                 # press in; stir up what is underneath; and push what is
                 # loose into the low ground
                 spent = min(press * share, 1.0)
@@ -633,7 +676,7 @@ def rub_stroke(
                 dusty = max(free, 0.0) / after
                 cover[iy, ix] += (1.0 - cover[iy, ix]) * stirred * dusty
     for part in range(LOOSE):  # (what is still on its face it carries off)
-        load[part] += near[part]
+        load[part] += near[part] + slid[part]
     return load
 
 
