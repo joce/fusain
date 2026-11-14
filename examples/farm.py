@@ -627,9 +627,8 @@ def fence(hand: Hand, height_at, x0=48.0, x1=560.0) -> list[Item]:
         xs.append(xs[-1] + hand.u(70, 84))
     for a, b in pairwise(xs):
         for dy in (22, 48):
-            ya, yb = height_at(a) - dy + hand.u(-2, 2), height_at(b) - dy + hand.u(
-                -2, 2
-            )
+            ya = height_at(a) - dy + hand.u(-2, 2)
+            yb = height_at(b) - dy + hand.u(-2, 2)
             rail = [(a, ya - 6), (b, yb - 6), (b, yb + 6), (a, ya + 6)]
             items.append(Part(hand.poly(rail, 0.8, 0.5), None, 0.0, 7.0))
     for x in xs:

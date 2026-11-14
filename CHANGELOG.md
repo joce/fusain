@@ -37,6 +37,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   (`examples/broadway.py`), a great green macaw in coloured pencil
   (`examples/macaw.py`) and a still life in three ballpoints
   (`examples/stilllife.py`).
+- Two more: morning mist on a mountain lake in graphite
+  (`examples/lake.py`) and a naive farm in wax crayon (`examples/farm.py`).
 - `Sheet.rub(area, tool, ...)`: rubs or erases a whole area, in passes side
   by side, to and fro. It is to `smudge` and `erase` what `shade` is to
   `stroke`: the pressure may be a function of (x, y), and where it is nothing
