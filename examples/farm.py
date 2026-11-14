@@ -1024,7 +1024,7 @@ def foreground(hand: Hand) -> list[Item]:
     items += hen(hand, Place(436, 985, 0.95, left=True), None)
     items += pig(hand, Place(1000, 918, 0.9, left=True))
     items += hen(hand, Place(1190, 922, 1.2, left=True), ORANGE, rooster=True)
-    items += hen(hand, Place(1318, 990, 0.92, left=True), None)
+    items += hen(hand, Place(1302, 992, 0.92, left=True), None)
     return items
 
 
@@ -1587,11 +1587,12 @@ def zigzag(run: Run, touch: Touch, origin, hand: Hand, rim):
         if j % 2:
             a, b = b, a
         n = max(int(abs(b - a) // 50), 0)
+        ease = 1.0 - (1.0 - EASE) * min(abs(b - a) / (4.0 * touch.width), 1.0)
         wob = hand.rng.normal(0, 0.7 * touch.loose, n + 2)
         for t, w in zip(np.linspace(0, 1, n + 2), wob, strict=True):
             pts.append(origin + (off + w) * across + (a + (b - a) * t) * along)
             # (the hand bears on mid-leg, and eases where it turns)
-            bear.append(leg_firm * (EASE if t in (0.0, 1.0) else 1.0))
+            bear.append(leg_firm * (ease if t in (0.0, 1.0) else 1.0))
     return stray(np.array(pts), hand, rim), np.array(bear)
 
 
@@ -1659,7 +1660,7 @@ def scribble(sheet, hand: Hand, m, hard, y0, x0, colour, touch: Touch, rim, agai
         path, bear = zigzag(run, touch, origin, hand, rim)
         if len(path) < 2:
             continue
-        cap = 0.9 if colour == BLACK else 0.82
+        cap = 0.98 if colour == BLACK else 0.82
         pressure = list(np.clip(firm_along(hand, len(path), touch.firm) * bear, 0.1, cap))
         sheet.stroke(path, medium, pressure, width * hand.u(0.92, 1.06))
         mark_reached(reached, path - origin, width - 2.0)
@@ -1758,13 +1759,22 @@ def fill(sheet: Sheet, hand: Hand, part: Part, m: np.ndarray, hard, y0, x0, rim)
             under = Touch(angle - hand.u(20, 40), firm=0.6, gap=FILL_GAP * 1.2)
             scribble(sheet, hand, patch, hard, y0, x0, part.tint, under, rim, 0)
             firm *= 0.85
-        first = Touch(angle, firm=firm)
-        scribble(sheet, hand, patch, hard, y0, x0, part.colour, first, rim)
-        if hand.u(0, 1) < part.passes - 1:
-            cross = Touch(angle + hand.u(40, 62) * hand.rng.choice([-1, 1]))
-            cross.firm, cross.gap, cross.loose = min(firm * 0.8, 0.58), FILL_GAP * 1.3, 1.8
-            cross.skip = 0.18
-            scribble(sheet, hand, patch, hard, y0, x0, part.colour, cross, rim)
+        for touch in passes(hand, part, angle, firm):
+            scribble(sheet, hand, patch, hard, y0, x0, part.colour, touch, rim)
+
+
+def passes(hand: Hand, part: Part, angle: float, firm: float) -> list[Touch]:
+    """How a patch is filled: one pass, and where the shape should be solid
+    a second across it, lighter and less neat; black is pressed solid."""
+    turn = hand.u(40, 62) * hand.rng.choice([-1, 1])
+    if part.colour == BLACK:
+        return [Touch(angle, firm=firm, gap=0.5), Touch(angle + turn, firm=0.9, gap=0.55)]
+    out = [Touch(angle, firm=firm)]
+    if hand.u(0, 1) < part.passes - 1:
+        cross = Touch(angle + turn, firm=min(firm * 0.8, 0.58), gap=FILL_GAP * 1.3)
+        cross.loose, cross.skip = 1.8, 0.18
+        out.append(cross)
+    return out
 
 
 def part_angle(part: Part, x: float) -> float:
@@ -1779,7 +1789,7 @@ EASE = 0.8
 
 #: How firmly each colour is pressed when filling.
 FIRM = {SUN: 0.8, LIME: 0.66, GREEN: 0.7, SKY: 0.74, CREAM: 0.6, PINK: 0.7}
-FIRM[BLACK] = 0.86
+FIRM[BLACK] = 0.95
 
 
 def draw(items: Sequence[Item]) -> Sheet:
