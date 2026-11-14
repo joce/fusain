@@ -578,10 +578,10 @@ def rub_stroke(
     the dust underneath up into the dust on top and spreads it over the
     pixel; and over each of its own widths the tool lays the share ``lay`` of
     what it carries back down, as dust on top. As strongly as it smears, it
-    also spreads the dust on top over the pixels around. Dust that fixative
-    has set
-    (``fixed``, its volume in each of the two layers) is lifted only as held
-    pigment is, and is neither pressed in nor stirred.
+    also spreads the dust on top over the pixels around, and slides the
+    graphite that the paper holds (:func:`slide_graphite`). Dust that
+    fixative has set (``fixed``, its volume in each of the two layers) is
+    lifted only as held pigment is, and is neither pressed in nor stirred.
 
     Returns what the tool carries at the end: [K (N bands), S, volume, sheen].
     """

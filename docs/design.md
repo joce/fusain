@@ -109,8 +109,9 @@ A tool is a tip plus, usually, a medium.
 - **Still to come.** A worn tip stored as its own small height map, so that a
   crayon keeps the facets it wore.
 - **Tools that lay nothing** use the same stroke runner: stump and finger
-  (carry `loose` along and press part of it in), kneaded eraser (lifts
-  `loose`), hard eraser (also abrades `held`), burnisher.
+  (carry `loose` along and press part of it in, and slide held graphite),
+  kneaded eraser (lifts `loose`), hard eraser (also abrades `held`),
+  burnisher.
 - **Fixative** (built) acts on the whole sheet. It does not move the dust into
   `held`, which would mix a light pastel into the dark one under it: the dust
   stays in its two layers, and `fixed` records how much of each is set (it
