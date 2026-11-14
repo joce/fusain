@@ -1,9 +1,9 @@
 """A still life, drawn in blue, black and red ballpoint.
 
-Run from the repository root: ``python examples/stilllife.py FOLDER``.
-
-Stage 1: the scene is modelled and lit, and written to FOLDER as a plain
-study in grey and in colour, with the maps the pen will follow.
+Run from the repository root: ``python examples/stilllife.py``. Writes
+``examples/output/stilllife.png``; ``python examples/stilllife.py FOLDER``
+also writes the lit studies of the scene and the maps the pen follows to
+FOLDER.
 
 On a table covered with a striped cloth stand a blue-and-white jug, a dark
 wine bottle, a white bowl of cherries, an apple, half an apple and a knife,
@@ -13,7 +13,18 @@ cloth as a surface folded over the table and over its front edge.  One
 camera in perspective sees them, lit by a soft key light from the upper left
 and a weak fill, with cast shadows, highlights and the light the cloth
 throws back into the shadows.
+
+The pen then works as a hand does, patch by patch: for each ink and layer
+it finds where the most tone is still wanting and lays there a bundle of
+near-parallel strokes that follow the form (round and along the jug, the
+bottle and the bowl, round the fruit, along the folds, along the boards),
+each tapering at both ends and keeping its distance from the others of its
+layer.  Red is the fruit, blue the shadows on white things, the pattern and
+the stripes, black the darkest places; the painted pattern and the stripes
+are drawn as lines lying on their surfaces, and living contours come last.
 """
+
+# cspell:words bary catmull hwck interp isscalar keepdims nmax savez stilllife tris
 
 from __future__ import annotations
 
@@ -21,6 +32,7 @@ import math
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from murex import filters, write_png
@@ -642,7 +654,7 @@ def folds_at(x, z):
     direction there (unit (dx, dz)), weighted by how near each fold is."""
     q = np.stack([x.ravel(), z.ravel()], 1)
     height = np.zeros(len(q))
-    direc = np.tile([0.0, 1.0], (len(q), 1)) * 0.2
+    heading = np.tile([0.0, 1.0], (len(q), 1)) * 0.2
     for line, amp, width in fold_lines():
         best = np.full(len(q), np.inf)
         tang = np.zeros((len(q), 2))
@@ -656,8 +668,8 @@ def folds_at(x, z):
         taper = np.sin(np.pi * np.clip(along, 0, 1)) ** 0.5
         bump = amp * taper * np.exp(-0.5 * (best / width) ** 2)
         height = np.maximum(height, bump) + 0.25 * np.minimum(height, bump)
-        direc += tang * np.exp(-0.5 * (best / (2 * width)) ** 2)[:, None]
-    return height.reshape(x.shape), unit_rows(direc).reshape(*x.shape, 2)
+        heading += tang * np.exp(-0.5 * (best / (2 * width)) ** 2)[:, None]
+    return height.reshape(x.shape), unit_rows(heading).reshape(*x.shape, 2)
 
 
 def flat_under(x, z):
@@ -1091,10 +1103,27 @@ def occlusion(b: Buffers, cam: Camera):
 
 # Regions of the picture, as stored in the region map.
 REGIONS = [
-    "paper", "wall", "table", "cloth", "stripe", "jug", "jug_blue", "jug_inside",
-    "bottle", "label", "label_ink", "bowl", "cherry", "stem", "apple", "flesh",
-    "core", "seed", "blade", "handle",
-]  # fmt: skip
+    "paper",
+    "wall",
+    "table",
+    "cloth",
+    "stripe",
+    "jug",
+    "jug_blue",
+    "jug_inside",
+    "bottle",
+    "label",
+    "label_ink",
+    "bowl",
+    "cherry",
+    "stem",
+    "apple",
+    "flesh",
+    "core",
+    "seed",
+    "blade",
+    "handle",
+]
 R = {name: k for k, name in enumerate(REGIONS)}
 COLOURS = {
     "paper": "#fbfaf7",
@@ -1261,8 +1290,8 @@ def regions(b: Buffers):
 
 def albedo(region, b: Buffers):
     out = np.zeros(region.shape + (3,))
-    for name, hexc in COLOURS.items():
-        out[region == R[name]] = to_linear(hexc)
+    for name, code in COLOURS.items():
+        out[region == R[name]] = to_linear(code)
     wood = 0.8 + 0.4 * noise2(b.pos[..., 0] / 0.4, b.pos[..., 2] / 6.0, 11)
     seam = 1 - 0.5 * smoothstep(
         0.25, 0.05, np.abs(np.mod(b.pos[..., 0] + 6.5, 13.0) - 6.5)
@@ -1606,7 +1635,9 @@ def pen_maps(parts, sc: Scene) -> PenMaps:
     pic = picture(sc, CAMERA)
     b, cam = pic.b, CAMERA
     lum = pic.raw @ np.array([0.2126, 0.7152, 0.0722])
-    shade = np.clip(1 - pic.light.diffuse / 0.95, 0, 1)
+    flat = ("wall", "table", "cloth", "stripe", "flesh", "core", "seed")
+    ground = np.isin(pic.region, [R[k] for k in flat])
+    shade = np.clip(1 - pic.light.diffuse / np.where(ground, 0.7, 0.9), 0, 1)
     return PenMaps(
         np.where(b.obj >= O_CHERRY, b.obj, b.obj).astype(np.int32),
         pic.region.astype(np.int32),
@@ -1768,9 +1799,22 @@ class Hatcher:
         out = np.zeros((600, 2))
         ways = []
         for sign, ln in zip((1, -1), half, strict=True):
-            k = _trace(start[0], start[1], sign * d[0], sign * d[1], field, part,
-                       want, goal, 0.12 * ps.cap, turn, 2.0, int(ln / 2), out,
-                       self.full)  # fmt: skip
+            k = _trace(
+                start[0],
+                start[1],
+                sign * d[0],
+                sign * d[1],
+                field,
+                part,
+                want,
+                goal,
+                0.12 * ps.cap,
+                turn,
+                2.0,
+                int(ln / 2),
+                out,
+                self.full,
+            )
             ways.append(out[:k].copy())
         pts = np.vstack([ways[1][::-1], ways[0][1:]])
         return pts if len(pts) >= ps.shortest else None
@@ -1817,13 +1861,13 @@ def near_fruit(m: PenMaps):
 def white_targets(m: PenMaps):
     """Shadows on white things: open blue in steps, a little black at the
     darkest, violet near the fruit; bare paper in the lights."""
-    S = m.shade
+    S = m.shade + 0.08 * masks(m, ("cloth", "stripe"))
     white = masks(m, WHITES + ("stripe", "jug_blue"))
     bare = 1 - smoothstep(0.04, 0.12, m.spec)
-    blue = steps(S, (0.22, 0.45, 0.68), (0.04, 0.06, 0.07)) * bare
+    blue = steps(S, (0.2, 0.42, 0.66), (0.035, 0.06, 0.08)) * bare
     red = 0.6 * near_fruit(m) * blue
-    black = 0.05 * smoothstep(0.8, 0.95, S)
-    k = np.where(white, m.keep, 0)
+    black = 0.05 * smoothstep(0.78, 0.92, S)
+    k = np.where(white, smoothstep(0.3, 0.75, m.keep), 0)
     return blue * k, red * k, black * k
 
 
@@ -1832,7 +1876,11 @@ def fruit_targets(m: PenMaps):
     the core of the shadow; the highlight bare paper."""
     S = m.shade
     fruit = masks(m, FRUIT)
-    bare = 1 - smoothstep(0.08, 0.25, m.spec)
+    cherry = masks(m, ("cherry",))
+    glint = (
+        filters.box_blur((m.spec > np.where(cherry, 0.12, 0.22)).astype(float), 2) > 0.1
+    )
+    bare = (1 - smoothstep(0.06, 0.2, m.spec)) * ~glint
     red = (0.07 + steps(S, (0.3, 0.6), (0.08, 0.09))) * bare
     black = steps(S, (0.55, 0.8), (0.05, 0.07)) * bare
     blue = 0.04 * smoothstep(0.65, 0.85, S) * bare
@@ -1858,9 +1906,9 @@ def wall_targets(m: PenMaps):
     raggedly where the drawing stops."""
     D = m.dark
     wall = masks(m, ("wall",))
-    ragged = smoothstep(0.35, 0.6, m.keep)
-    blue = np.where(wall, 0.04 + steps(D, (0.45, 0.6), (0.04, 0.05)), 0) * ragged
-    black = np.where(wall, 0.05 * smoothstep(0.55, 0.7, D), 0) * ragged
+    ragged = smoothstep(0.35, 0.6, m.keep) * (0.45 + 0.8 * blobs(m.keep.shape, 90, 4))
+    blue = np.where(wall, 0.022 + steps(D, (0.52, 0.64), (0.025, 0.035)), 0) * ragged
+    black = np.where(wall, 0.04 * smoothstep(0.6, 0.72, D), 0) * ragged
     return blue, black
 
 
@@ -1895,21 +1943,23 @@ def seen_runs(line, min_len=3):
     return out
 
 
-def surface_line(h: Hatcher, pts3d, pen, lo, hi, tol=0.25, fade=True):
+def surface_line(h: Hatcher, pts3d, pen, lo, hi, tol=0.25, edge=0.25):
     """Draw a line lying on a surface: only where it is seen, its pressure
     from ``lo`` in the light to ``hi`` in shadow, tapering at its ends."""
     m = h.maps
     line = seen_line(CAMERA, m.dist, pts3d, tol)
     for run in seen_runs(line, 4):
         S = sample(m.shade, run)
-        k = sample(m.keep, run) if fade else np.ones(len(run))
+        k = sample(m.keep, run)
         u = np.linspace(0, 1, len(run))
         taper = np.clip(np.minimum(u, 1 - u) * len(run) / 6, 0, 1)
-        press = (lo + (hi - lo) * S) * taper * smoothstep(0.25, 0.6, k)
+        press = (lo + (hi - lo) * S) * taper * smoothstep(edge, edge + 0.35, k)
         if press.max() < 0.03:
             continue
         step = 2 if len(run) < 40 else 3
-        h.sheet.stroke([tuple(q) for q in run[::step]], pen, list(press[::step] + 0.005))
+        h.sheet.stroke(
+            [tuple(q) for q in run[::step]], pen, list(press[::step] + 0.005)
+        )
 
 
 def jug_outside():
@@ -1927,8 +1977,15 @@ def jug_point(theta, y, lift=0.04):
     return place(local, (JUG_AT[0], CLOTH_Y, JUG_AT[1]), JUG_YAW)
 
 
-JUG_BANDS = [(1.25, 1.55), (6.15, 6.45), (6.75, 6.9), (11.1, 11.25), (11.55, 11.85),
-             (16.3, 16.5), (20.9, 21.3)]  # fmt: skip
+JUG_BANDS = [
+    (1.25, 1.55),
+    (6.15, 6.45),
+    (6.75, 6.9),
+    (11.1, 11.25),
+    (11.55, 11.85),
+    (16.3, 16.5),
+    (20.9, 21.3),
+]
 
 
 def draw_jug_pattern(h: Hatcher):
@@ -1945,7 +2002,7 @@ def draw_jug_pattern(h: Hatcher):
         side = 1.0 if k % 2 == 0 else -1.0
         cy = 9.0 + np.sin(7 * tk) + side * 0.95
         a = np.linspace(0, 2 * np.pi, 40)
-        for scale in (1.0, 0.75, 0.5, 0.25):
+        for scale in (1.0, 0.85, 0.7, 0.55, 0.4, 0.25, 0.1):
             t = tk + scale * 0.6 / 7.8 * np.cos(a)
             y = cy + scale * 0.34 * np.sin(a)
             surface_line(h, jug_point(t, y), BLUE, 0.35, 0.6)
@@ -1956,8 +2013,12 @@ def stripe_bands():
     out = []
     for j in range(5):
         base = 15.0 + 17.0 * (j - 1)
-        out += [(base, base + 1.3), (base + 2.0, base + 2.35), (base + 3.0, base + 3.35)]
-    return [(a, b) for a, b in out if 0 < a and b < cloth_length()]
+        out += [
+            (base, base + 1.3),
+            (base + 2.0, base + 2.35),
+            (base + 3.0, base + 3.35),
+        ]
+    return [(a, b) for a, b in out if a > 0 and b < cloth_length()]
 
 
 def cloth_line(u, v):
@@ -1982,15 +2043,29 @@ def draw_stripes(h: Hatcher):
 
 # ----------------------------------------------------------- the hatching
 
-LONG = {"length": (90, 240), "count": (5, 11)}
-SMALL = {"length": (14, 40), "count": (3, 6), "spacing": (2.5, 7.0), "shortest": 5}
-FRUIT_KW = {"length": (40, 110), "count": (4, 9), "spacing": (2.5, 9.0), "shortest": 8}
+LONG: dict[str, Any] = {"length": (90, 240), "count": (5, 11)}
+SMALL: dict[str, Any] = {
+    "length": (14, 40),
+    "count": (3, 6),
+    "spacing": (2.5, 7.0),
+    "shortest": 5,
+}
+FRUIT_KW: dict[str, Any] = {
+    "length": (40, 110),
+    "count": (4, 9),
+    "spacing": (2.5, 9.0),
+    "shortest": 8,
+}
 
 
 def hatch_whites(h: Hatcher):
     blue, red, black = white_targets(h.maps)
     for ink, t, layers in (
-        (BLUE, blue, ((0, 0.0, 0.04, 0.22), (62, 0.04, 0.06, 0.25), (-48, 0.1, 0.07, 0.28))),
+        (
+            BLUE,
+            blue,
+            ((0, 0.0, 0.04, 0.22), (62, 0.04, 0.06, 0.25), (-48, 0.1, 0.07, 0.28)),
+        ),
         (RED, red, ((28, 0.0, 0.04, 0.2), (-75, 0.04, 0.05, 0.22))),
         (BLACK, black, ((80, 0.0, 0.05, 0.25),)),
     ):
@@ -2003,7 +2078,11 @@ def hatch_fruit(h: Hatcher):
     cherry = masks(h.maps, ("cherry",))
     for sel, kw in ((cherry, SMALL), (~cherry, FRUIT_KW)):
         for ink, t, layers in (
-            (RED, red, ((0, 0.0, 0.07, 0.3), (58, 0.07, 0.08, 0.32), (-38, 0.15, 0.09, 0.35))),
+            (
+                RED,
+                red,
+                ((0, 0.0, 0.07, 0.3), (58, 0.07, 0.08, 0.32), (-38, 0.15, 0.09, 0.35)),
+            ),
             (BLACK, black, ((70, 0.0, 0.05, 0.3), (-20, 0.05, 0.07, 0.35))),
             (BLUE, blue, ((110, 0.0, 0.04, 0.28),)),
         ):
@@ -2015,8 +2094,11 @@ def hatch_darks(h: Hatcher):
     black, blue, red = dark_targets(h.maps)
     for ink, t, layers in (
         (BLUE, blue, ((0, 0.0, 0.1, 0.3), (75, 0.1, 0.12, 0.35))),
-        (BLACK, black, ((90, 0.0, 0.12, 0.35), (15, 0.12, 0.14, 0.4),
-                        (-50, 0.26, 0.2, 0.45))),
+        (
+            BLACK,
+            black,
+            ((90, 0.0, 0.12, 0.35), (15, 0.12, 0.14, 0.4), (-50, 0.26, 0.2, 0.45)),
+        ),
         (RED, red, ((35, 0.0, 0.1, 0.3),)),
     ):
         for angle, lo, cap, p in layers:
@@ -2025,7 +2107,11 @@ def hatch_darks(h: Hatcher):
 
 def hatch_wall(h: Hatcher):
     blue, black = wall_targets(h.maps)
-    kw = {"length": (150, 340), "count": (6, 12), "spacing": (5.0, 16.0)}
+    kw: dict[str, Any] = {
+        "length": (150, 340),
+        "count": (6, 12),
+        "spacing": (5.0, 16.0),
+    }
     h.lay(Pass(BLUE, 0, 0.0, 0.05, 0.22, **kw), blue)
     h.lay(Pass(BLUE, 90, 0.05, 0.05, 0.24, **kw), blue)
     h.lay(Pass(BLACK, 30, 0.0, 0.05, 0.25, **kw), black)
@@ -2033,8 +2119,13 @@ def hatch_wall(h: Hatcher):
 
 def hatch_small(h: Hatcher):
     ink, steel = small_targets(h.maps)
-    kw = {"length": (8, 30), "count": (3, 6), "spacing": (1.8, 4.0), "shortest": 3,
-          "by_region": True}  # fmt: skip
+    kw: dict[str, Any] = {
+        "length": (8, 30),
+        "count": (3, 6),
+        "spacing": (1.8, 4.0),
+        "shortest": 3,
+        "by_region": True,
+    }
     h.lay(Pass(BLACK, 0, 0.0, 0.45, 0.5, **kw), ink)
     h.lay(Pass(BLUE, 90, 0.0, 0.1, 0.3, **SMALL), steel)
     h.lay(Pass(BLACK, 0, 0.08, 0.1, 0.3, **SMALL), steel)
@@ -2043,10 +2134,26 @@ def hatch_small(h: Hatcher):
 # ------------------------------------------------------------------- lines
 
 #: Ink and weight of each object's outline: (pens, weight in shadow).
-OUTLINES = {"jug": ((BLUE, BLACK), 0.45), "bowl": ((BLUE, BLACK), 0.4),
-            "bottle": ((BLACK,), 0.6), "apple": ((BLACK, RED), 0.5),
-            "half_apple": ((BLACK, RED), 0.45), "cherries": ((BLACK,), 0.5),
-            "knife": ((BLACK,), 0.45)}  # fmt: skip
+OUTLINES = {
+    "jug": ((BLUE, BLACK), 0.45),
+    "bowl": ((BLUE, BLACK), 0.4),
+    "bottle": ((BLACK,), 0.6),
+    "apple": ((BLACK, RED), 0.5),
+    "half_apple": ((BLACK, RED), 0.45),
+    "cherries": ((BLACK,), 0.5),
+    "knife": ((BLACK,), 0.45),
+}
+
+
+OUTLINE_OBJ = {
+    "jug": O_JUG,
+    "bowl": O_BOWL,
+    "bottle": O_BOTTLE,
+    "apple": O_APPLE,
+    "half_apple": O_HALF,
+    "cherries": O_CHERRY,
+    "knife": O_KNIFE,
+}
 
 
 def resample(pts, step=2.0):
@@ -2091,8 +2198,11 @@ def draw_contour(h: Hatcher, line, weight, pens_):
             if k and press.max() < 0.3:
                 break
             off = h.rng.normal(0, 0.5, 2) if k else 0
-            h.sheet.stroke([tuple(q) for q in run[::2] + off], pen,
-                           list(press[::2] * (1 - 0.3 * k) + 0.005))  # fmt: skip
+            h.sheet.stroke(
+                [tuple(q) for q in run[::2] + off],
+                pen,
+                list(press[::2] * (1 - 0.3 * k) + 0.005),
+            )
 
 
 def draw_outlines(h: Hatcher):
@@ -2103,7 +2213,8 @@ def draw_outlines(h: Hatcher):
         what = name[len("outline_") : name.rindex("_")]
         pens_, strength = OUTLINES[what]
         pts = resample(line[:, :2], 2.0)
-        inside = np.isin(m.obj, np.unique(sample(m.obj, pts + 0.0)))
+        o = OUTLINE_OBJ[what]
+        inside = m.obj >= O_CHERRY if o == O_CHERRY else m.obj == o
         n = inward(pts, inside)
         S = sample(m.shade, pts + 3 * n)
         w = strength * smoothstep(0.15, 0.6, S) + 0.05
@@ -2112,10 +2223,13 @@ def draw_outlines(h: Hatcher):
 
 def draw_rims_and_stems(h: Hatcher):
     m = h.maps
-    for name, pen, lo, hi in (("rim_jug", BLUE, 0.25, 0.5), ("rim_bowl", BLUE, 0.2, 0.45),
-                              ("rim_bottle", BLACK, 0.3, 0.5),
-                              ("foot_jug", BLUE, 0.2, 0.45),
-                              ("foot_bowl", BLUE, 0.2, 0.45)):  # fmt: skip
+    for name, pen, lo, hi in (
+        ("rim_jug", BLUE, 0.25, 0.5),
+        ("rim_bowl", BLUE, 0.2, 0.45),
+        ("rim_bottle", BLACK, 0.3, 0.5),
+        ("foot_jug", BLUE, 0.2, 0.45),
+        ("foot_bowl", BLUE, 0.2, 0.45),
+    ):
         for run in seen_runs(m.lines[name], 4):
             run = resample(run, 2.0)
             S = sample(m.shade, run)
@@ -2127,6 +2241,22 @@ def draw_rims_and_stems(h: Hatcher):
             w = 0.25 + 0.4 * np.sin(np.pi * u)
             h.sheet.stroke([tuple(q) for q in run], BLACK, list(w))
             h.sheet.stroke([tuple(q + [0.6, 0.3]) for q in run], RED, list(0.6 * w))
+
+
+def draw_edges(h: Hatcher):
+    """The cloth's edge over the table's front and its hem, and the table's
+    front edge where it is bare: light lines that fade out."""
+    u = np.linspace(0, 1, 900)
+    top = TABLE_FRONT - CLOTH_BACK
+    for v, lo, hi in (
+        (top + EDGE_R * np.pi / 4, 0.15, 0.4),
+        (cloth_length() - 0.05, 0.2, 0.45),
+    ):
+        surface_line(h, cloth_line(u, np.full_like(u, v)), BLUE, lo, hi, 0.6, 0.5)
+    x = np.linspace(-19, CLOTH_LEFT[1] - 0.3, 200)
+    for y, z in ((0.0, TABLE_FRONT + 0.02), (-4.5, TABLE_FRONT + 0.02)):
+        edge = np.stack([x, np.full_like(x, y), np.full_like(x, z)], 1)
+        surface_line(h, edge, BLACK, 0.3, 0.5, 0.4, 0.45)
 
 
 def drawing(m: PenMaps, seed=7) -> Sheet:
@@ -2141,6 +2271,7 @@ def drawing(m: PenMaps, seed=7) -> Sheet:
     hatch_small(h)
     draw_outlines(h)
     draw_rims_and_stems(h)
+    draw_edges(h)
     return sheet
 
 
