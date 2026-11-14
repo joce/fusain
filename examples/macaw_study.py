@@ -1,35 +1,48 @@
 """A structural study of a great green macaw: the bird built as solids.
 
 Run from the repository root: ``python examples/macaw_study.py OUTDIR``.
-Writes ``study_grey.png``, ``study_colour.png``, ``head.png`` and the
-renders the silhouette check is made from into OUTDIR.
+Writes ``study_grey.png``, ``study_colour.png``, ``head.png`` and
+``head_colour.png`` into OUTDIR (in about a minute).
 
-This is the under-drawing of ``macaw.py``, not a drawing in pencil: the bird
-modelled from measurements, lit, and its feather tracts and features drawn
-on the model in line and tone.
+This is the under-drawing of ``macaw.py``, not yet a drawing in pencil: the
+bird modelled from measurements, posed, lit from the upper left, and its
+feather tracts and features drawn on the model in line and tone.
 
-The measurements (eleven reference photographs, CC BY / CC0, read off on
-grids; nothing sampled from them). Head, in units of the distance from the
-eye to the base of the culmen, the bird facing +x, y up:
+The measurements (landmarks read off fine grids laid over eleven reference
+photographs, CC BY / CC0; nothing sampled from them). The head, from seven
+near-profile heads, in units of the distance from the eye to the base of
+the culmen (the "unit" throughout), the bird facing +x, y up:
 
-* the bill's chord (base of culmen to the hook's tip) is 1.38 long and
-  turns 102 degrees down from the line eye-to-culmen-base (seven photos,
-  sd 2.5 degrees): the tip hangs almost under the base;
-* the culmen bulges forward of that chord by 0.26 of its length, the bulge
-  highest at 0.43 of the way down, leaving the base steeply;
-* the upper mandible's base runs back from the culmen to the gape, which
-  lies 0.62 along the chord and 0.47 behind it; the lower mandible's chin
-  reaches 1.1 chords down and 0.5 behind;
-* the bare face reaches 0.16 above the eye, 0.46 behind it and 0.96 below;
-  the red forehead runs from 0.32 in front of the eye to the bill, its top
-  0.35 above the eye level, and laps over the culmen's base;
-* the crown is only 0.35 above the eye: a flat head, the eye set high.
+* the bill's chord (culmen base to the hook's tip) is 1.26 long (1.17 over
+  all seven, 1.26 without the two strongly three-quarter ones, which shorten
+  it) and turns 102 degrees down from the line eye-to-culmen-base (sd 2.5):
+  the tip hangs almost under the base;
+* the culmen stands forward of the chord by 0.26 of its length, highest
+  0.43 of the way down; the upper mandible's base sweeps back from the
+  culmen to the gape, 0.31 in front of the eye and 0.62 below it;
+* the bare face reaches 0.16 above the eye, 0.46 behind it and 0.95 below,
+  its feather lines (eight to nine rows, about 0.07 apart) curving about a
+  point above the bill's base; the red forehead runs from 0.3 in front of
+  the eye to the bill, 0.35 above the eye's level;
+* the crown is only 0.35 above the eye: a flat head, the eye set high; the
+  iris about 0.06 across its radius.
 
-Whole bird, in units of the eye-to-bill-tip distance (1.53 of the above):
-shoulder 1.2 from the eye; folded wing 4.1-4.4 from shoulder to tip, its
-greater coverts ending 42% of the way; breast front 1.6 below and a little
-behind the eye; feet 2.5; tail tip 8.1-9.1; the tail hangs within 5-10
-degrees of vertical even when the body leans.
+The whole bird, from three whole perched birds, in eye-to-bill-tip lengths
+(1.45 units): shoulder 1.2 from the eye; folded wing 4.1-4.4 from shoulder
+to tip, its greater coverts ending 42% of the way; breast 1.6 below the eye;
+feet 2.5; tail tip 8.1-9.1, hanging within 5-10 degrees of the vertical.
+
+The model: the feathered head and body are ellipsoids melted together (a
+smooth maximum of their depths); each mandible is a surface inflated from
+its measured outline, full width along its base and thin at its cutting
+edge; the folded wing is a shell lying on the body, its lower edge standing
+proud; the tail is six stacked blades; toes and claws wrap a branch. Every
+pixel seen knows where it lies on the bird, so the face, the brow, the eye,
+the face's feather rows and the bill's lines are laid on the surface and
+turn with it. The feathers are relief on the model (covert rows growing in
+size down the wing, overlapping flight feathers, small tiles over head and
+body that follow the way the feathers run), shown only as much as the light
+rakes them.
 """
 
 from __future__ import annotations
@@ -37,20 +50,25 @@ from __future__ import annotations
 import math
 import sys
 from dataclasses import dataclass, field
+from functools import cache
+from itertools import pairwise
 from pathlib import Path
 
 import numpy as np
-from murex import write_png
+from murex import noise, write_png
 from murex.filters import box_blur, smoothstep
 
 WIDTH, HEIGHT = 1100, 1540
 #: Pixels to one unit of the head (eye to the base of the culmen).
-UNIT = 124.0
+UNIT = 134.0
 #: Where the eye lands on the sheet.
-EYE_AT = (300.0, 215.0)
+EYE_AT = (330.0, 225.0)
 SEED = 11
+#: How much the light is opened up, so that the sunlit green reads light
+#: and the bare face and catchlight go to the paper.
+EXPOSURE = 2.3
 #: Toward the light (x right, y up, z toward the viewer): above, front-left.
-LIGHT = np.array([-0.5, 0.62, 0.6]) / np.linalg.norm([-0.5, 0.62, 0.6])
+LIGHT = np.array([-0.72, 0.6, 0.34]) / np.linalg.norm([-0.72, 0.6, 0.34])
 
 # ----------------------------------------------------------------------
 # the measured head (units: eye to culmen base; facing +x, y up)
@@ -74,7 +92,8 @@ BILL_BASE = [(0.0, 0.0), (0.05, 0.14), (0.124, 0.272), (0.25, 0.35), (0.38, 0.40
 #: hook shows: from the gape the edge runs forward, nearly level, then down
 #: the inside of the hook, which lies forward of the chord)
 TOMIUM = [(0.58, 0.42), (0.55, 0.3), (0.56, 0.17), (0.6, 0.08), (0.63, 0.05),
-          (0.66, 0.045), (0.73, -0.02), (0.84, -0.045), (0.93, -0.03), (1.0, 0.0)]  # fmt: skip
+          (0.66, 0.045), (0.73, -0.02), (0.84, -0.045), (0.93, -0.03),
+          (1.0, 0.0)]  # fmt: skip
 #: The lower mandible, closed: from the gape, under the upper's edge, out
 #: from inside the hook and round its chin and back.
 LOWER = [(0.58, 0.42), (0.6, 0.2), (0.68, 0.02), (0.8, -0.02), (0.9, 0.0), (0.97, 0.08),
@@ -212,8 +231,12 @@ class Patch:
         fy = np.clip((xy[:, 1] - y0) / step, 0, h.shape[0] - 1.001)
         ix, iy = fx.astype(int), fy.astype(int)
         ax, ay = fx - ix, fy - iy
-        z = (h[iy, ix] * (1 - ax) * (1 - ay) + h[iy, ix + 1] * ax * (1 - ay)
-             + h[iy + 1, ix] * (1 - ax) * ay + h[iy + 1, ix + 1] * ax * ay)
+        z = (
+            h[iy, ix] * (1 - ax) * (1 - ay)
+            + h[iy, ix + 1] * ax * (1 - ay)
+            + h[iy + 1, ix] * (1 - ax) * ay
+            + h[iy + 1, ix + 1] * ax * ay
+        )
         o, ex, ey, ez = (np.asarray(v, dtype=np.float64) for v in self.basis)
         return o + np.outer(xy[:, 0], ex) + np.outer(xy[:, 1], ey) + np.outer(z, ez)
 
@@ -234,9 +257,11 @@ def inside(poly: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
 def distance_to(curve: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     """Distance from each point (x, y) to the polyline ``curve``."""
     best = np.full(x.shape, np.inf)
-    for (ax, ay), (bx, by) in zip(curve[:-1], curve[1:], strict=True):
+    for (ax, ay), (bx, by) in pairwise(curve):
         ex, ey = bx - ax, by - ay
-        t = np.clip(((x - ax) * ex + (y - ay) * ey) / max(ex * ex + ey * ey, 1e-12), 0, 1)
+        t = np.clip(
+            ((x - ax) * ex + (y - ay) * ey) / max(ex * ex + ey * ey, 1e-12), 0, 1
+        )
         np.minimum(best, np.hypot(x - ax - t * ex, y - ay - t * ey), out=best)
     return best
 
@@ -279,7 +304,9 @@ def relief(height: np.ndarray, gx, gy, keep, step, base=None):
 def mirror_z(points: np.ndarray, normals: np.ndarray):
     """The same surface on the other side of the middle plane."""
     flip = np.array([1.0, 1.0, -1.0])
-    return np.concatenate([points, points * flip]), np.concatenate([normals, normals * flip])
+    return np.concatenate([points, points * flip]), np.concatenate(
+        [normals, normals * flip]
+    )
 
 
 def mandible(outline, free, ridge, widths, part, rounding, step=0.004):
@@ -312,49 +339,7 @@ def mandible(outline, free, ridge, widths, part, rounding, step=0.004):
     return Patch(pts, nrm, flow, part, (gx[0, 0], gy[0, 0], step, height), IDENTITY)
 
 
-def section_cuts(outline: np.ndarray, spine: np.ndarray):
-    """Where the line across ``spine`` at each of its points meets the
-    closed ``outline`` (both (N, 2)): the two ends of each cross-section."""
-    tangent = np.gradient(spine, axis=0)
-    tangent /= np.linalg.norm(tangent, axis=1, keepdims=True)
-    normal = np.stack([-tangent[:, 1], tangent[:, 0]], axis=1)
-    a, b = outline, np.roll(outline, -1, axis=0)
-    ends = []
-    for p, n in zip(spine, normal, strict=True):
-        # p + s n = a + t (b - a), for every edge at once
-        e = b - a
-        det = n[0] * -e[:, 1] + n[1] * e[:, 0]
-        ok = np.abs(det) > 1e-12
-        d = a - p
-        s = np.where(ok, (d[:, 0] * -e[:, 1] + d[:, 1] * e[:, 0]) / np.where(ok, det, 1), 0)
-        t = np.where(ok, (n[0] * d[:, 1] - n[1] * d[:, 0]) / np.where(ok, det, 1), -1)
-        hit = ok & (t >= 0) & (t <= 1)
-        below, above = s[hit & (s <= 0)], s[hit & (s >= 0)]
-        lo = below.max() if below.size else 0.0
-        hi = above.min() if above.size else 0.0
-        ends.append((p + lo * n, p + hi * n))
-    return np.array(ends)
-
-
-def horn(outline, spine, widths, part, n=90, flow=None):
-    """A solid of horn (a mandible) from its outline in profile (skull
-    frame): ellipsoids across it along ``spine``, as wide as ``widths``
-    (from its root to its end)."""
-    spine2 = smooth_curve(spine, n)
-    ring = np.asarray(outline, dtype=np.float64)
-    ring = smooth_curve(np.concatenate([ring, ring[:1]]), 400)
-    ends = section_cuts(ring, spine2)
-    mid = 0.5 * (ends[:, 0] + ends[:, 1])
-    half = 0.5 * np.linalg.norm(ends[:, 1] - ends[:, 0], axis=1)
-    w = np.interp(np.linspace(0, 1, n), np.linspace(0, 1, len(widths)), widths)
-    spine3 = np.concatenate([mid, np.zeros((n, 1))], axis=1)
-    blobs = chain(spine3, half, w, part)
-    if flow is not None:
-        for b in blobs:
-            b.flow = np.asarray(flow, dtype=np.float64)
-    return blobs
-
-
+@cache
 def head_blobs() -> list[Blob]:
     """The head, in the skull frame (eye at the origin, the culmen's base at
     (1, 0), y up, z toward the bird's right): the feathered skull, forehead,
@@ -367,14 +352,6 @@ def head_blobs() -> list[Blob]:
         blob((-0.5, -0.32, 0.0), (0.6, 0.68, 0.45), "plumage", flow=(-0.5, -1.0, 0)),
         blob((0.36, -0.3, 0.0), (0.28, 0.28, 0.24), "plumage", flow=back),
     ]
-    upper = np.concatenate([bill_point(CULMEN), bill_point(TOMIUM[::-1][1:]),
-                            bill_point(BILL_BASE[::-1][1:-1])])
-    upper_spine = bill_point([(0.1, 0.04), (0.3, 0.06), (0.47, 0.03), (0.6, -0.08),
-                              (0.75, -0.12), (0.88, -0.08), (0.97, -0.02), (0.995, 0.0)])
-    lower = bill_point(LOWER)
-    lower_spine = bill_point([(0.66, 0.6), (0.82, 0.58), (0.96, 0.46), (1.02, 0.3),
-                              (0.97, 0.14)])
-    del upper_spine, lower_spine
     eye = [blob((0.0, 0.0, 0.36), (0.1, 0.1, 0.1), "eye")]
     return plume + eye
 
@@ -396,19 +373,37 @@ def point_of(outline) -> np.ndarray:
     return bill_point([(1.0, 0.0)])[0]
 
 
+@cache
 def bill_patches() -> list[Patch]:
     """The two mandibles, as horn."""
-    upper = np.concatenate([bill_point(CULMEN), bill_point(TOMIUM[::-1][1:]),
-                            bill_point(BILL_BASE[::-1][1:-1])])
+    upper = np.concatenate(
+        [
+            bill_point(CULMEN),
+            bill_point(TOMIUM[::-1][1:]),
+            bill_point(BILL_BASE[::-1][1:-1]),
+        ]
+    )
     lower = bill_point(LOWER)
     chin = bill_point(LOWER[4:10])
     upper_free = np.concatenate([bill_point(CULMEN), bill_point(TOMIUM[::-1][1:])])
     lower_free = bill_point(LOWER[:-1])
     return [
-        mandible(upper, upper_free, bill_point(CULMEN), [0.28, 0.27, 0.23, 0.16, 0.08, 0.025],
-                 "upper", (0.3, 0.1)),
-        mandible(lower, lower_free, chin, [0.3, 0.3, 0.28, 0.24, 0.16, 0.08], "lower",
-                 (0.3, 0.08)),
+        mandible(
+            upper,
+            upper_free,
+            bill_point(CULMEN),
+            [0.28, 0.27, 0.23, 0.16, 0.08, 0.025],
+            "upper",
+            (0.3, 0.035),
+        ),
+        mandible(
+            lower,
+            lower_free,
+            chin,
+            [0.3, 0.3, 0.28, 0.24, 0.16, 0.08],
+            "lower",
+            (0.3, 0.08),
+        ),
     ]
 
 
@@ -436,14 +431,16 @@ FEET = (-0.42, 0.34)
 #: neck, the breast, the belly, the rump and vent, the back.
 TORSO = [
     ((-0.62, -1.0), (0.95, 0.85, 0.54), -112.0),
-    ((-1.6, -1.85), (1.4, 1.25, 1.08), -128.0),
-    ((-2.25, -3.25), (1.3, 1.05, 1.0), -130.0),
+    ((-1.55, -1.9), (1.45, 1.22, 1.06), -126.0),
+    ((-2.05, -2.75), (1.2, 1.1, 1.02), -128.0),
+    ((-2.3, -3.35), (1.15, 1.0, 0.96), -132.0),
     ((-3.2, -4.35), (1.0, 0.65, 0.68), -130.0),
     ((-2.6, -2.4), (1.9, 0.62, 0.8), -130.0),
 ]
-THIGHS = [((-1.9, -3.6, z), (0.52, 0.46, 0.4)) for z in (0.42, -0.42)]
+THIGHS = [((-1.95, -3.72, z), (0.5, 0.42, 0.36)) for z in (0.3, -0.3)]
 
 
+@cache
 def body_blobs() -> list[Blob]:
     """The neck, breast, belly, back, vent and thighs: one soft mass."""
     out = [
@@ -495,7 +492,9 @@ def plate(outline, height_of, basis, part, step=0.004, both=True) -> Patch:
     o, ex, ey, ez = (np.asarray(v, dtype=np.float64) for v in basis)
     m = np.stack([ex, ey, ez], axis=1)
     flow = np.tile(ex, (len(pts), 1))
-    return Patch(o + pts @ m.T, nrm @ m.T, flow, part, (gx[0, 0], gy[0, 0], step, height), basis)
+    return Patch(
+        o + pts @ m.T, nrm @ m.T, flow, part, (gx[0, 0], gy[0, 0], step, height), basis
+    )
 
 
 def wing_frame():
@@ -504,7 +503,7 @@ def wing_frame():
     a, b = np.array(SHOULDER), np.array(WING_TIP)
     length = float(np.linalg.norm(b - a))
     along = (b - a) / length
-    return a, along, np.array([-along[1], along[0]]) * -1.0, length
+    return a, along, np.array([-along[1], along[0]]), length
 
 
 #: The folded wing's outline in the bird's middle plane: from the wrist its
@@ -568,14 +567,17 @@ def tail_axes():
 #: far sideways each lies, how long it is (of TAIL_LENGTH), how far it fans
 #: (degrees) and how wide it is.
 BLADES = [(0.05, 1.0, 1.0, 0.25), (-0.07, 0.95, -1.2, 0.25), (0.2, 0.8, 3.5, 0.24),
-          (-0.21, 0.76, -3.5, 0.24), (0.33, 0.6, 6.0, 0.23), (-0.34, 0.56, -6.0, 0.23)]  # fmt: skip
+          (-0.21, 0.76, -3.5, 0.24), (0.33, 0.6, 6.0, 0.23),
+          (-0.34, 0.56, -6.0, 0.23)]  # fmt: skip
 
 
 def blade_outline(length: float, half: float) -> np.ndarray:
     """A long tail feather in its own plane: from its root, narrowing
     a little, its end rounded to a blunt point."""
     t = np.linspace(0.0, 1.0, 60)
-    w = half * np.where(t < 0.72, 1.0 - 0.22 * t, 0.84 * np.sqrt(np.clip((1 - t) / 0.28, 0, 1)))
+    w = half * np.where(
+        t < 0.72, 1.0 - 0.22 * t, 0.84 * np.sqrt(np.clip((1 - t) / 0.28, 0, 1))
+    )
     w = np.maximum(w, 0.004)
     top = np.stack([t * length, w], 1)
     return np.vstack([top, top[::-1] * np.array([1.0, -1.0])])
@@ -635,7 +637,9 @@ def toe(centre, turn, along, thick, part="toes"):
     a = np.radians(np.linspace(*turn, 16))
     r = BRANCH_R + np.linspace(*thick, 16) * 0.8
     spine = (
-        centre + np.outer(np.cos(a) * r, side) + np.outer(np.sin(a) * r, up)
+        centre
+        + np.outer(np.cos(a) * r, side)
+        + np.outer(np.sin(a) * r, up)
         + np.outer(np.linspace(*along, 16), b)
     )
     radius = np.linspace(*thick, 16)
@@ -661,7 +665,9 @@ def feet_blobs() -> list[Blob]:
         for start, stop, along, th in TOES:
             out += toe(c, (start, stop), (0.0, along), (th, th * 0.65))
             end = stop + (-42 if stop < 90 else 42)
-            out += toe(c, (stop, end), (along, along * 1.1), (th * 0.55, 0.015), "claws")
+            out += toe(
+                c, (stop, end), (along, along * 1.1), (th * 0.55, 0.015), "claws"
+            )
     return out
 
 
@@ -671,6 +677,7 @@ def bird_blobs() -> tuple[list[Blob], list[Blob]]:
     return head_blobs(), body_blobs() + feet_blobs() + branch_blobs()
 
 
+@cache
 def bird_patches() -> tuple[list[Patch], list[Patch]]:
     """All of the bird's surfaces of points: the head's and the rest."""
     return bill_patches(), [wing_patch(body_blobs()), *tail_patches()]
@@ -738,7 +745,13 @@ class Pose:
         """The blobs on the sheet."""
         m = self.linear(head)
         return [
-            Blob(self.to_sheet(b.centre, head), m @ b.frame, b.radii * UNIT, b.part, m @ b.flow)
+            Blob(
+                self.to_sheet(b.centre, head),
+                m @ b.frame,
+                b.radii * UNIT,
+                b.part,
+                m @ b.flow,
+            )
             for b in blobs
         ]
 
@@ -753,17 +766,28 @@ class Scene:
     def turned(self, m: np.ndarray, shift=(0.0, 0.0, 0.0)) -> Scene:
         """The scene turned by the rotation ``m`` (and moved by -``shift``)."""
         sh = np.asarray(shift, dtype=np.float64)
-        blobs = [Blob(m @ b.centre - sh, m @ b.frame, b.radii, b.part, b.flow) for b in self.blobs]
-        patches = [Patch(p.points @ m.T - sh, p.normals @ m.T, p.flow @ m.T, p.part)
-                   for p in self.patches]
+        blobs = [
+            Blob(m @ b.centre - sh, m @ b.frame, b.radii, b.part, b.flow)
+            for b in self.blobs
+        ]
+        patches = [
+            Patch(p.points @ m.T - sh, p.normals @ m.T, p.flow @ m.T, p.part)
+            for p in self.patches
+        ]
         return Scene(blobs, patches)
 
 
 def place_patch(pose: Pose, patch: Patch, head: bool) -> Patch:
     """A surface on the sheet."""
     m = pose.linear(head)
-    return Patch(pose.to_sheet(patch.points, head), patch.normals @ m.T, patch.flow @ m.T,
-                 patch.part, patch.grid, patch.basis)
+    return Patch(
+        pose.to_sheet(patch.points, head),
+        patch.normals @ m.T,
+        patch.flow @ m.T,
+        patch.part,
+        patch.grid,
+        patch.basis,
+    )
 
 
 def posed(pose: Pose) -> Scene:
@@ -831,8 +855,14 @@ def box_of(b: Blob, shape) -> tuple[int, int, int, int] | None:
     """The pixels ``b`` may cover, or None if none of them is on the sheet."""
     e = extent(b)
     h, w = shape
-    x0, y0 = int(max(math.floor(b.centre[0] - e[0]), 0)), int(max(math.floor(b.centre[1] - e[1]), 0))
-    x1, y1 = int(min(math.ceil(b.centre[0] + e[0]) + 1, w)), int(min(math.ceil(b.centre[1] + e[1]) + 1, h))
+    x0, y0 = (
+        int(max(math.floor(b.centre[0] - e[0]), 0)),
+        int(max(math.floor(b.centre[1] - e[1]), 0)),
+    )
+    x1, y1 = (
+        int(min(math.ceil(b.centre[0] + e[0]) + 1, w)),
+        int(min(math.ceil(b.centre[1] + e[1]) + 1, h)),
+    )
     return (x0, y0, x1, y1) if x1 > x0 and y1 > y0 else None
 
 
@@ -880,6 +910,12 @@ def splat(patches: list[Patch], shape):
     nrm = np.concatenate([p.normals for p in patches])
     flo = np.concatenate([p.flow for p in patches])
     h, w = shape
+    # (each point covers a 2 x 2 footprint, so that no hole opens where the
+    # surface turns steeply away)
+    pts = np.concatenate(
+        [pts + [dx, dy, 0.0] for dx in (0.0, 0.7) for dy in (0.0, 0.7)]
+    )
+    nrm, flo = np.tile(nrm, (4, 1)), np.tile(flo, (4, 1))
     ix, iy = np.floor(pts[:, 0]).astype(int), np.floor(pts[:, 1]).astype(int)
     ok = (ix >= 0) & (ix < w) & (iy >= 0) & (iy < h)
     key, z = iy[ok] * w + ix[ok], pts[ok, 2]
@@ -905,8 +941,13 @@ def render_any(scene: Scene, name: str, shape):
 def render(scene: Scene, shape=(HEIGHT, WIDTH)) -> Render:
     """The solids as the viewer sees them."""
     names = sorted({b.part for b in scene.blobs} | {p.part for p in scene.patches})
-    out = Render(np.full(shape, -np.inf), np.full(shape, -1, np.int16),
-                 np.zeros((*shape, 3)), np.zeros((*shape, 3)), names)
+    out = Render(
+        np.full(shape, -np.inf),
+        np.full(shape, -1, np.int16),
+        np.zeros((*shape, 3)),
+        np.zeros((*shape, 3)),
+        names,
+    )
     for i, name in enumerate(names):
         z, n, f = render_any(scene, name, shape)
         front = z > out.z
@@ -917,10 +958,10 @@ def render(scene: Scene, shape=(HEIGHT, WIDTH)) -> Render:
 
 def light_frame() -> np.ndarray:
     """The rotation that turns the light's direction (on the sheet) into +z."""
-    l = LIGHT * np.array([1.0, -1.0, 1.0])
-    e1 = np.cross([0.0, 1.0, 0.0], l)
+    sun = SUN
+    e1 = np.cross([0.0, 1.0, 0.0], sun)
     e1 /= np.linalg.norm(e1)
-    return np.stack([e1, np.cross(l, e1), l])
+    return np.stack([e1, np.cross(sun, e1), sun])
 
 
 def shadowed(scene: Scene, seen: Render, bias: float = 3.0) -> np.ndarray:
@@ -1007,15 +1048,255 @@ def build_model() -> Model:
     return model
 
 
+def rake(model: Model) -> np.ndarray:
+    """How much the light rakes each surface, 0..1: little where it falls
+    full on it or where the surface is deep in shadow, most where the form
+    turns from light to shadow."""
+    n = model.seen.normal
+    facing = n @ SUN
+    turning = smoothstep(0.95, 0.45, facing) * smoothstep(-0.25, 0.2, facing)
+    return np.clip(0.12 + 0.88 * turning * (1.0 - 0.6 * model.shadow), 0.0, 1.0)
+
+
 def emboss(model: Model, height: np.ndarray, where: np.ndarray) -> None:
     """Raise the relief ``height`` (pixels) over ``where`` on the model's
-    surfaces: its slopes tilt their normals."""
-    h = np.where(where, height, 0.0)
+    surfaces: its slopes tilt their normals, as much as the light rakes
+    them there (so that the feathers are seen only where it does)."""
+    h = np.where(where, height, 0.0) * rake(model)
     model.relief += h
     gy, gx = np.gradient(h)
     gx, gy = gx * where, gy * where
     n = model.normal - np.stack([gx, gy, np.zeros_like(gx)], -1)
     model.normal = n / np.maximum(np.linalg.norm(n, axis=-1, keepdims=True), 1e-9)
+
+
+# ----------------------------------------------------------------------
+# lifting lines drawn on the bird onto its surfaces
+
+
+def head_surface(xy) -> np.ndarray:
+    """Points (N, 2) of the skull frame's side, lifted onto the near side
+    of the head (N, 3): onto the eye where it stands out, else the head."""
+    xy = np.asarray(xy, dtype=np.float64)
+    head = head_blobs()
+    z = soft_extent(
+        [b for b in head if b.part == "plumage"],
+        xy[:, 0],
+        xy[:, 1],
+        BLEND["plumage"] / UNIT,
+    )
+    eye = next(b for b in head if b.part == "eye")
+    r2 = np.sum((xy - eye.centre[:2]) ** 2, axis=1)
+    on_eye = eye.centre[2] + np.sqrt(np.clip(eye.radii[0] ** 2 - r2, 0, None))
+    z = np.where(np.isfinite(z), z, 0.0)
+    return np.concatenate(
+        [xy, np.maximum(z, np.where(r2 < eye.radii[0] ** 2, on_eye, -9))[:, None]], 1
+    )
+
+
+def on_head(model: Model, xy) -> np.ndarray:
+    """Points (N, 2) of the skull frame's side, on the sheet (N, 3)."""
+    return model.pose.to_sheet(head_surface(xy), head=True)
+
+
+def on_bill(model: Model, which: int, xy, side: float = 1.0) -> np.ndarray:
+    """Points (N, 2) of the skull frame on mandible ``which`` (0 upper, 1
+    lower), on its near side (or its middle, ``side`` 0), on the sheet."""
+    patch = bill_patches()[which]
+    p = patch.lift(xy)
+    p[:, 2] *= side
+    return model.pose.to_sheet(p, head=True)
+
+
+def dashes(rng, line: np.ndarray, dash, gap) -> list[np.ndarray]:
+    """A polyline broken into dashes (lengths ``dash`` and gaps ``gap``,
+    each a (low, high) range, in its own units)."""
+    seg = np.linalg.norm(np.diff(line, axis=0), axis=1)
+    s = np.concatenate([[0.0], np.cumsum(seg)])
+    out, t = [], rng.uniform(0, gap[1])
+    while t < s[-1]:
+        n = rng.uniform(*dash)
+        ts = np.linspace(t, min(t + n, s[-1]), 6)
+        out.append(
+            np.stack([np.interp(ts, s, line[:, k]) for k in range(line.shape[1])], 1)
+        )
+        t += n + rng.uniform(*gap)
+    return out
+
+
+# ----------------------------------------------------------------------
+# the head's features
+
+
+PLUME, EYE_SKIN = ("plumage",), ("plumage", "eye")
+
+
+def draw_eye(model: Model, ink: Ink, tone: np.ndarray) -> np.ndarray:
+    """The eye: a pale iris round a black pupil, a dark rim, the heavy upper
+    lid and its shadow over the iris, the lower lid, one catchlight toward
+    the light; set in a ring of finely wrinkled bare skin."""
+    sk = np.nan_to_num(model.skull, nan=9.0)
+    near = sk[..., 2] > 0.2
+    r = np.hypot(sk[..., 0], sk[..., 1])
+    ang = np.arctan2(sk[..., 1], sk[..., 0])
+    iris = near & (r < IRIS)
+    lid_shadow = iris * smoothstep(0.2 * IRIS, 0.9 * IRIS, sk[..., 1])
+    tone[iris] = 0.72
+    tone[:] = np.where(
+        iris,
+        tone * (1 - 0.35 * smoothstep(0.6 * IRIS, IRIS, r)) * (1 - 0.45 * lid_shadow),
+        tone,
+    )
+    tone[near & (r < PUPIL)] = 0.04
+    glint = near & (np.hypot(sk[..., 0] - 0.022, sk[..., 1] - 0.026) < 0.014)
+    del ang
+    t = np.linspace(0.12 * math.pi, 0.95 * math.pi, 30)
+    upper = np.stack([np.cos(t), np.sin(t)], 1) * (IRIS + 0.006)
+    draw3d(
+        ink,
+        model,
+        on_head(model, upper),
+        3.0,
+        0.9 * np.sin(np.linspace(0.3, 2.8, 30)) + 0.1,
+        6.0,
+        EYE_SKIN,
+    )
+    t = np.linspace(1.15 * math.pi, 1.9 * math.pi, 24)
+    lower = np.stack([np.cos(t), np.sin(t)], 1) * (IRIS + 0.008)
+    draw3d(
+        ink,
+        model,
+        on_head(model, lower),
+        1.6,
+        0.4 * np.sin(np.linspace(0.2, 2.9, 24)),
+        6.0,
+        EYE_SKIN,
+    )
+    ink.dark[glint] = 0.0
+    return glint
+
+
+def draw_eye_skin(model: Model, ink: Ink, rng) -> None:
+    """The bare skin round the eye: fine concentric wrinkles, broken."""
+    for k in range(9):
+        radius = IRIS + 0.016 + 0.011 * k + rng.normal(0, 0.002)
+        start = rng.uniform(0, 2 * math.pi)
+        span = rng.uniform(1.4, 3.6)
+        t = np.linspace(start, start + span, 30)
+        wob = 1 + 0.03 * np.sin(t * 7 + k)
+        arc = np.stack([np.cos(t), np.sin(t) * 0.92], 1) * (radius * wob)[:, None]
+        dark = (0.32 - 0.018 * k) * np.sin(np.linspace(0.1, 3.0, 30))
+        draw3d(ink, model, on_head(model, arc), 1.1, dark, 6.0, EYE_SKIN)
+
+
+#: The centre the rows of tiny feathers across the bare face curve about
+#: (skull frame), and the first and last row's radius: nine rows, as
+#: counted on the photographs, closest under the eye.
+FACE_CENTRE, FACE_ROWS = (0.78, 0.38), (0.98, 1.6)
+
+
+def draw_face_lines(model: Model, ink: Ink, rng) -> None:
+    """The rows of tiny dark feathers across the bare face: arcs about a
+    point above the bill's base, from the face's back edge forward and down
+    toward the gape, each a broken line of tiny tufts, uneven, and fading
+    toward the bill."""
+    ring = smooth_curve(np.vstack([face_ring(), face_ring()[:1]]), 300)
+    cx, cy = FACE_CENTRE
+    radius = FACE_ROWS[0]
+    while radius < FACE_ROWS[1]:
+        t = np.linspace(math.radians(195), math.radians(265), 160)
+        wav = 0.008 * np.sin(t * 40 + radius * 9)
+        arc = np.stack(
+            [cx + (radius + wav) * np.cos(t), cy + (radius + wav) * np.sin(t)], 1
+        )
+        keep = inside(ring, arc[:, 0], arc[:, 1]) & (
+            np.hypot(arc[:, 0], arc[:, 1]) > IRIS + 0.07
+        )
+        for run in runs(arc, keep):
+            for dash in dashes(rng, run, (0.02, 0.07), (0.006, 0.03)):
+                fade = smoothstep(0.55, 0.2, float(dash[:, 0].mean()))
+                d = rng.uniform(0.45, 0.8) * (0.5 + 0.5 * fade)
+                draw3d(
+                    ink,
+                    model,
+                    on_head(model, dash),
+                    rng.uniform(1.4, 2.0),
+                    d,
+                    6.0,
+                    PLUME,
+                )
+        radius += rng.uniform(0.06, 0.08)
+
+
+def runs(points: np.ndarray, keep: np.ndarray) -> list[np.ndarray]:
+    """The unbroken stretches of ``points`` where ``keep`` holds."""
+    out, start = [], None
+    for i, k in enumerate(np.append(keep, False)):
+        if k and start is None:
+            start = i
+        elif not k and start is not None:
+            if i - start > 1:
+                out.append(points[start:i])
+            start = None
+    return out
+
+
+def draw_brow(model: Model, ink: Ink, rng) -> None:
+    """The velvety red forehead: dense tiny strokes lying back from the bill,
+    its back edge broken where its feathers lie over the green."""
+    ring = smooth_curve(np.vstack([BROW_EDGE, BROW_EDGE[:1]]), 300)
+    lo, hi = ring.min(axis=0), ring.max(axis=0)
+    pts = rng.uniform(lo, hi, (1400, 2))
+    pts = pts[inside(ring, pts[:, 0], pts[:, 1])]
+    for x, y in pts:
+        a = math.radians(170 + rng.normal(0, 12) + 25 * (y - 0.15))
+        n = rng.uniform(0.02, 0.04)
+        stroke = np.array([[x, y], [x + n * math.cos(a), y + n * math.sin(a)]])
+        draw3d(
+            ink, model, on_head(model, stroke), 1.1, rng.uniform(0.06, 0.16), 6.0, PLUME
+        )
+
+
+def draw_bill(model: Model, ink: Ink, rng) -> None:
+    """The bill's drawing: the cutting edge with its notch, dark; the base
+    where it meets the face; the line of the culmen; the growth lines and
+    the grain of the horn, faint, along its arch."""
+    upper = ("upper",)
+    tomium = smooth_curve(bill_point(TOMIUM), 60)
+    tomium = tomium + grain_offset(tomium, 0.012)
+    draw3d(
+        ink,
+        model,
+        on_bill(model, 0, tomium),
+        2.4,
+        np.linspace(0.85, 0.6, 60),
+        5.0,
+        upper,
+    )
+    base = smooth_curve(bill_point(BILL_BASE), 50)
+    base = base + grain_offset(base, 0.012)
+    draw3d(ink, model, on_bill(model, 0, base), 2.2, 0.55, 5.0, upper)
+    culmen = smooth_curve(bill_point(CULMEN), 80)
+    for k in range(7):
+        grain = culmen + grain_offset(culmen, -(0.04 + 0.05 * k))
+        for dash in dashes(rng, grain, (0.12, 0.4), (0.04, 0.15)):
+            draw3d(
+                ink,
+                model,
+                on_bill(model, 0, dash),
+                1.0,
+                rng.uniform(0.08, 0.18),
+                4.0,
+                upper,
+            )
+
+
+def grain_offset(curve: np.ndarray, off: float) -> np.ndarray:
+    """How far to move a curve's points to run ``off`` inside it (toward
+    the bill's back)."""
+    t = np.gradient(curve, axis=0)
+    t /= np.maximum(np.linalg.norm(t, axis=1, keepdims=True), 1e-9)
+    return np.stack([t[:, 1], -t[:, 0]], 1) * -off
 
 
 # ----------------------------------------------------------------------
@@ -1045,11 +1326,11 @@ def illumination(model: Model) -> np.ndarray:
     soft_parts = model.part("plumage", "wing")
     wrap = np.where(soft_parts, 0.3, 0.08)
     sun = np.clip((n @ SUN + wrap) / (1.0 + wrap), 0.0, 1.0) ** 1.15
-    sun *= 1.0 - 0.92 * model.shadow
-    bounce = np.clip(n @ np.array([0.15, 0.85, 0.5]), 0.0, 1.0) * 0.16
-    sky = 0.16 + 0.08 * np.clip(-n[..., 1], 0.0, 1.0)
+    sun *= 1.0 - 0.95 * model.shadow
+    bounce = np.clip(n @ np.array([0.15, 0.85, 0.5]), 0.0, 1.0) * 0.12
+    sky = 0.06 + 0.06 * np.clip(-n[..., 1], 0.0, 1.0)
     occ = occlusion(model)
-    return (sky + bounce + 0.9 * sun) * (1.0 - 0.7 * occ)
+    return (sky + bounce + sun) * (1.0 - 0.75 * occ) * EXPOSURE
 
 
 def specular(model: Model, power: float) -> np.ndarray:
@@ -1065,7 +1346,7 @@ def specular(model: Model, power: float) -> np.ndarray:
 #: The covert rows' coordinate: how far back along the wing (units) the
 #: rows' tips lie, a row being tilted back toward the lower edge and bowed
 #: toward the tip in the middle.
-ROW_SLANT, ROW_BOW = 0.35, 0.25
+ROW_SLANT, ROW_BOW, ROW_MID = 0.35, 0.25, 0.07
 #: Where the greater coverts' tips lie (units back from the wrist): 42% of
 #: the way to the wing's tip, as measured.
 GREATER = 0.42
@@ -1080,18 +1361,18 @@ def covert_rows(rng: np.random.Generator) -> list[dict]:
     rows, d, w = [], 0.32, 0.12
     end = GREATER * length - 0.95
     while d < end:
-        rows.append(row_of(rng, d, w, 0.42))
+        rows.append(row_of(rng, d, w, 0.8))
         d += 0.68 * w * rng.uniform(0.9, 1.1)
         w = min(w * 1.17, 0.36)
-    rows.append(row_of(rng, GREATER * length, 0.38, 0.55))
+    rows.append(row_of(rng, GREATER * length, 0.38, 0.75))
     return rows
 
 
 def row_of(rng: np.random.Generator, d: float, w: float, depth: float) -> dict:
     """One row of coverts: tips about ``d`` back, feathers about ``w`` wide,
     neither all of one width nor evenly set."""
-    edges = [-0.6 + rng.uniform(0.0, w)]
-    while edges[-1] < 2.0:
+    edges = [-1.0 + rng.uniform(0.0, w)]
+    while edges[-1] < 1.2:
         edges.append(edges[-1] + w * rng.uniform(0.8, 1.2))
     jitter = rng.normal(0.0, 0.08 * w, len(edges))
     return {"d": d, "edges": np.array(edges), "jitter": jitter, "depth": depth, "w": w}
@@ -1100,7 +1381,7 @@ def row_of(rng: np.random.Generator, d: float, w: float, depth: float) -> dict:
 def row_coordinate(u, v):
     """The covert rows' coordinate at wing coordinates (u, v)."""
     _, _, _, length = wing_frame()
-    return u * length - ROW_SLANT * (v - 0.6) + ROW_BOW * (v - 0.6) ** 2
+    return u * length - ROW_SLANT * (v - ROW_MID) + ROW_BOW * (v - ROW_MID) ** 2
 
 
 def row_tip(row: dict, v) -> np.ndarray:
@@ -1109,26 +1390,34 @@ def row_tip(row: dict, v) -> np.ndarray:
     e = row["edges"]
     j = np.clip(np.searchsorted(e, v) - 1, 0, len(e) - 2)
     a, b = e[j], e[j + 1]
-    half = 0.58 * (b - a)
+    half = 0.53 * (b - a)
     theta = np.clip((v - 0.5 * (a + b)) / half, -1.0, 1.0)
-    return row["d"] + row["jitter"][j] - row["depth"] * (b - a) * (1 - np.sqrt(1 - theta**2))
+    return (
+        row["d"]
+        + row["jitter"][j]
+        - row["depth"] * (b - a) * (1 - np.sqrt(1 - theta**2))
+    )
 
 
 def covert_relief(u, v, rows):
     """Over the coverts: which row each place lies in (-1 past them), how
     far from the row above's tips to its own (0..1), and where across its
-    own feather (-1..1)."""
+    own feather (0 at the edge the next one covers, 1 at its free edge)."""
     d = row_coordinate(u, v)
     which = np.full(u.shape, -1)
     q = np.zeros(u.shape)
+    side = np.zeros(u.shape)
     prev = np.full(u.shape, -1.0)
     for k, row in enumerate(rows):
         tip = row_tip(row, v)
         here = (which < 0) & (d <= tip)
         which = np.where(here, k, which)
         q = np.where(here, np.clip((d - prev) / np.maximum(tip - prev, 1e-6), 0, 1), q)
+        e = row["edges"]
+        j = np.clip(np.searchsorted(e, v) - 1, 0, len(e) - 2)
+        side = np.where(here, np.clip((v - e[j]) / (e[j + 1] - e[j]), 0, 1), side)
         prev = tip
-    return which, q
+    return which, q, side
 
 
 #: The flight feathers seen below the greater coverts, from the top (the
@@ -1136,7 +1425,8 @@ def covert_relief(u, v, rows):
 #: each one's free lower edge lies across the wing (0 at its upper edge, 1
 #: at its lower) and how far along the wing it reaches.
 FLIGHT = [(0.16, 0.6), (0.3, 0.63), (0.42, 0.66), (0.53, 0.69), (0.63, 0.72),
-          (0.72, 0.76), (0.8, 0.86), (0.87, 0.93), (0.935, 0.97), (1.0, 1.0)]  # fmt: skip
+          (0.72, 0.76), (0.8, 0.86), (0.87, 0.93), (0.935, 0.97),
+          (1.0, 1.0)]  # fmt: skip
 
 
 def wing_edges(u):
@@ -1168,7 +1458,11 @@ def flight_relief(u, v):
         end = reach - 0.05 * (1 - np.sqrt(1 - theta**2))
         here = (which < 0) & (f <= edge) & (f >= top) & (u <= end)
         which = np.where(here, j, which)
-        q = np.where(here, np.clip((f - max(prev, top)) / max(edge - max(prev, top), 1e-6), 0, 1), q)
+        q = np.where(
+            here,
+            np.clip((f - max(prev, top)) / max(edge - max(prev, top), 1e-6), 0, 1),
+            q,
+        )
         prev = edge
     return which, q
 
@@ -1181,15 +1475,265 @@ def feather_wing(model: Model, rng: np.random.Generator) -> dict:
     b = np.nan_to_num(model.bird)
     u, v = wing_uv(b[..., 0], b[..., 1])
     rows = covert_rows(rng)
-    row, q = covert_relief(u, v, rows)
+    row, q, side = covert_relief(u, v, rows)
     blade, qf = flight_relief(u, v)
     covert = wing & (row >= 0)
     flight = wing & (row < 0)
-    lift = np.where(covert, 2.2 + 0.5 * np.minimum(row, 8), 2.6)
-    height = np.where(covert, q**0.6, np.clip(qf, 0, 1) ** 0.8) * lift
+    size = np.array([r["w"] for r in rows])[np.clip(row, 0, len(rows) - 1)]
+    lift = np.where(covert, 9.0 * size**1.3 / 0.38**0.3, 2.4)
+    height = (
+        np.where(covert, 0.75 * q**0.8 + 0.25 * side, np.clip(qf, 0, 1) ** 0.8) * lift
+    )
     emboss(model, box_blur(height.astype(np.float32), 1), wing)
-    return {"u": u, "v": v, "rows": rows, "row": np.where(wing, row, -2), "q": q,
-            "blade": np.where(flight, blade, -2), "qf": qf}
+    return {
+        "u": u,
+        "v": v,
+        "rows": rows,
+        "row": np.where(wing, row, -2),
+        "q": q,
+        "blade": np.where(flight, blade, -2),
+        "qf": qf,
+    }
+
+
+# ----------------------------------------------------------------------
+# the small feathers of the head and body
+
+
+def flow2d(model: Model):
+    """The way the feathers run at each pixel, on the sheet: a unit vector
+    (H, W, 2) and how much it is foreshortened (0..1)."""
+    f = model.seen.flow[..., :2]
+    size = np.linalg.norm(f, axis=-1)
+    return f / np.maximum(size, 1e-9)[..., None], np.clip(size, 0.15, 1.0)
+
+
+def feather_size(model: Model) -> np.ndarray:
+    """How long the small feathers are at each pixel (units): tiny on the
+    face's edge and forehead, small over the crown, larger down the neck,
+    largest over the breast and belly, small again on the thighs."""
+    b = np.nan_to_num(model.bird)
+    head = model.headness
+    down = smoothstep(-0.8, -3.2, b[..., 1])
+    body = 0.09 + 0.08 * down
+    thigh = smoothstep(0.75, 0.4, implicit_map(model, THIGHS))
+    body = body * (1 - 0.4 * thigh)
+    return head * 0.055 + (1 - head) * body
+
+
+def implicit_map(model: Model, ellipsoids) -> np.ndarray:
+    """How far inside the nearest of these ellipsoids (centre, radii) each
+    pixel's point of the bird lies (below 1 inside)."""
+    b = model.bird
+    best = np.full(b.shape[:2], np.inf)
+    for c, r in ellipsoids:
+        q = (np.nan_to_num(b, nan=99.0) - np.asarray(c)) / np.asarray(r)
+        np.minimum(best, np.sqrt(np.sum(q * q, axis=-1)), out=best)
+    return best
+
+
+def scatter(
+    where: np.ndarray, spacing: np.ndarray, rng: np.random.Generator
+) -> np.ndarray:
+    """Points (N, 2) over ``where``, about ``spacing`` (pixels, a map) apart:
+    none closer than that, none of the region far from one."""
+    ys, xs = np.nonzero(where)
+    if not len(xs):
+        return np.zeros((0, 2))
+    r = spacing[ys, xs]
+    count = int(np.sum(1.0 / r**2) * 2.2)
+    pick = rng.choice(len(xs), size=min(count, len(xs)), replace=False)
+    cell = float(r.min()) / 1.5
+    grid: dict[tuple[int, int], list[int]] = {}
+    pts = []
+    for i in pick:
+        x, y, ri = xs[i] + rng.random(), ys[i] + rng.random(), r[i]
+        cx, cy = int(x / cell), int(y / cell)
+        reach = int(math.ceil(ri / cell))
+        if any(
+            (pts[k][0] - x) ** 2 + (pts[k][1] - y) ** 2 < (0.5 * (ri + pts[k][2])) ** 2
+            for gx in range(cx - reach, cx + reach + 1)
+            for gy in range(cy - reach, cy + reach + 1)
+            for k in grid.get((gx, gy), ())
+        ):
+            continue
+        grid.setdefault((cx, cy), []).append(len(pts))
+        pts.append((x, y, ri))
+    return np.array(pts)[:, :2]
+
+
+@dataclass
+class Tiles:
+    """Feathers laid as overlapping tiles on the sheet: which one is seen at
+    each pixel, how far toward its tip (-1..0.5 of its length), across it
+    (-1..1), and its seeds."""
+
+    which: np.ndarray
+    along: np.ndarray
+    across: np.ndarray
+    seeds: np.ndarray
+
+
+def lay_tiles(model: Model, where: np.ndarray, size_px: np.ndarray, rng) -> Tiles:
+    """Small feathers over ``where``, each ``size_px`` long, as the way the
+    feathers run lays them: each lying over the base of the next, so at any
+    place the one seen is the one nearest its own tip there."""
+    direction, short = flow2d(model)
+    seeds = scatter(where, np.maximum(0.62 * size_px * np.sqrt(short), 2.5), rng)
+    h, w = where.shape
+    best = np.full((h, w), -9.0)
+    which = np.full((h, w), -1)
+    along = np.zeros((h, w))
+    across = np.zeros((h, w))
+    for k, (x, y) in enumerate(seeds):
+        ix, iy = int(x), int(y)
+        d = direction[iy, ix]
+        length = size_px[iy, ix] * short[iy, ix] * rng.uniform(0.85, 1.15)
+        width = size_px[iy, ix] * rng.uniform(0.75, 0.95)
+        r = int(length + width) + 2
+        x0, x1, y0, y1 = (
+            max(ix - r, 0),
+            min(ix + r + 1, w),
+            max(iy - r, 0),
+            min(iy + r + 1, h),
+        )
+        gy, gx = np.mgrid[y0:y1, x0:x1] + 0.5
+        sa = ((gx - x) * d[0] + (gy - y) * d[1]) / length
+        ta = ((gx - x) * -d[1] + (gy - y) * d[0]) / (0.5 * width)
+        tip = 0.5 * np.sqrt(np.clip(1 - ta**2, 0, 1))
+        cover = (sa >= -1.0) & (sa <= tip) & (np.abs(ta) <= 1) & where[y0:y1, x0:x1]
+        prio = sa + 0.02 * rng.random()
+        take = cover & (prio > best[y0:y1, x0:x1])
+        best[y0:y1, x0:x1] = np.where(take, prio, best[y0:y1, x0:x1])
+        which[y0:y1, x0:x1] = np.where(take, k, which[y0:y1, x0:x1])
+        along[y0:y1, x0:x1] = np.where(take, sa, along[y0:y1, x0:x1])
+        across[y0:y1, x0:x1] = np.where(take, ta, across[y0:y1, x0:x1])
+    return Tiles(which, along, across, seeds)
+
+
+def feather_plumage(model: Model, rng: np.random.Generator) -> Tiles:
+    """The small feathers of the head, neck, breast, belly and thighs, laid
+    as tiles in relief: each rising toward its rounded tip, a step down to
+    the next."""
+    where = model.part("plumage") & (face_mask(model) < 0.5) & (brow_mask(model) < 0.5)
+    size = feather_size(model) * UNIT
+    tiles = lay_tiles(model, where, size, rng)
+    lift = 0.05 * size
+    height = np.where(
+        tiles.which >= 0, (0.35 + 0.65 * np.clip(tiles.along + 1.0, 0, 1.5) / 1.5), 0
+    )
+    height = height * lift - 0.08 * lift * np.abs(tiles.across)
+    soft = box_blur(box_blur(height.astype(np.float32), 1), 1)
+    emboss(model, soft, where & (tiles.which >= 0))
+    return tiles
+
+
+# ----------------------------------------------------------------------
+# lines of the wing, tail and feet
+
+
+def on_wing(model: Model, uv) -> np.ndarray:
+    """Points (u, v) of the folded wing, on its surface, on the sheet."""
+    uv = np.asarray(uv, dtype=np.float64)
+    a, along, across, length = wing_frame()
+    xy = a + np.outer(uv[:, 0] * length, along) + np.outer(uv[:, 1], across)
+    return model.pose.to_sheet(bird_patches()[1][0].lift(xy))
+
+
+def shade_at(model: Model, pts: np.ndarray) -> np.ndarray:
+    """How far into shadow each point (N, 3) of the sheet lies, 0..1, and how
+    much the light rakes it there, as weights for a line."""
+    h, w = model.seen.z.shape
+    ix = np.clip(pts[:, 0].astype(int), 0, w - 1)
+    iy = np.clip(pts[:, 1].astype(int), 0, h - 1)
+    return rake(model)[iy, ix]
+
+
+def draw_flight(model: Model, ink: Ink, rng) -> None:
+    """The flight feathers: the free edge of each, a crisp dark line where it
+    lies over the next, and its rounded end; firm where the light rakes."""
+    for edge, reach in FLIGHT[:-1]:
+        u = np.linspace(GREATER - 0.02, reach - 0.02, 60)
+        up, low = wing_edges(u)
+        v = up + edge * (low - up)
+        pts = on_wing(model, np.stack([u, v], 1))
+        dark = (0.35 + 0.45 * shade_at(model, pts)) * np.sin(
+            np.linspace(0.15, 2.9, 60)
+        ) ** 0.4
+        draw3d(ink, model, pts, rng.uniform(1.6, 2.2), dark, 4.0, ("wing",))
+        theta = np.linspace(-1.0, 1.0, 16)
+        f = edge - 0.12 + 0.12 * theta
+        uu = reach - 0.05 * (1 - np.sqrt(1 - theta**2))
+        up, low = wing_edges(uu)
+        end = on_wing(model, np.stack([uu, up + f * (low - up)], 1))
+        draw3d(
+            ink,
+            model,
+            end,
+            1.8,
+            0.55 * np.sin(np.linspace(0.2, 2.9, 16)),
+            4.0,
+            ("wing",),
+        )
+
+
+def draw_coverts(model: Model, ink: Ink, wing: dict, rng) -> None:
+    """The tips of the larger coverts, each a soft dark line along its edge,
+    stated where the light rakes the wing and left out elsewhere."""
+    rows = wing["rows"]
+    for row in rows[-4:]:
+        e = row["edges"]
+        for a, b in pairwise(e):
+            v = np.linspace(a, b, 14)
+            d = row_tip(row, v)
+            u = (
+                d + ROW_SLANT * (v - ROW_MID) - ROW_BOW * (v - ROW_MID) ** 2
+            ) / wing_frame()[3]
+            pts = on_wing(model, np.stack([u + 0.004, v], 1))
+            weight = shade_at(model, pts)
+            if rng.random() > 0.35 + 0.6 * float(weight.mean()):
+                continue
+            dark = (0.2 + 0.5 * weight) * np.sin(np.linspace(0.1, 3.0, 14))
+            draw3d(ink, model, pts, rng.uniform(1.4, 2.4), dark, 4.0, ("wing",))
+
+
+def draw_tail(model: Model, ink: Ink, rng) -> None:
+    """The tail feathers' shafts, fine and broken, along each one's middle."""
+    for k, (_, frac, _, _) in enumerate(BLADES):
+        origin, dk, side, n = blade_basis(k)
+        t = np.linspace(0.03, 0.93, 90) * TAIL_LENGTH * frac
+        patch = bird_patches()[1][1 + k]
+        local = np.stack([t, np.zeros_like(t)], 1)
+        pts = model.pose.to_sheet(patch.lift(local) + n * 0.002)
+        lift = np.convolve(rng.random(90) < 0.12, np.ones(5), mode="same") > 0
+        dark = np.where(lift, 0.0, 0.35 * (1.0 - 0.5 * t / t[-1]))
+        draw3d(ink, model, pts, 1.3, dark, 3.0, (f"tail{k}",))
+        del origin, dk, side
+
+
+def draw_feet(model: Model, ink: Ink) -> None:
+    """The scales across the toes, as rings; the claws, dark."""
+    b, up, side = branch_frame()
+    for f in FEET:
+        c = np.asarray(BRANCH_AT) + b * f
+        for start, stop, along, th in TOES:
+            for a in np.linspace(start, stop, 8)[1:-1]:
+                ang = math.radians(a)
+                frac = (a - start) / (stop - start)
+                r = BRANCH_R + th * (1 - 0.35 * frac) * 0.8
+                centre = (
+                    c
+                    + side * r * math.cos(ang)
+                    + up * r * math.sin(ang)
+                    + b * along * frac
+                )
+                radial = side * math.cos(ang) + up * math.sin(ang)
+                ring = [
+                    centre + radial * th * (1 - 0.35 * frac) * q + b * th * 0.9 * w
+                    for q, w in ((1.0, -1.0), (1.25, 0.0), (1.0, 1.0))
+                ]
+                pts = model.pose.to_sheet(np.array(ring))
+                draw3d(ink, model, pts, 1.3, [0.1, 0.5, 0.1], 4.0, ("toes",))
 
 
 # ----------------------------------------------------------------------
@@ -1198,9 +1742,10 @@ def feather_wing(model: Model, rng: np.random.Generator) -> dict:
 #: The local colours (sRGB 0..1).
 COLOURS = {
     "green": (0.36, 0.56, 0.15), "lime": (0.6, 0.71, 0.17), "olive": (0.42, 0.5, 0.16),
-    "teal": (0.16, 0.5, 0.48), "blue": (0.16, 0.38, 0.66), "deep_blue": (0.13, 0.25, 0.52),
+    "teal": (0.16, 0.5, 0.48), "blue": (0.16, 0.38, 0.66),
+    "deep_blue": (0.13, 0.25, 0.52),
     "sky": (0.55, 0.76, 0.86), "rust": (0.76, 0.3, 0.14), "red": (0.8, 0.1, 0.12),
-    "skin": (0.94, 0.8, 0.8), "horn": (0.24, 0.25, 0.28), "horn_tip": (0.36, 0.36, 0.38),
+    "skin": (0.94, 0.8, 0.8), "horn": (0.24, 0.25, 0.28),
     "jaw": (0.17, 0.17, 0.2), "foot": (0.4, 0.4, 0.42), "claw": (0.13, 0.13, 0.15),
     "bark": (0.56, 0.5, 0.43), "eye": (0.9, 0.86, 0.66),
 }  # fmt: skip
@@ -1221,7 +1766,7 @@ def face_mask(model: Model) -> np.ndarray:
     out = np.zeros(x.shape)
     inner = inside(ring, np.where(ok, x, 9.0), np.where(ok, y, 9.0))
     out[inner & (np.abs(np.nan_to_num(z)) > 0.1)] = 1.0
-    return out * model.part("plumage") * (model.headness > 0.15)
+    return ragged(out * model.part("plumage") * (model.headness > 0.15), 3.0, 41)
 
 
 def face_ring() -> np.ndarray:
@@ -1237,7 +1782,16 @@ def brow_mask(model: Model) -> np.ndarray:
     ring = smooth_curve(np.vstack([BROW_EDGE, BROW_EDGE[:1]]), 300)
     ok = np.isfinite(sk[..., 0])
     inner = inside(ring, np.where(ok, sk[..., 0], 9.0), np.where(ok, sk[..., 1], 9.0))
-    return inner * model.part("plumage") * (model.headness > 0.5) * 1.0
+    return ragged(inner * model.part("plumage") * (model.headness > 0.5) * 1.0, 2.5, 43)
+
+
+def ragged(mask: np.ndarray, cell: float, seed: int) -> np.ndarray:
+    """``mask`` (0..1) with its edge broken, as where small feathers lie
+    over the edge of a patch: breaks about ``cell`` pixels across."""
+    rng = np.random.default_rng(seed)
+    grain = noise.value_noise_2d(*mask.shape, cell, rng) - 0.5
+    soft = box_blur(box_blur(mask.astype(np.float32), 2), 2)
+    return ((soft + 0.9 * grain > 0.5) & (soft > 0.05)).astype(np.float64)
 
 
 def wing_colours(model: Model, wing: dict):
@@ -1247,16 +1801,25 @@ def wing_colours(model: Model, wing: dict):
     toward the tips."""
     seen = model.part("wing")
     u, row, blade, qf = wing["u"], wing["row"], wing["blade"], wing["qf"]
-    rows = len(wing["rows"])
     covert = seen & (row >= 0)
     flight = seen & (row < 0) & (blade >= 0)
-    lime = covert * (0.45 + 0.4 * smoothstep(rows - 2.5, rows - 1, row) * wing["q"])
+    lime = covert * (0.4 + 0.2 * wing["q"])
     teal = flight * smoothstep(1.5, 3.5, blade) * smoothstep(0.4, 0.62, u)
-    blue = flight * np.clip(smoothstep(4.5, 6.5, blade) + smoothstep(0.62, 0.8, u)
-                            + 0.4 * smoothstep(0.6, 1.0, qf) * (blade >= 3), 0, 1)
+    blue = flight * np.clip(
+        smoothstep(4.5, 6.5, blade)
+        + smoothstep(0.62, 0.8, u)
+        + 0.4 * smoothstep(0.6, 1.0, qf) * (blade >= 3),
+        0,
+        1,
+    )
     deep = seen * smoothstep(0.85, 1.0, u)
-    return [paint(seen, "green"), paint(lime, "lime"), paint(teal, "teal", 0.7),
-            paint(blue, "blue"), paint(deep, "deep_blue", 0.5)]
+    return [
+        paint(seen, "green"),
+        paint(lime, "lime"),
+        paint(teal, "teal", 0.7),
+        paint(blue, "blue"),
+        paint(deep, "deep_blue", 0.5),
+    ]
 
 
 def local_colour(model: Model, wing: dict) -> np.ndarray:
@@ -1265,8 +1828,12 @@ def local_colour(model: Model, wing: dict) -> np.ndarray:
     out = np.ones((h, w, 3))
     b = model.bird
     plume = model.part("plumage")
-    crown = smoothstep(0.2, 0.9, model.headness) * smoothstep(-0.6, 0.3, np.nan_to_num(model.skull[..., 1]))
-    rump = smoothstep(-3.2, -3.6, np.nan_to_num(b[..., 0])) * smoothstep(-4.3, -4.7, np.nan_to_num(b[..., 1]))
+    crown = smoothstep(0.2, 0.9, model.headness) * smoothstep(
+        -0.6, 0.3, np.nan_to_num(model.skull[..., 1])
+    )
+    rump = smoothstep(-3.2, -3.6, np.nan_to_num(b[..., 0])) * smoothstep(
+        -4.3, -4.7, np.nan_to_num(b[..., 1])
+    )
     layers = [
         paint(plume, "green"),
         paint(plume * crown, "lime", 0.55),
@@ -1297,10 +1864,18 @@ def tail_colours(model: Model):
         if not seen.any():
             continue
         t, across = blade_coords(model, k)
-        blue = np.clip(smoothstep(0.55, 0.85, t) + 0.6 * smoothstep(0.45, 0.95, np.abs(across))
-                       + 0.25 * (k >= 4), 0.0, 1.0)
-        out += [paint(seen, "rust"), paint(seen * blue, "blue"),
-                paint(seen * smoothstep(0.88, 0.99, t), "sky", 0.7)]
+        blue = np.clip(
+            smoothstep(0.55, 0.85, t)
+            + 0.6 * smoothstep(0.45, 0.95, np.abs(across))
+            + 0.25 * (k >= 4),
+            0.0,
+            1.0,
+        )
+        out += [
+            paint(seen, "rust"),
+            paint(seen * blue, "blue"),
+            paint(seen * smoothstep(0.88, 0.99, t), "sky", 0.7),
+        ]
     return out
 
 
@@ -1315,12 +1890,14 @@ def blade_coords(model: Model, k: int):
 
 def lit(colour: np.ndarray, light: np.ndarray) -> np.ndarray:
     """Local colour under the light (in linear light, back to sRGB)."""
-    return np.clip(np.clip(colour, 0, 1) ** 2.2 * light[..., None], 0.0, 1.0) ** (1 / 2.2)
+    return np.clip(np.clip(colour, 0, 1) ** 2.2 * light[..., None], 0.0, 1.0) ** (
+        1 / 2.2
+    )
 
 
 def grey(colour: np.ndarray) -> np.ndarray:
-    """How light a colour is, 0..1."""
-    return colour @ np.array([0.3, 0.59, 0.11])
+    """How much light a colour gives back, 0..1 (linear)."""
+    return np.clip(colour, 0, 1) ** 2.2 @ np.array([0.2126, 0.7152, 0.0722])
 
 
 # ----------------------------------------------------------------------
@@ -1357,8 +1934,14 @@ class Ink:
             return
         h, wd = self.dark.shape
         r = float(w.max()) / 2 + 1.5
-        x0, x1 = int(max(math.floor(x.min() - r), 0)), int(min(math.ceil(x.max() + r) + 1, wd))
-        y0, y1 = int(max(math.floor(y.min() - r), 0)), int(min(math.ceil(y.max() + r) + 1, h))
+        x0, x1 = (
+            int(max(math.floor(x.min() - r), 0)),
+            int(min(math.ceil(x.max() + r) + 1, wd)),
+        )
+        y0, y1 = (
+            int(max(math.floor(y.min() - r), 0)),
+            int(min(math.ceil(y.max() + r) + 1, h)),
+        )
         if x1 <= x0 or y1 <= y0:
             return
         gy, gx = np.mgrid[y0:y1, x0:x1] + 0.5
@@ -1368,21 +1951,24 @@ class Ink:
         region[:] = 1.0 - (1.0 - region) * (1.0 - cover)
 
 
-def visible(model: Model, pts: np.ndarray, tol: float = 3.0) -> np.ndarray:
+def visible(model: Model, pts: np.ndarray, tol: float = 3.0, parts=None) -> np.ndarray:
     """Which of the points (N, 3) on the sheet are not hidden behind a
-    nearer surface."""
+    nearer surface (and lie on one of ``parts``, if given)."""
     h, w = model.seen.z.shape
     ix = np.clip(pts[:, 0].astype(int), 0, w - 1)
     iy = np.clip(pts[:, 1].astype(int), 0, h - 1)
     z = model.seen.z[iy, ix]
     on = (pts[:, 0] >= 0) & (pts[:, 0] < w) & (pts[:, 1] >= 0) & (pts[:, 1] < h)
-    return on & (pts[:, 2] >= z - tol)
+    on &= np.isfinite(z) & (pts[:, 2] >= z - tol)
+    if parts is not None:
+        on &= model.part(*parts)[iy, ix]
+    return on
 
 
-def draw3d(ink: Ink, model: Model, pts3, width, dark, tol=3.0) -> None:
+def draw3d(ink: Ink, model: Model, pts3, width, dark, tol=3.0, parts=None) -> None:
     """A line through points (N, 3) on the sheet, lifted where hidden."""
     pts3 = np.asarray(pts3, dtype=np.float64)
-    seen = visible(model, pts3, tol)
+    seen = visible(model, pts3, tol, parts)
     d = np.broadcast_to(np.asarray(dark, float), len(pts3)) * seen
     ink.line(pts3[:, :2], width, d)
 
@@ -1392,29 +1978,68 @@ def contours(model: Model, ink: Ink, outline: np.ndarray) -> None:
     paper: firm on the side away from the light and where the form turns
     under, lost where the light takes the edge."""
     z = np.where(np.isfinite(model.seen.z), model.seen.z, -1e4)
+    part = model.seen.part
+    plume = model.seen.names.index("plumage")
     jump = np.zeros(z.shape)
-    for dy, dx in ((0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)):
+    for dy, dx in (
+        (0, 1),
+        (1, 0),
+        (0, -1),
+        (-1, 0),
+        (1, 1),
+        (-1, -1),
+        (1, -1),
+        (-1, 1),
+    ):
         nb = np.roll(np.roll(z, dy, 0), dx, 1)
-        jump = np.maximum(jump, np.clip((z - nb - 6.0) / 10.0, 0.0, 1.0))
+        same = (np.roll(np.roll(part, dy, 0), dx, 1) == part) & (part == plume)
+        step = np.where(same, 40.0, 6.0)
+        jump = np.maximum(jump, np.clip((z - nb - step) / 10.0, 0.0, 1.0))
     jump *= np.isfinite(model.seen.z)
     n = model.seen.normal
     away = np.clip(0.55 - (n @ SUN), 0.0, 1.0) / 0.55
-    weight = jump * (0.35 + 0.65 * away) * outline
+    weight = jump * (0.15 + 0.85 * away) * outline
     soft = box_blur(weight.astype(np.float32), 1)
     ink.dark = 1.0 - (1.0 - ink.dark) * (1.0 - np.clip(1.4 * soft, 0.0, 0.85))
 
 
-def finish(model: Model, ink: Ink, colour: np.ndarray, light: np.ndarray, spec: np.ndarray):
+def finish(
+    model: Model, ink: Ink, colour: np.ndarray, light: np.ndarray, spec: np.ndarray
+):
     """The study in grey and in colour, as images (H, W, 3) 0..1."""
     seen = np.isfinite(model.seen.z)
     value = grey(colour)
-    tone = np.clip(value ** 2.2 * light, 0.0, 1.0) ** (1 / 2.2) + spec
+    tone = np.clip(value * light, 0.0, 1.0) ** (1 / 2.2) + spec
     tone = np.where(seen, np.clip(tone, 0.0, 1.0), 1.0)
     paper = np.array([0.985, 0.98, 0.965])
-    grey_img = (tone * (1.0 - ink.dark))[..., None] * paper
-    col = np.where(seen[..., None], np.clip(lit(colour, light) + spec[..., None], 0, 1), paper)
-    col = col * (1.0 - ink.dark)[..., None]
+    fade = branch_fade(model)
+    tone = 1.0 - (1.0 - tone) * fade
+    dark = ink.dark * fade
+    grey_img = (tone * (1.0 - dark))[..., None] * paper
+    col = np.where(
+        seen[..., None], np.clip(lit(colour, light) + spec[..., None], 0, 1), 1.0
+    )
+    col = 1.0 - (1.0 - col) * fade[..., None]
+    col = col * (1.0 - dark)[..., None] * paper
     return grey_img, col
+
+
+def branch_fade(model: Model) -> np.ndarray:
+    """How much of the branch is drawn: all of it under the feet, fading out
+    either side, so that the bird is the subject."""
+    x, y, _ = model.pose.to_sheet(np.asarray(BRANCH_AT))
+    h, w = model.seen.z.shape
+    yy, xx = np.mgrid[:h, :w]
+    far = np.hypot(xx - x, (yy - y) * 1.5)
+    fade = np.exp(-((far / 230.0) ** 2.5))
+    near = box_blur(model.part("branch").astype(np.float32), 3) > 0.01
+    bird = (
+        box_blur(
+            (np.isfinite(model.seen.z) & ~model.part("branch")).astype(np.float32), 2
+        )
+        > 0.01
+    )
+    return np.where(near & ~bird, fade, 1.0)
 
 
 def save(path: Path, img: np.ndarray) -> None:
@@ -1434,13 +2059,25 @@ def main() -> None:
     model = build_model()
     rng = np.random.default_rng(SEED)
     wing = feather_wing(model, rng)
+    feather_plumage(model, rng)
     light = illumination(model)
     colour = local_colour(model, wing)
     hard = model.part("upper", "lower", "claws", "eye")
     spec = 0.35 * specular(model, 18.0) * hard
     ink = Ink(model.seen.z.shape)
     contours(model, ink, np.ones(model.seen.z.shape))
-    grey_img, col = finish(model, ink, colour, light, spec)
+    tone = np.ones(model.seen.z.shape)
+    draw_eye_skin(model, ink, rng)
+    draw_face_lines(model, ink, rng)
+    draw_brow(model, ink, rng)
+    draw_bill(model, ink, rng)
+    draw_flight(model, ink, rng)
+    draw_coverts(model, ink, wing, rng)
+    draw_tail(model, ink, rng)
+    draw_feet(model, ink)
+    glint = draw_eye(model, ink, tone)
+    spec = np.where(glint, 1.0, spec)
+    grey_img, col = finish(model, ink, colour, light * tone, spec)
     save(out / "study_grey.png", grey_img)
     save(out / "study_colour.png", col)
     x, y = int(EYE_AT[0]), int(EYE_AT[1])
