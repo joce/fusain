@@ -58,11 +58,11 @@ import numpy as np
 from murex import noise
 from murex.filters import box_blur, smoothstep
 
-WIDTH, HEIGHT = 1100, 1540
+WIDTH, HEIGHT = 1300, 1850
 #: Pixels to one unit of the head (eye to the base of the culmen).
-UNIT = 134.0
+UNIT = 172.0
 #: Where the eye lands on the sheet.
-EYE_AT = (330.0, 225.0)
+EYE_AT = (385.0, 265.0)
 SEED = 11
 #: How much the light is opened up, so that the sunlit green reads light
 #: and the bare face and catchlight go to the paper.
@@ -424,7 +424,7 @@ TAIL_ROOT, TAIL_HANG, TAIL_LENGTH, TAIL_ROLL = (-3.5, -4.75), 17.0, 7.6, 62.0
 #: The branch: a point on its axis under the feet, its direction (it runs
 #: along the bird, as macaws often stand), its radius; where along it from
 #: that point each foot grips.
-BRANCH_AT, BRANCH_DIR, BRANCH_R = (-1.65, -4.32, 0.0), (0.97, -0.2, 0.06), 0.34
+BRANCH_AT, BRANCH_DIR, BRANCH_R = (-1.65, -4.32, 0.0), (0.97, -0.2, 0.06), 0.4
 FEET = (-0.42, 0.34)
 
 #: The feathered body: centre (x, y), radii (along, across, sideways) and
@@ -633,12 +633,24 @@ def branch_frame():
 
 
 def branch_blobs() -> list[Blob]:
-    """The branch: a long round stick, a little bent."""
+    """The branch: thick, a little bent and uneven, swelling at a knot where
+    a short broken side stub leaves it."""
     b, up, side = branch_frame()
     s = np.linspace(-11.0, 11.0, 300)
     spine = np.asarray(BRANCH_AT) + np.outer(s, b) + np.outer(0.006 * s**2, up)
-    r = BRANCH_R * (1.0 - 0.01 * s)
-    return chain(spine, r, r, "branch", side=side, overlap=6.0)
+    spine += np.outer(0.025 * np.sin(1.7 * s + 0.4), up)
+    knot = np.exp(-(((s - KNOT) / 0.35) ** 2))
+    r = BRANCH_R * (1.0 - 0.01 * s + 0.06 * np.sin(2.3 * s) + 0.18 * knot)
+    out = chain(spine, r, r, "branch", side=side, overlap=6.0)
+    root = np.asarray(BRANCH_AT) + b * KNOT + up * 0.1
+    stub_dir = 0.55 * b + 0.75 * up + 0.35 * side
+    stub = root + np.outer(np.linspace(0.0, 0.75, 12), stub_dir)
+    radius = np.linspace(0.24, 0.17, 12)
+    return out + chain(stub, radius, radius, "branch", side=side, overlap=3.0)
+
+
+#: Where along the branch (from BRANCH_AT) the knot and its stub are.
+KNOT = -1.75
 
 
 def toe(centre, turn, along, thick, part="toes"):
@@ -1312,13 +1324,13 @@ def covert_rows(rng: np.random.Generator) -> list[dict]:
     each begins, so each one's width), and how deep their rounded tips are.
     The feathers grow down the wing, the greater coverts largest."""
     _, _, _, length = wing_frame()
-    rows, d, w = [], 0.34, 0.15
-    end = GREATER * length - 0.8
+    rows, d, w = [], 0.36, 0.24
+    end = GREATER * length - 0.95
     while d < end:
-        rows.append(row_of(rng, d, w, 0.8))
-        d += 0.8 * w * rng.uniform(0.85, 1.15)
-        w = min(w * 1.28, 0.44)
-    rows.append(row_of(rng, GREATER * length, 0.44, 0.7))
+        rows.append(row_of(rng, d, w, 0.75))
+        d += 0.85 * w * rng.uniform(0.85, 1.15)
+        w = min(w * 1.3, 0.56)
+    rows.append(row_of(rng, GREATER * length, 0.6, 0.65))
     return rows
 
 

@@ -1322,7 +1322,7 @@ def vignette(shape, seed=2):
     """1 inside the drawing, falling irregularly to 0 towards the edges."""
     h, w = shape
     yy, xx = np.mgrid[0:h, 0:w]
-    d = np.hypot((xx - 0.5 * w) / (0.5 * w), (yy - 0.56 * h) / (0.6 * h))
+    d = np.hypot((xx - 0.5 * w) / (0.48 * w), (yy - 0.53 * h) / (0.54 * h))
     k = w / WIDTH
     wobble = 0.75 * blobs(shape, 160 * k, seed) + 0.25 * blobs(shape, 45 * k, seed + 1)
     return 1 - smoothstep(0.84, 1.0, d + 0.22 * (wobble - 0.5))
