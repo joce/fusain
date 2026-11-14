@@ -324,7 +324,7 @@ def open_eyes(v):
         c = eye_centre(v, ring)
         d = v - c
         w = np.exp(-(d[:, 0] ** 2 / (2 * 1.6**2) + d[:, 1] ** 2 / (2 * 0.55**2)))
-        w *= np.exp(-np.clip(np.abs(d[:, 2]) - 1.0, 0, None) ** 2)
+        w *= np.exp(-(np.clip(np.abs(d[:, 2]) - 1.0, 0, None) ** 2))
         up = d[:, 1] > 0
         out[:, 1] += w * np.where(up, 0.64, 0.22) * np.tanh(d[:, 1] / 0.25)
         out[:, 0] += w * 0.28 * np.tanh(d[:, 0] / 0.6)

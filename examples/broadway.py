@@ -773,9 +773,12 @@ def front_arms(fig: Figure, chest: float) -> tuple[Limb, ...]:
             elbow = (side * (chest + 0.05), 0.7 * t)
             hand = (side * 0.1, t - 0.65 * fig.head)
         elif held == "child":
-            elbow, hand = (side * (chest + 0.04), 0.6 * t), (
-                side * (chest + 0.1),
-                0.42 * t,
+            elbow, hand = (
+                (side * (chest + 0.04), 0.6 * t),
+                (
+                    side * (chest + 0.1),
+                    0.42 * t,
+                ),
             )
         elif held == "led":
             elbow, hand = (side * (chest + 0.03), 0.6 * t), (side * chest, 0.65 * t)
