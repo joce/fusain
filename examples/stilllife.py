@@ -20,8 +20,9 @@ near-parallel strokes that follow the form (round and along the jug, the
 bottle and the bowl, round the fruit, along the folds, along the boards),
 each tapering at both ends and keeping its distance from the others of its
 layer.  Red is the fruit, blue the shadows on white things, the pattern and
-the stripes, black the darkest places; the painted pattern and the stripes
-are drawn as lines lying on their surfaces, and living contours come last.
+the stripes, black the darkest places; the jug's painted pattern is drawn as
+lines lying on its surface, the cloth's stripes are bands of short hatching
+laid across them, and living contours come last.
 """
 
 # cspell:words bary catmull hwck interp isscalar keepdims nmax savez stilllife tris

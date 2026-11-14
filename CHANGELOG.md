@@ -24,6 +24,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Four drawings as examples, each a script and the image it writes: an art
+  deco tower in charcoal (`examples/deco.py`), Broadway in SoHo in pastel
+  (`examples/broadway.py`), a great green macaw in coloured pencil
+  (`examples/macaw.py`) and a still life in three ballpoints
+  (`examples/stilllife.py`).
 - `Sheet.rub(area, tool, ...)`: rubs or erases a whole area, in passes side
   by side, to and fro. It is to `smudge` and `erase` what `shade` is to
   `stroke`: the pressure may be a function of (x, y), and where it is nothing

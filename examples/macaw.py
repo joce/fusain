@@ -1,7 +1,7 @@
 """A great green macaw, in coloured pencil on white paper.
 
 Run from the repository root: ``python examples/macaw.py``. Writes
-``examples/output/macaw.png`` (in about two minutes).
+``examples/output/macaw.png`` (in about a minute).
 
 A great green macaw (Ara ambiguus) on a branch, its body turned a little
 toward us and leaning forward, its head turned further and cocked, the long
