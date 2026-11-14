@@ -67,8 +67,17 @@ across, and shading came out in blotches wider than the pencil.)
 
 The paper itself is described by a `Paper` (texture, tooth size in pixels,
 depth of the tooth, how abrasive it is, how much it gives under a tip, colour), with presets such as
-cartridge paper, hot-pressed, cold-pressed, laid (Ingres) and sanded pastel
-paper.
+cartridge paper, hot-pressed, cold-pressed, laid (Ingres), pebbled (charcoal
+paper) and sanded pastel paper.
+
+A texture is judged by the scales at which its tooth varies, since a tone laid
+on it varies at the same ones. A wove paper varies at a grain and below: a
+tone on it is fine flecks. A rough paper also varies over many grains, so at
+a small grain a tone on it is blotchy. A pebbled paper is pits a grain
+across, 1.3 grains apart, each with its own depth and outline, in a net of
+rims: it varies at the scale of a pit and little beside (at grain 4, a tenth
+of its variation is at wavelengths over four grains, against over half for a rough
+paper), and a light tone on it is a net of dark around pale pits.
 
 ## A medium
 
