@@ -12,7 +12,10 @@ coloured lead is pigment in wax: translucent, so that layers of two colours
 mix to the eye, and waxy, so that the tooth turns slick as it fills. Laid
 lightly, ten or so layers go on building; a layer pressed hard fills and
 polishes the tooth, little takes over it, and it has a soft gloss under a
-lamp.
+lamp. The colourless blender pressed hard burnishes what it goes over: the
+white flecks of the paper close, and the colour is deeper and smoother. Wax
+holds against an eraser: the lights of a coloured pencil drawing are kept,
+or scratched out with ``tools.KNIFE``.
 """
 
 from __future__ import annotations
@@ -92,11 +95,14 @@ def coloured(color: ColorLike, name: str | None = None) -> Medium:
 
 
 #: A colourless blender: a pencil of wax with next to no pigment in it, to
-#: burnish what has been drawn.
+#: burnish what has been drawn. Pressed hard (0.8 or more), it melts into
+#: the wax under it and presses it into the valleys of the tooth: one firm
+#: layer closes four fifths of the white flecks.
 BLENDER = Medium(
     Pigment("#ffffff", opacity=0.02, name="blender"),
     softness=COLOURED_SOFTNESS,
     binding=1.0,
     wax=1.0,
     name="blender pencil",
+    melts=1.0,
 )

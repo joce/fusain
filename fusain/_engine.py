@@ -149,6 +149,16 @@ BURNISH = 1.5
 #: to it without carrying colour far.
 BURNISH_LIFT = 0.6
 BURNISH_LAY = 4.0
+#: A colourless blender melts into the film (:attr:`fusain.Medium.melts`):
+#: it polishes a thin film as if it were slick, takes up MELT_LIFT times its
+#: polish of what the paper holds (all of it at most) and lays MELT_LAY
+#: times what it drags back down over each of its own widths. One firm layer
+#: of it so stirs about half of what lies under it into an even film, which
+#: closes the white specks; it lays it back within the width of its tip or
+#: so, further along its way than across it, so an edge it is drawn across
+#: is dragged out a little.
+MELT_LIFT = 1.5
+MELT_LAY = 6.0
 #: A firm dry tip flattens the tooth itself: pressed harder than
 #: BURNISH_FROM, the hardest lead raises ``press`` by FLATTEN in one pass at
 #: full pressure. A softer tip gives before the paper does (it flattens as
@@ -226,6 +236,17 @@ SPREADS = 3.0
 #: A tool that rubs reaches the dust underneath less than the dust on top:
 #: the share of its lift it has there.
 UNDER_LIFT = 0.7
+#: Wax holds what it binds, and an eraser slides on it. Of what the paper
+#: holds, of a film and of what is set, an eraser lifts WAX_HOLDS less where
+#: the wax is WAX_FAST thick or more (a third of what makes it as slick as
+#: it gets to a pencil) and has kept its tooth, and POLISH_HOLDS less where
+#: it has been polished flat: a light layer of coloured pencil comes off
+#: fairly well, a dense one badly, a burnished one hardly. A blade or grit
+#: does not slide: as far as a tool scrapes, it takes what it would take of
+#: a medium without wax.
+WAX_FAST = 0.1
+WAX_HOLDS = 0.6
+POLISH_HOLDS = 0.9
 #: Graphite slides. A tool that smears moves, in one pass at full pressure,
 #: this share (times how strongly it smears) of the graphite the paper
 #: holds; the clay of a lead holds the rest back, and the less graphite a
@@ -339,13 +360,13 @@ def press_dust(held, under, loose, bonded, cover, iy, ix, share):
 
 
 @njit(cache=True, error_model="numpy")
-def burnish(held, press, drag, iy, ix, polish, lay):
+def burnish(held, press, drag, iy, ix, polish, lift, lay):
     """Polish a pixel by ``polish`` (the share of one full pass on a film as
-    slick as it gets): press its tooth flat, take that share of the lift of
-    what it holds onto the tip (``drag``, packed as the held layer is), and
-    lay the share ``lay`` of what the tip drags back down on it."""
+    slick as it gets): press its tooth flat, take ``lift`` times that share
+    of what it holds onto the tip (``drag``, packed as the held layer is),
+    and lay the share ``lay`` of what the tip drags back down on it."""
     press[iy, ix] = min(press[iy, ix] + BURNISH * polish, 1.0)
-    up = min(BURNISH_LIFT * polish, 1.0)
+    up = min(lift * polish, 1.0)
     down = min(lay, 1.0)
     for part in range(HELD):
         taken = held[iy, ix, part] * up
@@ -578,8 +599,8 @@ def bear(
     of it is a film, binding, scattering, sheen, wax, how many depths of
     this paper's tooth one of a paper of depth 1 is, how far one pass of it
     at full pressure flattens the tooth, how much less of it a flattened
-    tooth takes]. ``ends`` is as for
-    :func:`within_ends`.
+    tooth takes, how far it melts into a film of wax it polishes]. ``ends``
+    is as for :func:`within_ends`.
 
     Returns the volume laid and what of it is left to settle on top."""
     height, width = tooth.shape
@@ -596,7 +617,10 @@ def bear(
     per_pass, dragged = now[9] * step, now[10] * step
     lay, full, dry, slides, filmy = law[0], law[1], law[2], law[3], law[4]
     binding, s, sheen, wax = law[5], law[6], law[7], law[8]
-    sunk, crush, smooth = law[9], law[10], law[11]
+    sunk, crush, smooth, melts = law[9], law[10], law[11], law[12]
+    # (a tip that melts into the film stirs more of it, and lays it sooner)
+    stir = BURNISH_LIFT + (MELT_LIFT - BURNISH_LIFT) * melts
+    dragged *= 1.0 + (MELT_LAY / BURNISH_LAY - 1.0) * melts
     bound = max(wide, long)
     x0 = max(int(math.floor(x - bound)), 0)
     x1 = min(int(math.ceil(x + bound)), width)
@@ -642,8 +666,10 @@ def bear(
                 firm = (bearing - BURNISH_FROM) / (1.0 - BURNISH_FROM)
                 # (a hard tip crushes the tooth, whatever lies on it)
                 press[iy, ix] = min(press[iy, ix] + crush * firm * passing, 1.0)
-                polish, lay_back = firm * waxy * passing, dragged * touch
-                burnish(held, press, drag, iy, ix, polish, lay_back)
+                # (a blender melts into the film, however thin it is)
+                slick = waxy + (1.0 - waxy) * melts
+                polish, lay_back = firm * slick * passing, dragged * touch
+                burnish(held, press, drag, iy, ix, polish, stir, lay_back)
             # the tip presses some of the dust under it into the paper
             pressed = min(PRESS_IN * bearing, 1.0) * passing
             press_dust(held, under, loose, bonded, cover, iy, ix, pressed)
@@ -749,9 +775,9 @@ def put_down(
 @njit(cache=True, error_model="numpy")
 def law_of(medium, paper):
     """What :func:`bear` takes as ``law`` for a medium [scattering per unit
-    volume, softness, binding, the share of wax in it, its sheen] on a paper
-    [depth, bite, give, hold]; and how far down the tooth it reaches at full
-    pressure, held upright."""
+    volume, softness, binding, the share of wax in it, its sheen, how far
+    it melts into a film of wax] on a paper [depth, bite, give, hold]; and
+    how far down the tooth it reaches at full pressure, held upright."""
     s, softness, binding, wax = medium[0], medium[1], medium[2], medium[3]
     depth, bite, give = paper[0], paper[1], paper[2]
     reach = (REACH_HARD + REACH_SOFT * softness) * (GIVE_NONE + GIVE_FULL * give)
@@ -767,7 +793,7 @@ def law_of(medium, paper):
         * (1.0 + PILE * (1.0 - binding))
         * paper[3]
     )
-    law = np.empty(12)
+    law = np.empty(13)
     law[0], law[1] = LAY * shape * (0.5 + bite), full
     law[2], law[3] = resist_dry(wax), resist_waxy(softness, wax)
     law[4] = min(wax / STICKS, 1.0)  # how far what the paper holds is a film
@@ -777,6 +803,7 @@ def law_of(medium, paper):
     dryness = 1.0 - min(wax / STICKS, 1.0)
     law[10] = FLATTEN * (1.0 - softness) ** 3 * binding * binding * dryness
     law[11] = FLAT_BITE * dryness
+    law[12] = medium[5]  # how far it melts into the film it polishes
     return law, reach
 
 
@@ -851,7 +878,8 @@ def lay_stroke(
     (:func:`put_down`).
 
     ``medium`` is [scattering per unit volume, softness, binding, the share
-    of wax in it, its sheen] (its absorption per band is ``k``) and ``paper`` is
+    of wax in it, its sheen, how far it melts into a film of wax] (its
+    absorption per band is ``k``) and ``paper`` is
     [depth, bite, give, hold]. The medium is laid where the tip touches the
     tooth.
     What the paper does not hold of it is dust, or paste if the medium is
@@ -1038,15 +1066,30 @@ def lift_bonded(layer, bonded, load, iy, ix, which, up_dust, up_paste, up_held):
 
 
 @njit(cache=True, error_model="numpy")
+def wax_grip(held, cover, flat, iy, ix, scrape):
+    """The share of its lift a tool keeps on what a pixel holds, for the
+    wax there: all of it where there is none, less the thicker the wax is
+    and the further it has been polished (``flat``), which a tool gets
+    through as far as it scrapes (``scrape``, 0..1)."""
+    covered = cover[iy, ix]
+    if covered <= 0.0 or held[iy, ix, IW] <= 0.0:
+        return 1.0
+    waxy = min(held[iy, ix, IW] / covered / WAX_FAST, 1.0)
+    fast = WAX_HOLDS + (POLISH_HOLDS - WAX_HOLDS) * flat[iy, ix]
+    return 1.0 - (1.0 - scrape) * waxy * fast
+
+
+@njit(cache=True, error_model="numpy")
 def lift(held, under, loose, bonded, load, iy, ix, lifts, share):
     """Lift onto a tool (``load``) what it takes at a pixel in the ``share``
     of a pass at full pressure. ``lifts`` is [how strongly it lifts the
-    dust, how strongly what is held, how strongly it smears]: it takes less
-    of the dust underneath than of the dust on top; what is set or a film
-    only as what the paper holds; and paste as dust if it smears, as what is
-    held if it only lifts."""
+    dust, how strongly what is held, how strongly it smears, the share of
+    its lift it keeps on what is held here (:func:`wax_grip`)]: it takes
+    less of the dust underneath than of the dust on top; what is set or a
+    film only as what the paper holds; and paste as dust if it smears, as
+    what is held if it only lifts."""
     greasy = min(lifts[2], 1.0)
-    up_held = min(lifts[1] * share, 1.0)
+    up_held = min(lifts[1] * lifts[3] * share, 1.0)
     up_loose = min(lifts[0] * share, 1.0)
     up_under = min(UNDER_LIFT * lifts[0] * share, 1.0)
     kinds = bonded[iy, ix, 1, SET] + bonded[iy, ix, 1, FILM]
@@ -1116,6 +1159,7 @@ def stir_up(under, loose, bonded, iy, ix, stirred):
 @njit(cache=True, error_model="numpy")
 def rub_stroke(
     cover,
+    flat,
     held,
     under,
     loose,
@@ -1130,6 +1174,7 @@ def rub_stroke(
     lay,
     press,
     smear,
+    scrape,
     carried,
     salt,
 ):
@@ -1150,7 +1195,11 @@ def rub_stroke(
     film, and a film itself are lifted only as held pigment is, and are
     neither pressed in nor stirred. Paste is moved as dust is by a tool that
     smears, and lifted only as held pigment is by one that does not; it is
-    paste again where the tool lays it.
+    paste again where the tool lays it. Wax holds all that is lifted as held
+    pigment is, the more the thicker it is and the further it has been
+    polished (``flat``, the ``press`` of the sheet), but for the share
+    ``scrape`` of the tool's lift, which cuts through it
+    (:func:`wax_grip`).
 
     ``carried`` is what the tool carries, three rows packed as dust is with
     the volume of paste after ([K (N bands), S, volume, sheen, paste]): what
@@ -1167,7 +1216,7 @@ def rub_stroke(
     # on, per pixel moved
     per_pixel = lay / (2.0 * bound * math.pi * bound * bound)
     per_near = SPREAD / (2.0 * bound * math.pi * bound * bound)
-    lifts = np.array([lift_loose, lift_held, smear])
+    lifts = np.array([lift_loose, lift_held, smear, 1.0])
     load = carried[0]
     near = carried[1]  # the dust on the face of the tool, soon laid back
     slid = carried[2]  # held graphite it is pushing along, likewise
@@ -1192,6 +1241,7 @@ def rub_stroke(
                 local = pressure * min((bound - d) / rim, 1.0) * edge
                 local *= streak_at(dx, dy, tx, ty, salt)
                 share = local * per_pass * step  # of one pass at full pressure
+                lifts[3] = wax_grip(held, cover, flat, iy, ix, scrape)
                 lift(held, under, loose, bonded, load, iy, ix, lifts, share)
                 back = min(per_near * local * step, 1.0)
                 pushed = slide_graphite(

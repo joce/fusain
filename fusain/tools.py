@@ -1,9 +1,15 @@
 """Tools that lay nothing of their own: stumps and fingers that move what
-is on the paper, and erasers that take it off. Used with
-:meth:`fusain.Sheet.smudge`, :meth:`fusain.Sheet.erase` and
+is on the paper, erasers that take it off, and a knife that scrapes it off.
+Used with :meth:`fusain.Sheet.smudge`, :meth:`fusain.Sheet.erase` and
 :meth:`fusain.Sheet.rub`: bare, a tool is clean each time it is put to the
 paper; a :class:`fusain.Smudger` is one in the hand, which keeps what it
-picks up."""
+picks up.
+
+An eraser takes a dry medium off as far as it lifts. Wax holds: a light
+layer of coloured pencil comes off a vinyl eraser fairly well, a dense one
+badly, a burnished one hardly, and a kneaded eraser barely touches any of
+them. A light is scratched out of those with ``KNIFE`` or rubbed out with
+``SAND_ERASER``, or kept from the start (:meth:`fusain.Sheet.indent`)."""
 
 from __future__ import annotations
 
@@ -37,6 +43,12 @@ class Tool:
         Its usual width in pixels.
     name:
         Optional label.
+    scrape:
+        0..1: how far it cuts through wax. Wax holds what it binds, and an
+        eraser slides on it: of a coloured pencil, a crayon or an oil
+        pastel it lifts the less the thicker the wax is, and hardly
+        anything once the wax is polished. A tool that scrapes (grit, a
+        blade) takes that share of what the wax would have kept from it.
     """
 
     lift_loose: float
@@ -46,6 +58,7 @@ class Tool:
     smear: float = 0.0
     width: float = 12.0
     name: str = ""
+    scrape: float = 0.0
 
     def __post_init__(self):
         for field in ("lift_loose", "lift_held", "lay", "press", "smear"):
@@ -54,6 +67,8 @@ class Tool:
                 raise ValueError(f"{field} must be 0 or more, got {value!r}")
         if self.lay > 1:
             raise ValueError(f"lay is a share, at most 1, got {self.lay!r}")
+        if not (math.isfinite(self.scrape) and 0 <= self.scrape <= 1):
+            raise ValueError(f"scrape must be between 0 and 1, got {self.scrape!r}")
         if not (math.isfinite(self.width) and self.width > 0):
             raise ValueError(
                 f"width must be a number of pixels above 0: {self.width!r}"
@@ -73,7 +88,15 @@ FINGER = Tool(1.2, 0.01, lay=0.5, press=0.8, smear=2.5, width=22.0, name="finger
 #: A chamois: it wipes most of the dust away and spreads the rest thin.
 CHAMOIS = Tool(1.6, 0.04, lay=0.12, press=0.1, smear=1.0, width=30.0, name="chamois")
 #: A kneaded eraser: it lifts the dust, and a little of what is held; so
-#: only a little of an oil pastel, which is paste.
+#: only a little of an oil pastel, which is paste, and next to nothing of
+#: wax.
 KNEADED = Tool(2.5, 0.3, width=12.0, name="kneaded eraser")
-#: A vinyl eraser: it rubs off nearly everything.
+#: A vinyl eraser: it rubs off nearly everything but wax, on which it
+#: slides: it lightens a dense layer of coloured pencil only by degrees.
 ERASER = Tool(4.0, 2.5, width=10.0, name="vinyl eraser")
+#: A sand eraser (an ink eraser, or the tip of an electric one): grit in
+#: rubber, which abrades the wax a vinyl eraser slides on.
+SAND_ERASER = Tool(4.0, 3.0, width=6.0, name="sand eraser", scrape=0.8)
+#: The point of a knife, to scratch a fine light line out of a dense layer
+#: (sgraffito): it scrapes off nearly all that lies in its way, wax or not.
+KNIFE = Tool(6.0, 6.0, width=2.0, name="knife", scrape=1.0)

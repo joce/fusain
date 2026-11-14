@@ -230,10 +230,13 @@ def test_a_kneaded_eraser_does_not_lift_oil_pastel_as_it_lifts_dust():
     assert shares["oil"] == pytest.approx(shares["crayon"], rel=0.15)
 
 
-def test_a_vinyl_eraser_scrapes_oil_pastel_off():
+def test_a_vinyl_eraser_takes_half_of_an_oil_pastel_and_a_knife_scrapes_it_off():
     sheet = _sheet()
     laid = sheet.shade(BOX, pastels.oil(RED), 0.6, WIDTH)
-    assert sheet.rub(BOX, tools.ERASER, 0.6) > 0.7 * laid
+    scraped = sheet.copy()
+    # (the eraser slides on the wax in it; it used to take over 0.7)
+    assert 0.4 * laid < sheet.rub(BOX, tools.ERASER, 0.6) < 0.65 * laid
+    assert scraped.rub(BOX, tools.KNIFE, 0.6, 10) > 0.9 * laid
 
 
 def test_what_a_finger_smears_of_an_oil_pastel_is_still_paste():

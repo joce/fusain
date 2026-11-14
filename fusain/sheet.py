@@ -435,6 +435,7 @@ class Sheet:
                         known.binding,
                         known.wax,
                         known.sheen,
+                        known.melts,
                     ],
                     dtype=np.float64,
                 ),
@@ -689,6 +690,14 @@ class Sheet:
         The paste of an oil pastel, a film of wax laid over dust and the
         dust set under it come off as what the paper holds does.
 
+        Wax holds what it binds, and an eraser slides on it: a light layer
+        of coloured pencil comes off a vinyl eraser fairly well, a dense
+        one by degrees and a burnished one hardly; a kneaded eraser barely
+        touches them. For a light in those, scratch it out with the point
+        of a knife (``tools.KNIFE``, a fine line back to the paper), rub it
+        out with a sand eraser (``tools.SAND_ERASER``), or keep it from the
+        start by leaving the paper or by indenting it (:meth:`indent`).
+
         ``path`` and ``pressure`` are as for :meth:`stroke`; ``width`` is the
         width of the eraser in pixels (by default the tool's own; a
         :class:`fusain.Smudger` has its own and takes none).
@@ -799,6 +808,7 @@ class Sheet:
         before = smudger.load
         eng.rub_stroke(
             self.cover,
+            self.press,
             self.held,
             self.under,
             self.loose,
@@ -813,6 +823,7 @@ class Sheet:
             float(tool.lay),
             float(tool.press),
             float(tool.smear),
+            float(tool.scrape),
             smudger._carried,
             int(self._rng.integers(1 << 31)),
         )

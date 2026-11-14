@@ -14,10 +14,13 @@ The two share their colour science and stroke paths through
 [murex](https://github.com/joce/murex).
 
 Early days. So far there are papers, graphite and coloured pencils, charcoal,
-soft, hard and oil pastels, wax crayons, ballpoint pens, stumps and erasers. Tone depends on how hard a stick is pressed and
+soft, hard and oil pastels, wax crayons, ballpoint pens, stumps, erasers and
+a knife. Tone depends on how hard a stick is pressed and
 how many layers are laid, as on real paper. Charcoal and pastel leave dust
 that a stump drags about and an eraser lifts; coloured pencils are waxy and
-translucent, so their layers mix to the eye; a light pastel covers a dark one.
+translucent, so their layers mix to the eye, a colourless blender burnishes
+them, and an eraser slides on them: their lights are kept, or scratched out
+with a knife. A light pastel covers a dark one.
 Crayons and oil pastels leave a film of wax that dry media hardly take over,
 even one firm line of it (wax resist); drawn over dust, they lie on it and
 bind part of it. An oil pastel is a paste, which a finger smears and a
@@ -66,8 +69,10 @@ medium is then laid along the forms that result.
   paper. The bird is a solid model (`examples/macaw_model.py`) whose
   proportions were measured on several photographs of the species, posed and
   lit; the pencil goes on darks first, each colour hatched lightly and then
-  stroked along the lie of the feathers, with the head carried furthest
-  (about 32,500 strokes, about a minute).
+  stroked along the lie of the feathers, with the head carried furthest.
+  The feathers and the bill are then burnished with a colourless blender,
+  and the lights scratched out of the wax with the point of a knife (about
+  36,700 strokes, about two minutes).
 * `examples/stilllife.py`: a still life in blue, black and red ballpoint. A
   jug, a bottle, a bowl of cherries, apples and a striped cloth are built as
   solids and lit; the pen then works patch by patch, laying bundles of
@@ -104,7 +109,8 @@ left side lays its shadow across the street.*
 ![A great green macaw in coloured pencil](examples/output/macaw.png)
 
 *A great green macaw in coloured pencil: built from measured proportions,
-then drawn darks first, each colour stroked along the feathers.*
+then drawn darks first, each colour stroked along the feathers, burnished
+with a colourless blender, its lights scratched out with a knife.*
 
 ![A still life in three ballpoints](examples/output/stilllife.png)
 
@@ -189,17 +195,41 @@ from fusain import pastels
 sheet.shade((100, 60, 300, 200), pencils.coloured("#2456a6"), pressure=0.7)
 sheet.shade((200, 60, 400, 200), pencils.coloured("#f2c40f"), pressure=0.7)  # green where they overlap
 sheet.shade((100, 60, 400, 200), pencils.BLENDER, pressure=1.0)              # burnish: the white specks close
+sheet.erase([(120, 100), (380, 110)], tools.KNIFE)                           # scratch a light out of the wax
 # build colour in light layers (pressure about 0.3): ten or so go on before the wax resists.
 # Press a layer hard and it fills and polishes the tooth, and little will take over it.
 sheet.stroke([(100, 300), (400, 320)], pastels.soft("#f4f1ea"), pressure=0.8, width=14)
 ```
+
+A colourless blender (`pencils.BLENDER`), pressed hard, burnishes coloured
+pencil: it presses the wax into the valleys of the tooth, so that the white
+flecks of the paper close and the colour is deeper, more saturated, smoother
+and a little glossy. One firm layer of it leaves a fifth of the flecks, two
+next to none; pressed lightly it does nothing. It stirs what it goes over,
+so two colours laid over each other become one, and an edge it is drawn
+across is dragged out by a tip's width or so. (A white or a light pencil
+pressed hard burnishes too, less thoroughly, and adds its colour.)
+
+Wax holds against an eraser. A light layer of coloured pencil comes off a
+vinyl eraser fairly well; a dense one comes off by degrees, a burnished one
+hardly (three rubs to and fro leave it as dark as it was), and a kneaded
+eraser barely touches any of them. So the lights of a coloured pencil
+drawing are kept from the start, by leaving the paper or by indenting a line
+(`Sheet.indent`), or taken out with something that cuts: the point of a
+knife (`tools.KNIFE`) scratches a fine line back to the paper, and a sand
+eraser (`tools.SAND_ERASER`) abrades a patch. And a dark goes on over a
+light only while the tooth has room: on a paper with a shallow tooth, which
+four light layers fill, lay the darks first.
 
 ![Coloured pencils and pastels](examples/output/colour.png)
 
 Top, coloured pencils on cartridge paper. Left: red, yellow and blue, lighter
 to firmer. Middle: the same three laid over one another: green, orange and
 violet where two overlap. Right: three layers of red, the right half then
-burnished with a colourless blender. Bottom, soft pastels on grey laid paper.
+burnished with a colourless blender; across both halves, a line indented
+before the red was laid, a vinyl eraser rubbed to and fro (it slides on the
+burnished half) and two lines scratched with a knife. Bottom, soft pastels
+on grey laid paper.
 Left: light colours over a dark blue ground, which they cover. Middle: orange
 and blue side by side, and the same with the join rubbed with a finger. Right:
 white pastel over black, and lines drawn with a hard pastel.
