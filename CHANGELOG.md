@@ -17,9 +17,50 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   medium's `side` times its sharp point, and no longer grows as the point
   wears; part way over, a stick marks its tip and that share of what the
   side adds. `repr(Stick)` shows the side.
+- A stroke's width and tilt can change along it, as its pressure can: one
+  value per point of the path, or a function of u
+  (`sheet.stroke(path, pencils.B2, width=lambda u: 8 - 6 * u)`), for a
+  stroke that tapers or recedes in perspective, or a stick turned onto its
+  side as it goes. What the tip lays on the paper under it does not change
+  with its width.
+- `Sheet.stroke(ends=...)` and `Sheet.shade(ends=...)`: `"round"` (the
+  default), in the outline of the tip, or `"flat"`, cut square across at
+  the ends of the path, so that a stroke is as long as its path; or a pair,
+  one for each end.
+
+### Fixed
+
+- A stroke is as strong at its ends as in its middle. The tip laid only as
+  it slid on, so where it landed the paper under the back half of it got
+  less, from nothing at its edge, and the same where it lifted: the ends of
+  a stroke faded out over a whole width of the tip, the end of its path got
+  half the tone of its middle, and a short stroke of a broad tip (a head, a
+  hand) reached a third of it and a dot a fifth. Now the paper the tip
+  covers where it lands and where it lifts is laid as though it had slid
+  onto it and off it, and the ends of a stroke are the outline of its tip at
+  the tone of the stroke. The strokes of `Sheet.shade` end half a tip short
+  of the edge of the area when their ends are round, so that a shading stays
+  inside it (it used to spill out by half a tip, faintly).
+
+### Examples
+
+- `examples/strokes.py` (`strokes.png`): round and flat ends, short dabs,
+  strokes that recede and taper, and the side of a stick of charcoal and of
+  pastel.
+- Every image is regenerated. Shadings end crisply at the edge of their
+  area. `broadway.py` cuts its fronts, awnings, cars and the bars of the
+  crossing square at their ends instead of insetting round ends by half a
+  width, narrows every stroke that runs into the distance as it goes,
+  draws its figures in one layer (two, laid opposite ways with a fix
+  between, made up for the weak ends of short strokes) and lays fewer and
+  lighter leaves, each now a whole dab. `deco.py` stops its windows square.
+  `stilllife.png` (ballpoint) and `papers.png` are unchanged.
 
 ### Changed
 
+- `lay_stroke` (in `fusain._engine`) takes the width, tilt and side of the
+  tip at each point, and the spacing of the points and how the stroke ends.
+  Every picture changes where strokes end; see the examples.
 - `Sheet.rub` carries what the tool picks up from one pass to the next, and
   over the stretches where the pressure is nothing and the tool is lifted.
   Each pass used to start clean and take its load away, which lifted a pale
