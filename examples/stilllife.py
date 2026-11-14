@@ -854,6 +854,7 @@ CAMERA = Camera(
 )
 
 
+@njit(cache=True, error_model="numpy")
 def _raster(px, py, pz, tris, depth, tid, bary):  # pragma: no cover
     h, w = depth.shape
     for t in range(tris.shape[0]):
@@ -1004,7 +1005,7 @@ def light_basis(w):
     return np.stack([u, np.cross(w, u), w])
 
 
-@njit(cache=False)
+@njit(cache=True, error_model="numpy")
 def _blocked(depth, x, y, z, bias):  # pragma: no cover
     h, w = depth.shape
     xi, yi = int(x), int(y)
@@ -1013,7 +1014,7 @@ def _blocked(depth, x, y, z, bias):  # pragma: no cover
     return -1.0
 
 
-@njit(cache=False)
+@njit(cache=True, error_model="numpy")
 def _soft_shadow(sx, sy, sz, grad, depth, disc, search, angle, out):  # pragma: no cover
     """Percentage-closer soft shadows: find the blockers round each point,
     then filter over a penumbra that widens with their distance.  Each
@@ -1679,7 +1680,7 @@ def glass_strip(b: Buffers, cam: Camera):
     return (b.obj == O_BOTTLE) * smoothstep(0.985, 0.995, c) * tall
 
 
-@njit(cache=False)
+@njit(cache=True, error_model="numpy")
 def _trace(
     x, y, dx, dy, field, part, want, target, tmin, turn, step, nmax, out, full
 ):  # pragma: no cover
@@ -1714,7 +1715,7 @@ def _trace(
     return n
 
 
-@njit(cache=False)
+@njit(cache=True, error_model="numpy")
 def _stamp(occ, xs, ys, radius):  # pragma: no cover
     """Mark the pixels within ``radius`` of the points: the room a line
     keeps from the next one of its layer."""
