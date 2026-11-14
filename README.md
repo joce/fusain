@@ -242,8 +242,8 @@ more the heavy graphite mirrors it; the charcoal stays black.
 ![The papers under a raking light](examples/output/papers.png)
 
 The papers of `fusain.papers` under a raking light: cartridge, printer paper,
-Bristol, newsprint, Ingres, cold-pressed; rough, sanded card, toned grey, toned
-tan, black.
+Bristol, newsprint, Ingres, charcoal paper; cold-pressed, rough, sanded card,
+toned grey, toned tan, black.
 
 ## Development
 

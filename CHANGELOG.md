@@ -32,6 +32,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- A pebbled paper: `Paper(texture="pebbled")`, and the preset
+  `papers.CHARCOAL`, a cream charcoal paper. Its tooth is small irregular
+  pits, each with its own depth and outline, in a net of rims: between a wove
+  paper, on which a tone enlarged is fine flecks, and a rough one, which at a
+  small grain is blotchy. A light tone of charcoal on it is a net of dark
+  around pale pits; meant for a grain of 3 to 5 pixels. The other textures and
+  papers draw as before.
 - Four drawings as examples, each a script and the image it writes: an art
   deco tower in charcoal (`examples/deco.py`), Broadway in SoHo in pastel
   (`examples/broadway.py`), a great green macaw in coloured pencil

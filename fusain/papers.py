@@ -29,6 +29,17 @@ NEWSPRINT = Paper(
 )
 #: Laid paper for charcoal and pastel: its lines show through a light tone.
 INGRES = Paper("laid", grain=3.0, depth=1.0, bite=0.55, color="#efe9da", name="Ingres")
+#: Charcoal paper: a pebbled tooth with no lines to it, on a thick, soft
+#: sheet; warm cream. A light tone on it is a net of dark around pale pits.
+CHARCOAL = Paper(
+    "pebbled",
+    grain=4.0,
+    depth=0.9,
+    bite=0.55,
+    give=0.6,
+    color="#eee8d7",
+    name="charcoal paper",
+)
 #: Watercolour paper, cold-pressed: a marked, bumpy tooth.
 COLD_PRESSED = Paper(
     "rough",
@@ -66,6 +77,7 @@ ALL = (
     BRISTOL,
     NEWSPRINT,
     INGRES,
+    CHARCOAL,
     COLD_PRESSED,
     ROUGH,
     SANDED,
