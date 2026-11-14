@@ -8,6 +8,102 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `Sheet.indent(path, pressure=0.7, width=3.0)`: a stylus, a hard round
+  point that lays nothing and presses a groove into the paper, and
+  `Sheet.dent`, the depth of the groove at each pixel (below the peaks of
+  the tooth, in depths of the tooth of a paper of depth 1). A pencil, a
+  crayon or charcoal shaded over a groove rides on the paper either side and
+  marks only what it reaches down to, so a line indented firmly stays the
+  colour of the paper in a tone (whiskers, grass, fine highlights), and one
+  indented lightly fills in under a soft pencil pressed hard: of what a 2B
+  shaded at 0.5 lays on the paper beside it, it lays 64% in a groove
+  indented at 0.3, 2% at 0.5 and nothing at 0.7; a 6B at full pressure 98%,
+  68% and 12%. The groove is deeper on a paper that gives, shows as a line
+  of shadow under a raking light, and no eraser takes it out.
+- A ballpoint presses a groove too, the deeper the firmer the pen: a 2B
+  shaded lightly over a pen line lays in it 97% of what it lays beside it
+  if the pen was light (0.2), 58% at 0.6 and 3% at full pressure. The ball
+  itself goes down into a groove, so pen lines cross as before.
+- A ballpoint leaves blobs. The ball gathers a twentieth of the ink it lays
+  on its rim, and a turn brings it round onto the paper: nearly all of it
+  where the line turns back on itself, about two thirds at a square corner (after 140
+  pixels of line, half as much ink again as on the line beyond the corner),
+  a little at a time on a gentle curve, where it does not show. A pen put to
+  the paper leaves what it had on it where it lands: mostly next to
+  nothing, so that one line in four or so starts with a dot that shows and a
+  few with a blob. A blob is a round dot a little wider than the line. It is
+  ink the pen lost like the rest: `Sheet.stroke` returns it with the line.
+- `Sheet.shine(of)` says how much of each pixel shines in each of three
+  ways, `"graphite"`, `"wax"` or `"ink"` (all three together by default),
+  and `Sheet.render` shows all three under the lamp; `gloss` scales them
+  together.
+- Heavy ballpoint ink bronzes under a lamp: from one and a half firm passes
+  thick, fully at four and a half (eight layers of firm hatching bronze
+  half-way, a single line not at all), in the colour the ink absorbs most:
+  blue ink shines copper, red ink green, black ink grey. Its light is
+  narrow: it shows with the lamp overhead, a tenth as much under the default
+  lamp, and not under a raking one. What is drawn over the ink hides it.
+
+### Fixed
+
+- A firm hard pencil flattens the tooth. `Sheet.press` was raised only by
+  burnishing wax. A dry tip pressed harder than 0.6 now flattens the tooth
+  itself, the more the harder it is (as the cube of its hardness) and the
+  better it holds together (as the square of its binding): three firm
+  layers flatten it by 0.88 under a 4H, 0.72 under an HB, 0.36 under a 2B
+  and 0.03 under a 6B; compressed charcoal and hard pastel by a few
+  hundredths, vine charcoal and soft pastel next to not at all. A flattened
+  tooth is touched all over, and bites a dry medium less (seven tenths less
+  in a pass): a light layer of a soft pencil over a patch a hard one
+  flattened lies on four fifths of it where it marks half of a tooth left
+  alone, and half as unevenly, for about as much graphite. And graphite
+  lies flat on it: a thinner film shines as much, so three firm layers of
+  4H shine 2.5 times as much as the same graphite would on a tooth that had
+  kept its shape, and six of HB a third as unevenly. Tones change little:
+  one layer of HB at full pressure reflects 0.457 of the paper's light, from
+  0.465, and of 4H 0.864, from 0.862.
+- Polished wax shines. Only graphite had sheen. Wax now has a gloss, which
+  is not the medium's but its polish's: how slick the film of wax is times
+  the square of how far it has been pressed flat. A coloured pencil laid
+  lightly has none; burnished with a blender it has seven tenths of the
+  most; two layers of crayon go from none at a pressure of 0.3 to 0.02, 0.35
+  and 0.75 at 0.6, 0.8 and full pressure. It counts wherever the wax lies (a film
+  laid over dust shines; what the paper holds shines through whatever dust
+  lies over it), and dust laid over it dulls it. Under the lamp it is white
+  light, less than half as strong as graphite's and wider: a soft gloss,
+  which a raking lamp still shows. Under the default lamp a burnished red
+  goes from (223, 88, 60) to (225, 95, 72), and the black outlines of the
+  crayon farm are about five levels lighter.
+
+### Examples
+
+- `examples/shine.py` shows all that shines, under its three lamps: a row is
+  added with a 2H laid lightly and pressed hard, a coloured pencil half
+  burnished, a crayon and an oil pastel pressed hard, and three ballpoints
+  hatched eight times over. `examples/ballpoint.py` has a row for blobs (a
+  zigzag and a scribble to and fro), for the groove of a pen under a soft
+  pencil, and for loops written with a pen that has run dry and shaded over.
+  `examples/pencils.py` has a row for the surface: indented lines under a
+  light and a firm tone, blades of grass kept white, and a tone over a tooth
+  a 2H flattened.
+- Every image is regenerated but `broadway.png` and `deco.png`. The
+  ballpoint still life has a dot here and there where a line starts, and
+  the faint relief of its grooves; the crayon farm and the crayons of
+  `crayons.png` and `colour.png` have the soft gloss of pressed wax; the
+  lake in graphite changes where a hard lead was pressed firmly;
+  `papers.png` is unchanged, and `charcoal.png`, `fixative.png`,
+  `strokes.png`, `tips.png` and `macaw.png` nearly so.
+
+### Changed
+
+- `Sheet.shine()` is now what shines in any of the three ways; what it was
+  is `Sheet.shine("graphite")`, which also counts how flat the tooth is
+  pressed. A `Sheet` takes about 0.37 KB per pixel, from 0.36.
+- `lay_stroke` and `roll_stroke` (in `fusain._engine`) take `dent` after
+  `press`, and `roll_stroke` writes to it.
+
+### Added
+
 - The side of a stick is as long as the stick. A `Medium` says how many
   times its point the side of a stick of it marks held flat (`side`: 5 for
   pencils, as before, and for soft pastel; 6 for compressed charcoal and

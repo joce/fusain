@@ -5,10 +5,11 @@ import itertools
 
 import numpy as np
 import pytest
-from murex import Pigment
+from murex import Pigment, Polyline
 from murex import spectral as sp
 
 from fusain import Pen, Sheet, crayons, papers, pastels, pencils, pens, tools
+from fusain import _engine as eng
 from fusain.sheet import IV
 
 BOX = (20, 20, 180, 130)
@@ -145,6 +146,170 @@ def test_the_ink_does_not_come_quite_evenly():
     assert 0.03 < along.std() / along.mean() < 0.2
 
 
+# --------------------------------------------------------------------------
+# blobs: the ball gathers ink, and leaves it where it lands and where it turns
+
+#: The most ink the ball of a pen 3 wide gathers.
+MOST = eng.BALL_BLOB * eng.BALL_INK * (0.5 * 3 + 0.5) ** 2
+
+
+def _near(sheet, x, y, radius=4.0) -> float:
+    """The ink within ``radius`` of a point."""
+    assert sheet.ink is not None
+    ys, xs = np.mgrid[: sheet.height, : sheet.width]
+    disc = (xs + 0.5 - x) ** 2 + (ys + 0.5 - y) ** 2 <= radius**2
+    return float(sheet.ink[..., IV][disc].sum(dtype=np.float64))
+
+
+def _lands_with(sheet) -> float:
+    """The share of the most it can gather that the next pen put to this
+    sheet lands with (see :func:`fusain._engine.roll_stroke`)."""
+    salt = int(sheet.copy()._rng.integers(1 << 31))
+    return eng.BALL_START * eng.unit_noise(0, 2, salt + 3) ** eng.BALL_SELDOM
+
+
+def _clean(width, height, seed=1) -> Sheet:
+    """A sheet on which the next pen lands with next to nothing gathered."""
+    for salt in range(seed, seed + 100):
+        sheet = Sheet(width, height, seed=salt)
+        if _lands_with(sheet) < 1e-3:
+            return sheet
+    raise AssertionError("no pen lands clean")
+
+
+def _loaded() -> int:
+    """The seed of a sheet (200 by 40) on which the next pen lands with a
+    blob."""
+    for seed in range(100):
+        if _lands_with(Sheet(200, 40, seed=seed)) > 0.5:
+            return seed
+    raise AssertionError("no pen of a hundred lands with a blob")
+
+
+def _thickest(sheet) -> float:
+    assert sheet.ink is not None
+    return float(sheet.ink[..., IV].max())
+
+
+def test_a_line_starts_with_a_dot_of_ink_now_and_then():
+    gathered, starts, extra = [], [], []
+    for seed in range(60):
+        sheet = Sheet(200, 40, seed=seed)
+        gathered.append(_lands_with(sheet))
+        laid = sheet.stroke([(20, 20.5), (180, 20.5)], pens.BLUE, 0.5)
+        assert _ink(sheet) == pytest.approx(laid, rel=1e-5)  # blob and all
+        # the ink where the line starts, and where it ends (nothing but line)
+        start, end = _near(sheet, 20, 20.5, 5), _near(sheet, 180, 20.5, 5)
+        starts.append(start / end)
+        extra.append((start - end) / MOST)
+    share, ratio = np.array(gathered), np.array(starts)
+    # mostly next to nothing; one line in four or so starts with a dot that
+    # shows; never more than a pen has on it
+    assert np.median(share) < 0.05
+    assert 0.15 < (share > 0.1).mean() < 0.4
+    assert 0.3 < share.max() <= eng.BALL_START
+    # and that is the ink on the paper (the line itself is not quite even)
+    assert np.abs(np.array(extra) - share).max() < 0.15
+    assert ratio[share < 0.01].min() > 0.7 and ratio[share < 0.01].max() < 1.3
+    assert ratio[share > 0.3].min() > 1.6
+
+
+def test_a_blob_is_a_dot_a_little_wider_than_the_line_and_thickest_in_the_middle():
+    sheet = Sheet(200, 40, seed=_loaded())
+    sheet.stroke([(20.5, 20.5), (180, 20.5)], pens.BLUE, 0.3)
+    assert sheet.ink is not None and sheet.inked is not None
+    ink, inked = sheet.ink[..., IV], sheet.inked
+    # across the line, at its start and half way along
+    start, run = ink[:, 20], ink[:, 100]
+    assert start.max() > 2.5 * run.max()
+    assert np.argmax(start) == 20
+    assert np.count_nonzero(start) > np.count_nonzero(run)
+    assert np.count_nonzero(start) <= 2 * eng.BLOB_WIDE * (0.5 * 3 + 0.5) + 1
+    # it fills the tooth: all of the pixels under its middle are inked
+    assert inked[20, 19:22].min() == 1.0 and inked[19:22, 20].min() == 1.0
+
+
+def _corner(run: float, seed: int, turn=(160.5, 90.5)) -> tuple[float, float]:
+    """A line that runs ``run`` pixels and turns sharply, from a pen that
+    landed clean. Returns the ink at the corner, and in as much line
+    further on."""
+    sheet = _clean(200, 120, seed)
+    path = Polyline([(160.5 - run, 30.5), (160.5, 30.5), turn])
+    laid = sheet.stroke(path, pens.BLUE, 0.5)
+    assert _ink(sheet) == pytest.approx(laid, rel=1e-5)
+    further = (0.5 * (160.5 + turn[0]), 0.5 * (30.5 + turn[1]))
+    return _near(sheet, 160.5, 30.5), _near(sheet, *further)
+
+
+def test_a_sharp_turn_leaves_a_blob_the_bigger_the_longer_the_line_before_it():
+    blobs, extra = [], []
+    for run in (10, 40, 140):
+        corners = [_corner(run, seed) for seed in (1, 20, 40, 60)]
+        blobs.append(float(np.mean([at / beyond for at, beyond in corners])))
+        extra.append(float(np.mean([at - beyond for at, beyond in corners])))
+    assert blobs[0] < 1.25  # (nothing gathered yet: the line, no more)
+    assert blobs[0] < blobs[1] < blobs[2]
+    assert blobs[2] > 1.4
+    # what gathers over a run is the share BALL_GATHER of what the run lays
+    # (about 0.045 a pixel), and a square turn brings most of it round
+    gathered = eng.BALL_GATHER * 140 * 0.045
+    assert 0.4 * gathered < extra[2] < 0.9 * gathered
+
+
+def test_a_line_that_turns_back_leaves_all_it_gathered():
+    square = [_corner(140, seed) for seed in (1, 20, 40, 60)]
+    back = [_corner(140, seed, (20.5, 50.5)) for seed in (1, 20, 40, 60)]
+    extra = [float(np.mean([at - beyond for at, beyond in c])) for c in (square, back)]
+    assert extra[1] > 1.2 * extra[0]
+    assert extra[1] < eng.BALL_GATHER * 140 * 0.045 * 1.15
+
+
+def test_a_gentle_curve_leaves_no_blob():
+    """The ink comes round a little at a time, and the line is as even as
+    a straight one."""
+    arc = [(100 + 60 * np.cos(a), 75 - 60 * np.sin(a)) for a in np.linspace(0, 3, 40)]
+    for seed in (1, 20, 40):
+        curved, straight = _clean(200, 100, seed), _clean(200, 100, seed)
+        bent = curved.stroke(arc, pens.BLUE, 0.5)
+        ruled = straight.stroke([(10, 50.5), (190, 50.5)], pens.BLUE, 0.5)
+        assert _thickest(curved) < 1.1 * _thickest(straight)
+        # what gathered is in the line: a little more ink than a straight one
+        assert 1.0 < bent / ruled < 1.0 + eng.BALL_GATHER
+
+
+def test_a_freer_pen_and_a_bigger_ball_gather_more():
+    seed = _loaded()
+
+    def blob(pen) -> float:
+        sheet = Sheet(200, 40, seed=seed)
+        sheet.stroke([(20, 20.5), (180, 20.5)], pen, 0.5)
+        return _near(sheet, 20, 20.5, 10) - _near(sheet, 180, 20.5, 10)
+
+    usual = blob(pens.BLUE)
+    assert usual > 0.4 * MOST
+    assert blob(pens.BLUE.with_(flow=0.5)) == pytest.approx(0.5 * usual, rel=1e-4)
+    # (as the square of its radius, half a pixel more than half its width)
+    assert 2.0 * usual < blob(pens.BLUE.with_(width=6.0)) < 4.0 * usual
+
+
+def test_a_blob_off_the_edge_of_the_sheet_or_on_wax_is_not_counted_as_laid():
+    for seed in range(40):
+        sheet = Sheet(120, 40, seed=seed)
+        laid = sheet.stroke([(-1.0, 20.5), (100, 20.5)], pens.BLUE, 0.5)
+        assert _ink(sheet) == pytest.approx(laid, rel=1e-5)
+    # on a patch of wax the ball skids, and its drop skids with it
+    sheet, bare = Sheet(200, 150, seed=1), Sheet(200, 150, seed=1)
+    for layer in range(3):
+        sheet.shade(BOX, crayons.wax("#c0392b"), 0.9, 9, angle=30 + 50 * layer)
+    on_wax = on_paper = 0.0
+    for k in range(20):
+        line = [(60, 40 + 3 * k), (140, 41 + 3 * k)]
+        on_wax += sheet.stroke(line, pens.BLUE, 0.5)
+        on_paper += bare.stroke(line, pens.BLUE, 0.5)
+    assert _ink(sheet) == pytest.approx(on_wax, rel=1e-5)
+    assert on_wax < 0.1 * on_paper
+
+
 def test_a_wide_pen_and_a_rough_paper_and_a_level_one():
     wide = _line(0.6, pen=pens.ballpoint("#22357e", width=6))
     assert 1.6 * _ink(_line(0.6)) < _ink(wide) < 2.4 * _ink(_line(0.6))
@@ -229,12 +394,18 @@ def test_an_eraser_takes_the_pencil_and_leaves_the_ink():
     assert _tone(sheet, line) < 0.25
 
 
-def test_a_pencil_draws_over_ink_as_on_bare_paper():
+def test_a_pencil_draws_over_light_ink_as_on_bare_paper():
+    """The ink is in the paper, not on it. (A pen pressed firmly leaves
+    grooves, which a pencil skips: see test_surface.py.)"""
     bare, inked = Sheet(200, 150, seed=1), Sheet(200, 150, seed=1)
     for layer in range(3):
-        inked.shade(BOX, pens.BLUE, 0.7, angle=30 + 47 * layer)
+        inked.shade(BOX, pens.BLUE, 0.25, angle=30 + 47 * layer)
     over = inked.shade(BOX, pencils.HB, 0.5)
-    assert 0.85 < over / bare.shade(BOX, pencils.HB, 0.5) < 1.15
+    assert 0.9 < over / bare.shade(BOX, pencils.HB, 0.5) < 1.1
+    firm = Sheet(200, 150, seed=1)
+    for layer in range(3):
+        firm.shade(BOX, pens.BLUE, 0.9, angle=30 + 47 * layer)
+    assert firm.shade(BOX, pencils.HB, 0.5) < 0.6 * over
 
 
 def _share_taken(under, layers, pressure, width=None) -> float:

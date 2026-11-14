@@ -10,6 +10,13 @@ layer pressed lighter to firmer from left to right. Right: a pencil sketch
 inked over in black, its right half then rubbed with a vinyl eraser, which
 takes the pencil and leaves the ink; and under it a red pen across a patch of
 wax crayon, on which it skids.
+
+Bottom. Left: a zigzag and a scribble to and fro: the ball gathers ink as it
+rolls and leaves a blob where the line turns sharply, and now and then where
+it starts. Middle: five lines pressed from lightest to firmest, and a soft
+pencil shaded lightly over them: the ball presses a groove, which the pencil
+skips where the pen was firm. Right: loops written with a pen that has run
+dry (``Sheet.indent``) and shaded over: the grooves stay white.
 """
 
 from __future__ import annotations
@@ -19,7 +26,7 @@ import math
 from pathlib import Path
 
 import numpy as np
-from murex import write_png
+from murex import Polyline, write_png
 
 from fusain import Sheet, crayons, papers, pencils, pens, tools
 
@@ -74,11 +81,37 @@ def sketch(sheet: Sheet) -> None:
         sheet.stroke([(670, y), (870, y + 3)], pens.RED, 0.5)
 
 
+def blobs(sheet: Sheet) -> None:
+    """Sharp turns, where the ball leaves the ink it has gathered."""
+    zigzag = [(40 + 25 * j, 372 if j % 2 else 322) for j in range(11)]
+    sheet.stroke(Polyline(zigzag), pens.BLUE, 0.5)
+    scribble = [(40 + 250 * (j % 2), 396 + 5 * j) for j in range(8)]
+    sheet.stroke(Polyline(scribble), pens.BLACK, 0.45)
+
+
+def grooves(sheet: Sheet) -> None:
+    """The groove of a firm pen, and of a pen with no ink, under a pencil."""
+    for k in range(5):
+        y = 330 + 22 * k
+        wave = [(350 + 24 * j, y + 4 * math.sin(0.9 * j + k)) for j in range(11)]
+        sheet.stroke(wave, pens.BLUE, 0.2 + 0.2 * k)
+    sheet.shade((340, 312, 600, 438), pencils.B4, 0.35, angle=60)
+    turns = [0.11 * t for t in range(200)]
+    for row in range(2):
+        y = 345 + 52 * row
+        loops = [(690 + 8 * a - 19 * math.sin(a), y + 19 * math.cos(a)) for a in turns]
+        sheet.indent(loops, 0.75, 3.0)
+    for angle in (55, -35):
+        sheet.shade((670, 312, 870, 438), pencils.B4, 0.5, angle=angle)
+
+
 def main() -> None:
-    sheet = Sheet(900, 300, paper=papers.CARTRIDGE, seed=71)
+    sheet = Sheet(900, 460, paper=papers.CARTRIDGE, seed=71)
     lines(sheet)
     hatching(sheet)
     sketch(sheet)
+    blobs(sheet)
+    grooves(sheet)
     out = Path(__file__).parent / "output" / "ballpoint.png"
     write_png(str(out), np.round(sheet.render() * 255).astype(np.uint8))
     print(f"wrote {out}")

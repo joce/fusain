@@ -30,6 +30,12 @@ is judged on. Each one is measurable, so each becomes a test.
    The side of a stick lays a broad band. Tilting the pencil widens the mark.
 7. **Conservation.** What leaves the stick is on the paper, on the tool that
    moved it (stump, eraser), or counted as dust that fell off.
+8. **The surface.** The paper is worked as well as marked. A hard tip pressed
+   firmly flattens the tooth, which is then touched all over and bites less.
+   A stylus, or the ball of a pen, indents a groove, and a tone shaded over
+   it afterwards skips it: the line stays the colour of the paper. And what
+   lies flat shines under a lamp: graphite like metal, polished wax softly,
+   heavy ballpoint ink like bronze.
 
 ## The state: a sheet of paper
 
@@ -38,14 +44,15 @@ Per pixel, all `float32`:
 | Field | What it holds |
 | --- | --- |
 | `tooth` | Height of the paper surface, 0 (valley) to 1 (peak). Set once from the paper's texture. |
-| `press` | How far the tooth has been crushed or polished here (0 to 1): burnishing, and lines indented with a stylus. |
+| `press` | How far the tooth has been flattened or polished here (0 to 1): by a hard tip pressed firmly, and by burnishing wax. A tooth pressed flat is level with its peaks. |
+| `dent` | How far the paper has been indented here: the depth of a groove below the peaks of the tooth, in depths of the tooth of a paper of depth 1. By a stylus, and by the ball of a pen. |
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
 | `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. |
 | `ink`, `inked` | The ink of pens, a stain in the paper under everything else: K, S and volume, and the share of the pixel it is on. Allocated when a pen first draws. |
 | `under`, `loose` | Pigment lying on what the paper holds: K, S, volume and sheen, in two layers. `loose` is on top; what a new pass covers goes `under`. Most of it is dust. |
 | `bonded` | Of what lies in each of the two layers, the volume that is not loose dust, of three kinds: `fixed`, dust that is set, by fixative or under a film; `film`, what a waxy medium laid on the dust and not on the paper; `paste`, what the paper does not hold of a greasy medium. |
 
-That is about 0.36 KB per pixel, a little more than oilpaint. As there, storing summed
+That is about 0.37 KB per pixel, a little more than oilpaint. As there, storing summed
 absorption and scattering lets any number of pigments mix correctly at a fixed
 cost.
 
@@ -92,6 +99,17 @@ each is not. The rule is that a medium lies on what it meets:
   is set, and a greasy tip ploughs up a little of what it is laid over, so
   that a light oil pastel only half covers a dark one. Fixative sets paste.
 
+The surface has two fields because a tip meets it in two ways. Where a
+whole area has been pressed flat, the tip that comes next rides on it: what
+matters is that it is level, so `press` raises the low ground to the peaks,
+and the tip touches all of it. A groove is narrower than the tip, which rides
+on the paper either side of it: what matters there is how far below that the
+floor is, so `dent` is a depth, and nothing in a groove stands higher than
+`1 - dent / depth` (the peaks of this paper's tooth being at 1). A light dent only takes the
+peaks off; a deep one is a level floor below the valleys. Both show in the
+relief the lamp lights: a flattened patch is smooth, and a groove is a line
+of shadow under a raking light.
+
 Sizes are in pixels, and the paper's grain sets the scale of a drawing: the
 tooth of a drawing paper is finer than a pencil line, which is two or three
 grains wide. (The first version of the tooth had patches several grains
@@ -122,7 +140,7 @@ code runs all of them; only the numbers change.
 | `binding` | Share of the deposit that is held at once rather than left as dust | vine charcoal, soft pastel | coloured pencil, wax crayon |
 | `wax` | Binder that films over the tooth: resist, burnishing | graphite, charcoal | coloured pencil, crayon, oil pastel |
 | opacity (of the pigment) | How strongly it hides what is underneath | coloured pencil | pastel |
-| `sheen` | How much of it mirrors the light once the paper holds it | everything else | graphite, the more the softer the lead |
+| `sheen` | How much of it mirrors the light once the paper holds it, as a metal does | everything else | graphite, the more the softer the lead |
 
 Presets group by family: `pencils.HB`, `pencils.B6`, `charcoal.VINE`,
 `charcoal.COMPRESSED`, `pastels.soft("#c0392b")`, `pastels.oil(...)`,
@@ -156,6 +174,20 @@ A tool is a tip plus, usually, a medium.
   tip that keeps its width.
 - **Still to come.** A worn tip stored as its own small height map, so that a
   crayon keeps the facets it wore.
+- **A stylus** (built): `Sheet.indent(path, pressure, width)`. A hard round
+  point that lays nothing: it presses a groove, as deep under its middle as
+  it is pressed hard and as the paper gives (two depths of a tooth at full
+  pressure on a paper of middling give), shallower towards its rim; the
+  deepest pass is what stays. A pencil, a crayon or charcoal shaded over it
+  rides on the paper either side and marks only what it reaches down to: on
+  cartridge paper a 2B at any pressure lays nothing in a groove indented at
+  0.7, and a 6B pressed hard an eighth of what it lays beside it; in one
+  indented at 0.3 a 2B shaded lightly lays a third and a 6B pressed hard
+  all but all; a hard lead reaches less far down than a soft one. That
+  is how whiskers and fine highlights are kept in a pencil drawing. What was
+  drawn there before goes down with the paper, and no eraser takes a groove
+  out. (A tip narrower than a groove would follow it down; the model does
+  not know how wide the groove is, so such a tip skips it too.)
 - **Tools that lay nothing** use the same stroke runner: stump and finger
   (carry `loose` along and press part of it in, and slide held graphite),
   kneaded eraser (lifts loose dust), hard eraser (also abrades `held`, and
@@ -211,7 +243,9 @@ end round half a tip short of the edge of the area, or flat at it.
 At each step, for each pixel under the tip:
 
 1. **Reach.** Pressure, the softness of the medium and the give of the paper
-   set how far down the tooth the tip gets. A tip is flat across with a
+   set how far down the tooth the tip gets: to the ground of a pixel, which is
+   its tooth, raised towards the peaks as far as it has been pressed flat, and
+   no higher than the floor of a groove. A tip is flat across with a
    rounded rim. A light touch reaches further than in proportion, and only the
    softest leads pressed hard reach every valley: a firm HB line still has
    white specks in it. No two passes meet the paper alike: each pass shifts
@@ -251,6 +285,19 @@ At each step, for each pixel under the tip:
    which levels the tooth so that every part of the pixel is touched, and it
    drags some of the waxy layer along and lays it back down, valleys
    included. That closes the white specks (burnishing).
+7. **The tooth.** A dry tip pressed hard (harder than `BURNISH_FROM`, as for
+   burnishing) flattens the tooth itself, and raises `press` too: the hardest
+   lead by `FLATTEN` in a pass at full pressure, a softer one as the cube of
+   its hardness (it gives before the paper does), and one that crumbles to
+   dust as the square of its binding (it bears on the paper only with what
+   holds together). Three firm layers leave the tooth flattened by 0.88 under
+   a 4H, 0.72 under an HB, 0.36 under a 2B and 0.03 under a 6B; compressed
+   charcoal and hard pastel flatten it by a few hundredths, vine charcoal and
+   soft pastel next to not at all. A flattened tooth is touched all over, and bites
+   less: a dry medium lays `FLAT_BITE` less on it in a pass (the tooth is
+   what scrapes it off its stick). So a light layer of a soft pencil over a
+   patch a hard one flattened lies on four fifths of it where it marks half
+   of a tooth left alone, and far more evenly, for about as much graphite.
 
 A stump, a finger or an eraser runs the same way but lays nothing of its own.
 Where it bears, it lifts a share of the `loose` pigment (and, for an eraser,
@@ -285,15 +332,43 @@ in, so a crayon drawn over charcoal dust is seen over it.
 By default a fairly high lamp shows the tooth faintly, as on a scan; a raking
 light brings it out, and `lighting=False` renders the sheet flat.
 
-Graphite shines. A film of it that the paper holds mirrors the lamp, the more
-the thicker it is (a heavy layer of a soft lead shines fully, a light layer of
-HB hardly at all), and matte dust lying over it hides it. The sheet is seen
-from straight above, so the mirrored light is strongest with the lamp
-overhead and all but gone under a raking one; it is added to the picture as
-white light, in a broad lobe, since graphite is satin and not a mirror. Under
-the default lamp, three firm layers of 6B reflect about 0.10 of what the paper
-does, against 0.06 without the shine: graphite never looks as black as
-charcoal. `render(gloss=0)` leaves the shine out, as a scanner does.
+Three things shine, each where it lies flat, and `Sheet.shine(of)` says how
+much of each pixel does. The sheet is seen from straight above, so the
+mirrored light is strongest with the lamp overhead and weakest under a
+raking one; it is added to what the pigment sends back.
+`render(gloss=0)` leaves all of it out, as a scanner does.
+
+- **Graphite** shines like a metal. A film of it that the paper holds mirrors
+  the lamp, the more the thicker it is (a heavy layer of a soft lead shines
+  fully, a light layer of HB hardly at all), and matte dust lying over it
+  hides it. On a tooth pressed flat the graphite lies flat, and a film two
+  fifths as thick shines as much: three firm layers of 4H shine 2.5 times as
+  much as the same graphite would on a tooth that had kept its shape (0.31
+  against 0.12 of the most), and of HB 1.4 times; six of HB shine a third as
+  unevenly. A soft lead shines by how much it lays, a hard one by how flat
+  it has pressed the paper. The light is white, in a broad lobe, since
+  graphite is satin and not a mirror. Under the default lamp, three firm
+  layers of 6B reflect about 0.10 of what the paper does, against 0.06
+  without the shine: graphite never looks as black as charcoal.
+- **Wax** has no sheen of its own: it is its polish that shines. The gloss is
+  how slick the film of wax is at the pixel (as for the resist) times the
+  square of how far the surface is pressed flat (a film half polished still
+  scatters most of the light), so a coloured pencil laid lightly has
+  none, one burnished with a blender seven tenths of the most, and two
+  layers of crayon from none at a pressure of 0.3 to three quarters at full
+  pressure. It counts
+  wherever the wax lies: a film laid over dust is on top and shines; what
+  the paper holds shines through whatever dust lies over it, as graphite
+  does. The light is white, less than half as strong as graphite's and in a
+  wider lobe: a soft, even gloss, which a raking lamp still shows.
+- **Ballpoint ink** bronzes where it is heavy: from one and a half firm
+  passes thick, fully at four and a half, so eight layers of firm hatching
+  bronze half-way and a single line not at all; what is drawn over the ink
+  hides it. Ink mirrors most the light it absorbs most (as the square of its
+  absorption), so the bronze of blue ink is copper and that of red ink
+  green. A film of dry ink is smooth and its lobe narrow: the bronze shows
+  with the lamp near overhead, a tenth as much under the default lamp and
+  not under a raking one.
 
 ## What the prototype showed
 
@@ -352,10 +427,25 @@ kernel and its own layer:
   ink. A pencil draws over it as on bare paper.
 - **The ball skids** on a thick film of pigment and on wax, and lays little
   there; over a light pencil sketch it writes as on bare paper.
-
-Not built: the groove a ballpoint presses into the paper (`fusain-dyh`), the
-blob of ink a ball leaves where a line starts or turns, and the sheen of
-heavy ink.
+- **The ball presses a groove** (`dent`), as a stylus does but less deep
+  (`BALL_DENT`), in proportion to the pressure. A soft pencil shaded lightly
+  over a pen line fills it as the paper beside it if the pen was light (a
+  pressure of 0.2), half-way at 0.6 and hardly at all at full pressure. The
+  ball itself goes down into a groove: it is as small as what made it, so
+  one pen line crosses another as if the paper were flat.
+- **The ball gathers ink.** The share `BALL_GATHER` of what it lays stays on
+  its rim as it rolls, up to a drop (`BALL_BLOB`), and a turn brings it
+  round onto the paper: nearly all of it when the line turns back on itself,
+  about two thirds at a square corner, a little at a time on a gentle curve, where
+  it does not show. So a sharp turn leaves a blob, the bigger the longer the
+  line before it (after 140 pixels, half as much ink again at a square
+  corner as on the line beyond it). A pen put to the paper has some on it
+  already and leaves it where it lands: mostly next to none, so that one
+  line in four or so starts with a dot that shows and a few with a blob. A
+  blob is a round dot a little wider than the line, thickest at its middle,
+  and it is ink the pen lost like the rest: `stroke` returns it with the
+  line.
+- **Heavy ink bronzes** under a lamp: see Rendering.
 
 ## Sketch of the API
 
@@ -369,6 +459,7 @@ sheet.stroke([(100, 560), (500, 550)], pencils.B4, tilt=1)   # the side of the l
 sheet.stroke(path, pastels.soft("#c0392b"), pressure=(0.2, 0.8), tilt=1)
 sheet.stroke(path, pencils.B2, width=lambda u: 8 - 6 * u)  # tapers
 sheet.stroke(path, pastels.hard("#2c3e50"), width=6, ends="flat")  # cut square
+sheet.indent(path, pressure=0.7)     # a stylus: a groove that a tone skips
 sheet.smudge(path, tools.STUMP)
 sheet.erase(path, tools.KNEADED)
 sheet.rub(area, tools.FINGER)        # a whole area, to and fro

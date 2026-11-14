@@ -5,7 +5,10 @@ A ballpoint is not a stick that the paper wears down: its ball rolls a
 paste of dye onto the paper at a steady rate. Its line is even, about as
 wide as the ball and nearly as dark at a light touch as at a firm one; the
 ink is clear, so lines that cross and layers of hatching darken; and it
-soaks into the paper, where no eraser reaches it.
+soaks into the paper, where no eraser reaches it. The ball gathers ink as it
+rolls and leaves a blob where the line turns sharply and, now and then,
+where it starts. Pressed firmly it leaves a groove, which a pencil shaded
+over it skips. And ink in heavy layers bronzes under a lamp.
 """
 
 from __future__ import annotations
@@ -34,7 +37,7 @@ class Pen:
         pressure. A light line is narrower.
     flow:
         How freely the ink comes: 1 for a good pen, less for one running
-        dry, more for one that blots.
+        dry, more for one that blots (its blobs are as much bigger).
     name:
         Optional label.
     """
