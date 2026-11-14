@@ -2104,19 +2104,156 @@ def cloth_line(u, v):
     return cloth_point(u, v - cloth_hem(u, v, length)) + [0, 0.03, 0]
 
 
-def draw_stripes(h: Hatcher):
-    """The cloth's stripes as lines along them, close together, bending
-    over every fold."""
-    u = np.linspace(0, 1, 900)
+@dataclass
+class Band:
+    """A stripe on the cloth: its two edges and its centre, as 3D points
+    sampled at the same places along it, and whether it is a wide one."""
+
+    edge_a: np.ndarray
+    edge_b: np.ndarray
+    centre: np.ndarray
+    wide: bool
+
+
+def cloth_at_x(x, v):
+    """Points of the cloth at a distance v down its length, at the places
+    that lie at x on the table (so that two such lines face each other
+    across a stripe); where x is off the cloth, the nearest edge."""
+    z = np.minimum(CLOTH_BACK + v, TABLE_FRONT)
+    left = np.interp(z, [CLOTH_BACK, TABLE_FRONT], CLOTH_LEFT)
+    u = np.clip((x - left) / (CLOTH_RIGHT - left), 0, 1)
+    return cloth_line(u, np.full_like(u, v))
+
+
+def cloth_bands(n=900):
+    """Every stripe of the cloth: across it, and along its free edge."""
+    out = []
+    x = np.linspace(CLOTH_LEFT[0], CLOTH_RIGHT, n)
     for lo, hi in stripe_bands():
-        for v in np.arange(lo + 0.04, hi, 0.09):
-            surface_line(h, cloth_line(u, np.full_like(u, v)), BLUE, 0.3, 0.55)
+        ea, eb, ec = (cloth_at_x(x, v) for v in (lo, hi, (lo + hi) / 2))
+        out.append(Band(ea, eb, ec, hi - lo > 1.0))
     v = np.linspace(0, cloth_length(), 700)
     z = np.minimum(CLOTH_BACK + v, TABLE_FRONT)
     width = CLOTH_RIGHT - np.interp(z, [CLOTH_BACK, TABLE_FRONT], CLOTH_LEFT)
     for lo, hi in ((2.0, 2.6), (3.2, 3.45)):
-        for uc in np.arange(lo + 0.04, hi, 0.09):
-            surface_line(h, cloth_line(uc / width, v), BLUE, 0.3, 0.55)
+        ea, eb, ec = (cloth_line(uc / width, v) for uc in (lo, hi, (lo + hi) / 2))
+        out.append(Band(ea, eb, ec, False))
+    return out
+
+
+def swell(lo, hi, peak=0.5, ends=0.15):
+    """A pressure that rises from nothing to ``hi`` at ``peak`` and falls."""
+
+    def f(u):
+        rise = min(u / ends, 1.0, (1 - u) / ends)
+        bump = math.exp(-0.5 * ((u - peak) / 0.3) ** 2)
+        return max(rise, 0.0) ** 0.7 * (lo + (hi - lo) * bump)
+
+    return f
+
+
+def band_stroke(h: Hatcher, a, b, t, slant, press):
+    """One short hatch stroke across a band, from edge point ``a`` to edge
+    point ``b``, leaning ``slant`` along the band's direction ``t``, with a
+    ragged overshoot and a slight curve."""
+    rng = h.rng
+    across = b - a
+    w = float(np.linalg.norm(across))
+    if w < 0.5:
+        return
+    unit_across = across / w
+    lean = t * max(w, 11.0) * slant
+    if w < 7.0:  # a narrow band: the stroke reaches a little past it
+        a, b, w = a - unit_across * (3.5 - w / 2), b + unit_across * (3.5 - w / 2), 7.0
+    start = a - unit_across * rng.uniform(0.0, 1.6) - lean / 2
+    end = b + unit_across * rng.uniform(0.0, 1.6) + lean / 2
+    normal = np.array([-(end - start)[1], (end - start)[0]])
+    bow = normal / (np.linalg.norm(normal) + 1e-9) * rng.normal(0, 0.5)
+    pts = [start, (start + end) / 2 + bow, end]
+    h.sheet.stroke([tuple(q) for q in pts], BLUE, swell(0.5 * press, press, 0.5, 0.2))
+
+
+def band_tone(h: Hatcher, xy):
+    """Shade and how far the drawing reaches, at points of a band."""
+    m = h.maps
+    S = sample(m.shade, xy) + 0.5 * (1 - sample(m.shadow, xy))
+    return np.clip(S, 0, 1), sample(m.keep, xy)
+
+
+def hatch_band(h: Hatcher, band: Band, sign, second=False):
+    """Hatch a stripe with short strokes across it, in bundles whose angle
+    and spacing drift; closer and firmer where it is in shadow, sparse and
+    broken where it is lit or the drawing fades."""
+    rng = h.rng
+    line = seen_line(CAMERA, h.maps.dist, band.centre, 0.4)
+    xa, ya, _ = CAMERA.project(band.edge_a)
+    xb, yb, _ = CAMERA.project(band.edge_b)
+    pa, pb, pc = np.stack([xa, ya], 1), np.stack([xb, yb], 1), line[:, :2]
+    seen = line[:, 2] > 0.5
+    arc = np.concatenate([[0], np.cumsum(np.linalg.norm(np.diff(pc, axis=0), axis=1))])
+    S, keep = band_tone(h, pc)
+    pos, n = rng.uniform(0, 3), len(pc)
+    while pos < arc[-1]:
+        slant = sign / math.tan(math.radians(rng.uniform(52, 66)))
+        base_gap = rng.uniform(0.85, 1.2)
+        for _ in range(int(rng.integers(4, 9))):
+            i = min(int(np.searchsorted(arc, pos)), n - 2)
+            dark = S[i] if not second else max(S[i] - 0.25, 0)
+            gap = base_gap * (2.0 + 2.2 * (1 - dark)) * (1 if band.wide else 1.1)
+            pos += gap / max(smoothstep(0.2, 0.7, keep[i]), 0.25)
+            reach = smoothstep(0.2, 0.7, keep[i])
+            if not seen[i] or rng.uniform() > reach or (second and dark < 0.05):
+                continue
+            if rng.uniform() < 0.15 * (1 - dark):  # small gaps of paper on lit ridges
+                continue
+            t = unit_rows(pc[i + 1] - pc[max(i - 1, 0)])
+            press = (0.3 + 0.35 * dark) * (0.6 + 0.4 * reach)
+            band_stroke(h, pa[i], pb[i], t, slant, press * rng.uniform(0.85, 1.15))
+        pos += rng.uniform(0, 2.0)
+
+
+def dash_band(h: Hatcher, band: Band):
+    """A thin stripe seen nearly edge on: a broken line of short, slightly
+    unsteady overlapping dashes, firmer in shadow, sparse where lit."""
+    rng = h.rng
+    line = seen_line(CAMERA, h.maps.dist, band.centre, 0.4)
+    pc, seen = line[:, :2], line[:, 2] > 0.5
+    arc = np.concatenate([[0], np.cumsum(np.linalg.norm(np.diff(pc, axis=0), axis=1))])
+    S, keep = band_tone(h, pc)
+    pos = rng.uniform(0, 6)
+    while pos < arc[-1] - 4:
+        ln = rng.uniform(9, 22)
+        i0 = int(np.searchsorted(arc, pos))
+        i1 = int(np.searchsorted(arc, min(pos + ln, float(arc[-1]))))
+        i1 = max(i1, i0 + 2)
+        reach = smoothstep(0.2, 0.7, keep[i0])
+        lit = 1 - S[i0]
+        pos += ln * rng.uniform(0.85, 1.2) + rng.uniform(1, 7) * lit
+        if not seen[i0:i1].all() or rng.uniform() > reach:
+            continue
+        seg = pc[i0:i1] + rng.normal(0, 0.6, 2)
+        press = (0.3 + 0.35 * S[i0]) * (0.6 + 0.4 * reach) * rng.uniform(0.85, 1.15)
+        step = max(len(seg) // 4, 1)
+        h.sheet.stroke([tuple(q) for q in seg[::step]], BLUE, swell(0.5 * press, press))
+
+
+def band_width(band: Band):
+    xa, ya, _ = CAMERA.project(band.edge_a)
+    xb, yb, _ = CAMERA.project(band.edge_b)
+    return float(np.median(np.hypot(xb - xa, yb - ya)))
+
+
+def draw_stripes(h: Hatcher):
+    """The cloth's stripes as bands of short hatching laid across them,
+    bending over every fold; the wide ones crossed by a second set, the
+    thinnest as broken lines of dashes."""
+    for band in cloth_bands():
+        if band_width(band) < 3.5:
+            dash_band(h, band)
+            continue
+        hatch_band(h, band, 1.0)
+        if band.wide:
+            hatch_band(h, band, -1.0, second=True)
 
 
 # ----------------------------------------------------------- the hatching
