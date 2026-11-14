@@ -1,18 +1,33 @@
 """A joyful farm on a hill, in wax crayon: naive art in bold colours.
 
-Run from the repository root: ``python examples/farm.py``. With
-``python examples/farm.py --study FOLDER`` it writes the flat design study
-(cut-paper shapes, flat colour and outlines) to FOLDER instead.
+Run from the repository root: ``python examples/farm.py``. Writes
+``examples/output/farm.png`` (in under a minute); ``python examples/farm.py
+FILE`` writes it to FILE instead, and ``python examples/farm.py --study
+FOLDER`` writes the flat design study (cut-paper shapes in flat colour, with
+their outlines) and enlarged crops of it to FOLDER.
 
-A red barn and a little white house with a cat on its roof sit on a round
-green hill under a big sun; behind them a farther hill is a patchwork of
-fields, with a windmill. In front, a meadow with a round blue pond and its
-ducks, a spotted cow, a pig, hens and a rooster; sheep graze on the hill,
-apple trees and lollipop trees stand about, sunflowers grow by the barn.
+A red barn and a little white house with a black cat on its roof sit on a
+round green hill under a big sun; behind them a farther hill is a patchwork
+of fields (stripes, furrows, cabbages, wheat), with a windmill. Sheep graze
+on the hill, sunflowers grow by the barn, an apple tree stands between. In
+front, a meadow with flowers, a round blue pond with two ducks, a spotted
+cow, a pig, two hens and a rooster.
 
-Everything is a flat shape with a wobbling outline, stacked as cut paper is,
-nearer below, farther above.
+The picture is first designed as cut paper: every element a closed shape
+with a wobbling outline, a flat colour and a place in the stack, nearer
+below and farther above, as naive art stacks things. The crayon then works
+out what each shape shows once those in front are cut away, and lays it as
+wax crayon must be laid, since a crayon does not cover what is under it:
+the black outlines first, on bare paper, in pieces of a hand's reach, some
+traced twice; then the patterns (furrows, stripes, dots, dashes) that a
+field's colour goes over; then every shape filled with back-and-forth
+strokes in its own direction, up to its lines, the light colours first, a
+second looser pass across where it should be solid, big shapes patch by
+patch. White is the paper, kept: clouds, walls, the cow, the sheep. A ragged
+margin of bare paper is left all round.
 """
+
+# cspell:words catmull interp
 
 from __future__ import annotations
 
@@ -188,7 +203,7 @@ class Hand:
 
 def sky(hand: Hand) -> list[Item]:
     box = hand.corners([(0, 0), (WIDTH, 0), (WIDTH, HEIGHT), (0, HEIGHT)], 200)
-    return [Part(box, SKY, 30.0, 0.0, name="sky", passes=1.45, drift=20.0)]
+    return [Part(box, SKY, 30.0, 0.0, name="sky", passes=1.6, drift=20.0)]
 
 
 def sun(hand: Hand, cx=1165.0, cy=168.0, r=86.0) -> list[Item]:
@@ -294,7 +309,7 @@ def fields(hand: Hand, height, cuts, bottom, hill: Part, looks):
     patches = []
     for left, right, (colour, angle) in zip(lines[:-1], lines[1:], looks, strict=True):
         poly = np.vstack([left[::-1], right])
-        field_ = Part(poly, colour, angle, 0.0, hill, "field", passes=1.0)
+        field_ = Part(poly, colour, angle, 0.0, hill, "field", passes=1.25)
         field_.flow = slope(height)
         patches.append(field_)
     edges = [Mark(line, BLACK, 9.0, hill) for line in lines[1:-1]]
@@ -450,7 +465,7 @@ def meadow(hand: Hand):
     """The meadow in front, and the height of its top edge at x."""
     ctrl = [(-40, 768), (250, 744), (560, 754), (860, 772), (1150, 748), (1440, 738)]
     top, height = silhouette(hand, ctrl)
-    part = Part(band(top, HEIGHT + 40), GREEN, 0.0, 0.0, name="meadow", passes=1.0)
+    part = Part(band(top, HEIGHT + 40), GREEN, 0.0, 0.0, name="meadow", passes=1.35)
     part.tint = LIME
     part.flow = slope(height)
     return [part, Mark(top, BLACK, OUTLINE)], height
@@ -465,7 +480,9 @@ def windmill(hand: Hand, x=318.0, base=372.0) -> list[Item]:
     tower = [(x - 34, base), (x + 34, base), (x + 21, base - 112), (x - 21, base - 112)]
     items.append(Part(hand.poly(tower), None, 90.0, 10.0))
     door = [(x - 12, base), (x + 12, base), (x + 12, base - 30), (x, base - 38)]
-    items.append(Part(hand.poly([*door, (x - 12, base - 30)], 1.0, 0.5), NAVY, 90.0, 8.0))
+    items.append(
+        Part(hand.poly([*door, (x - 12, base - 30)], 1.0, 0.5), NAVY, 90.0, 8.0)
+    )
     cap = [(x - 36, base - 106), (x + 36, base - 106), (x + 30, base - 146)]
     cap += [(x, base - 172), (x - 30, base - 146)]
     items.append(Part(hand.poly(cap), RED, 30.0, 9.0))
@@ -477,7 +494,9 @@ def windmill(hand: Hand, x=318.0, base=372.0) -> list[Item]:
         n = np.array([-d[1], d[0]])
         r1, w = 88.0 + hand.u(-6, 6), 9.0 + hand.u(-1, 1)
         pts = [hub + d * 12 - n * w, hub + d * r1 - n * w, hub + d * r1 + n * w]
-        items.append(Part(hand.poly([*pts, hub + d * 12 + n * w], 1.0, 0.6), None, 0.0, 8.0))
+        items.append(
+            Part(hand.poly([*pts, hub + d * 12 + n * w], 1.0, 0.6), None, 0.0, 8.0)
+        )
     items.append(Part(hand.blob(hub[0], hub[1], 8, 8, 6, 0.05), BLACK, 0.0, 0.0))
     return items
 
@@ -561,9 +580,13 @@ def barn(hand: Hand, cx=925.0, base=700.0, s=1.08) -> list[Item]:
     gable = [(-135, -182), (-100, -268), (0, -322), (100, -268), (135, -182)]
     outer = [(-156, -168), (-116, -282), (0, -346), (116, -282), (156, -168)]
     roof = np.vstack([at(outer), np.array(at(gable))[::-1] + [0, 4]])
-    items.append(Part(hand.poly(roof, 1.0, 0.8), NAVY, 30.0))
-    items.append(
-        Part(hand.poly(at([(-135, 0), (135, 0), *gable[::-1]]), 1.5, 1.0), RED, 80.0)
+    items.extend(
+        (
+            Part(hand.poly(roof, 1.0, 0.8), NAVY, 30.0),
+            Part(
+                hand.poly(at([(-135, 0), (135, 0), *gable[::-1]]), 1.5, 1.0), RED, 80.0
+            ),
+        )
     )
     (x0, y0), (x1, y1) = at([(-66, -150), (66, 0)])
     items += cross_door(hand, x0, y0, x1, y1)
@@ -598,7 +621,7 @@ def fence(hand: Hand, height_at, x0=48.0, x1=560.0) -> list[Item]:
     xs = [x0]
     while xs[-1] < x1 - 40:
         xs.append(xs[-1] + hand.u(70, 84))
-    for a, b in zip(xs, xs[1:], strict=False):
+    for a, b in pairwise(xs):
         for dy in (22, 48):
             ya, yb = height_at(a) - dy + hand.u(-2, 2), height_at(b) - dy + hand.u(
                 -2, 2
@@ -740,7 +763,7 @@ def flower(hand: Hand, x, y, colour) -> list[Item]:
 # animals, drawn facing right in local pixels and then placed
 
 
-def dot(hand: Hand, place: Place, x, y, r, colour=BLACK) -> Part:
+def dot(hand: Hand, place: Place, x, y, r, colour: str | None = BLACK) -> Part:
     cx, cy = place([(x, y)])[0]
     r *= abs(place.scale[1])
     return Part(hand.blob(cx, cy, r, r, 5, 0.05), colour, 0.0, 0.0)
@@ -768,16 +791,20 @@ def leg(x, top, bottom, w) -> list[tuple[float, float]]:
 def cow(hand: Hand, place: Place) -> list[Item]:
     items: list[Item] = []
     for x, dx in ((-80, -2), (-54, 3), (56, -3), (84, 2)):
-        items.append(
-            shape(hand, place, leg(x + dx, 20, 108, 11), None, 90.0, 9.0, False)
-        )
-        items.append(
-            shape(hand, place, leg(x + dx, 96, 110, 10.5), BLACK, 0.0, 6.0, False)
+        items.extend(
+            (
+                shape(hand, place, leg(x + dx, 20, 108, 11), None, 90.0, 9.0, False),
+                shape(hand, place, leg(x + dx, 96, 110, 10.5), BLACK, 0.0, 6.0, False),
+            )
         )
     items.append(shape(hand, place, oval(36, 50, 22, 15, 8), PINK, 0.0, 9.0))
     tail = place([(-100, -40), (-122, -22), (-130, 10), (-126, 34)])
-    items.append(Mark(hand.line(tail, 0.8, 0.6), BLACK, 8.0))
-    items.append(shape(hand, place, oval(-126, 42, 8, 12, 7, 10), BLACK, 90.0, 6.0))
+    items.extend(
+        (
+            Mark(hand.line(tail, 0.8, 0.6), BLACK, 8.0),
+            shape(hand, place, oval(-126, 42, 8, 12, 7, 10), BLACK, 90.0, 6.0),
+        )
+    )
     body = [
         (-104, -40),
         (-92, -52),
@@ -823,11 +850,15 @@ def cow_head(hand: Hand, place: Place) -> list[Item]:
             (hx + 5, -76),
         ]
         items.append(shape(hand, place, horn, CREAM, 90.0, 6.0))
-    items.append(shape(hand, place, oval(128, -52, 33, 30, 9, 10), None, 0.0))
-    items.append(shape(hand, place, oval(151, -31, 24, 18, 9, -10), PINK, 0.0, 8.0))
-    items.append(dot(hand, place, 122, -62, 5.5))
-    items.append(dot(hand, place, 146, -31, 3.5))
-    items.append(dot(hand, place, 160, -29, 3.5))
+    items.extend(
+        (
+            shape(hand, place, oval(128, -52, 33, 30, 9, 10), None, 0.0),
+            shape(hand, place, oval(151, -31, 24, 18, 9, -10), PINK, 0.0, 8.0),
+            dot(hand, place, 122, -62, 5.5),
+            dot(hand, place, 146, -31, 3.5),
+            dot(hand, place, 160, -29, 3.5),
+        )
+    )
     return items
 
 
@@ -853,14 +884,18 @@ def pig(hand: Hand, place: Place) -> list[Item]:
         (-10, 56),
         (-72, 40),
     ]
-    items.append(shape(hand, place, body, PINK, 20.0))
-    items.append(
-        shape(hand, place, [(48, -42), (72, -80), (84, -40)], PINK, 70.0, 9.0, False)
+    items.extend(
+        (
+            shape(hand, place, body, PINK, 20.0),
+            shape(
+                hand, place, [(48, -42), (72, -80), (84, -40)], PINK, 70.0, 9.0, False
+            ),
+            shape(hand, place, oval(104, -2, 13, 19, 8), ROSE, 90.0, 7.0),
+            dot(hand, place, 101, -8, 3.0),
+            dot(hand, place, 102, 6, 3.0),
+            dot(hand, place, 74, -22, 5.5),
+        )
     )
-    items.append(shape(hand, place, oval(104, -2, 13, 19, 8), ROSE, 90.0, 7.0))
-    items.append(dot(hand, place, 101, -8, 3.0))
-    items.append(dot(hand, place, 102, 6, 3.0))
-    items.append(dot(hand, place, 74, -22, 5.5))
     return items
 
 
@@ -912,13 +947,15 @@ def hen(hand: Hand, place: Place, colour=None, rooster=False) -> list[Item]:
     wing = [(-24, -2), (-4, -6), (12, 2), (-6, 12)]
     items.append(shape(hand, place, wing, colour, 20.0, 7.0))
     comb = [(24, -50), (26, -70), (36, -62), (42, -76), (50, -62), (60, -68), (56, -46)]
-    items.append(shape(hand, place, comb, RED, 0.0, 7.0))
-    items.append(
-        shape(hand, place, [(54, -44), (72, -39), (54, -33)], SUN, 0.0, 6.0, False)
+    items.extend(
+        (
+            shape(hand, place, comb, RED, 0.0, 7.0),
+            shape(hand, place, [(54, -44), (72, -39), (54, -33)], SUN, 0.0, 6.0, False),
+            shape(hand, place, oval(52, -24, 5, 8, 6), RED, 90.0, 6.0),
+            shape(hand, place, oval(40, -40, 18, 17, 8), colour, 0.0, 9.0),
+            dot(hand, place, 45, -44, 2.8),
+        )
     )
-    items.append(shape(hand, place, oval(52, -24, 5, 8, 6), RED, 90.0, 6.0))
-    items.append(shape(hand, place, oval(40, -40, 18, 17, 8), colour, 0.0, 9.0))
-    items.append(dot(hand, place, 45, -44, 2.8))
     return items
 
 
@@ -930,14 +967,19 @@ def sheep(hand: Hand, place: Place) -> list[Item]:
         )
     cx, cy = place([(0, 0)])[0]
     scale = abs(place.scale[0])
-    items.append(
-        Part(
-            hand.scallop(cx, cy, 74 * scale, 48 * scale, 9, 0.14, 0.75), None, 0.0, 10.0
+    items.extend(
+        (
+            Part(
+                hand.scallop(cx, cy, 74 * scale, 48 * scale, 9, 0.14, 0.75),
+                None,
+                0.0,
+                10.0,
+            ),
+            shape(hand, place, [(56, -28), (40, -42), (46, -24)], BLACK, 0.0, 7.0),
+            shape(hand, place, oval(76, -10, 22, 29, 9, -25), BLACK, 60.0, 8.0),
+            dot(hand, place, 80, -17, 4.5, None),
         )
     )
-    items.append(shape(hand, place, [(56, -28), (40, -42), (46, -24)], BLACK, 0.0, 7.0))
-    items.append(shape(hand, place, oval(76, -10, 22, 29, 9, -25), BLACK, 60.0, 8.0))
-    items.append(dot(hand, place, 80, -17, 4.5, None))
     return items
 
 
@@ -959,42 +1001,50 @@ def duck(hand: Hand, place: Place, colour) -> list[Item]:
     items: list[Item] = []
     items.append(shape(hand, place, DUCK_BODY, colour, 10.0, 9.0))
     wing = place([(-26, -10), (-10, -2), (10, -4)])
-    items.append(Mark(hand.line(wing, 0.5, 0.4), BLACK, 6.0))
-    items.append(
-        shape(
-            hand,
-            place,
-            [(42, -42), (66, -38), (64, -31), (42, -30)],
-            ORANGE,
-            0.0,
-            7.0,
-            False,
+    items.extend(
+        (
+            Mark(hand.line(wing, 0.5, 0.4), BLACK, 6.0),
+            shape(
+                hand,
+                place,
+                [(42, -42), (66, -38), (64, -31), (42, -30)],
+                ORANGE,
+                0.0,
+                7.0,
+                False,
+            ),
+            shape(hand, place, oval(30, -38, 18, 17, 8), colour, 0.0, 9.0),
+            dot(hand, place, 35, -42, 3.8),
         )
     )
-    items.append(shape(hand, place, oval(30, -38, 18, 17, 8), colour, 0.0, 9.0))
-    items.append(dot(hand, place, 35, -42, 3.8))
     return items
 
 
 def cat(hand: Hand, place: Place) -> list[Item]:
     items: list[Item] = []
     tail = place([(20, -6), (40, -14), (46, -38), (36, -60), (42, -74)])
-    items.append(Mark(hand.line(tail, 0.6, 0.5), BLACK, 11.0))
-    items.append(
-        shape(
-            hand,
-            place,
-            [(-26, 0), (26, 0), (22, -40), (10, -64), (-12, -64), (-24, -40)],
-            BLACK,
-            90.0,
-            8.0,
+    items.extend(
+        (
+            Mark(hand.line(tail, 0.6, 0.5), BLACK, 11.0),
+            shape(
+                hand,
+                place,
+                [(-26, 0), (26, 0), (22, -40), (10, -64), (-12, -64), (-24, -40)],
+                BLACK,
+                90.0,
+                8.0,
+            ),
+            shape(hand, place, oval(0, -80, 22, 20, 9), BLACK, 0.0, 8.0),
         )
     )
-    items.append(shape(hand, place, oval(0, -80, 22, 20, 9), BLACK, 0.0, 8.0))
     for side in (-1, 1):
         ear = [(side * 6, -94), (side * 20, -112), (side * 21, -86)]
-        items.append(shape(hand, place, ear, BLACK, 0.0, 6.0, False))
-        items.append(dot(hand, place, side * 9, -82, 4.5, SUN))
+        items.extend(
+            (
+                shape(hand, place, ear, BLACK, 0.0, 6.0, False),
+                dot(hand, place, side * 9, -82, 4.5, SUN),
+            )
+        )
     return items
 
 
@@ -1024,7 +1074,7 @@ def foreground(hand: Hand) -> list[Item]:
     items += hen(hand, Place(436, 985, 0.95, left=True), None)
     items += pig(hand, Place(1000, 918, 0.9, left=True))
     items += hen(hand, Place(1190, 922, 1.2, left=True), ORANGE, rooster=True)
-    items += hen(hand, Place(1302, 992, 0.92, left=True), None)
+    items += hen(hand, Place(1320, 996, 0.85, left=True), None)
     return items
 
 
@@ -1051,7 +1101,7 @@ def pond(hand: Hand, cx=660.0, cy=905.0) -> list[Item]:
 
 def middle(hand: Hand) -> list[Item]:
     items: list[Item] = []
-    items += sheep(hand, Place(136, 604, 0.8, left=True, turn=3))
+    items += sheep(hand, Place(138, 618, 0.8, left=True, turn=3))
     items += sheep(hand, Place(252, 572, 0.78, left=True, turn=-2))
     items += apple_tree(hand, 690, 660, 64, 66)
     items += house(hand)
@@ -1100,26 +1150,6 @@ def scene() -> list[Item]:
 # the flat study
 
 
-def fill_mask(poly: np.ndarray) -> np.ndarray:
-    """The pixels inside the closed polygon ``poly`` (even-odd), (H, W)."""
-    mask = np.zeros((HEIGHT, WIDTH), bool)
-    y0 = max(int(np.floor(poly[:, 1].min())), 0)
-    y1 = min(int(np.ceil(poly[:, 1].max())) + 1, HEIGHT)
-    if y1 <= y0:
-        return mask
-    rows = np.arange(y0, y1) + 0.5
-    p, q = poly, np.roll(poly, -1, axis=0)
-    lo, hi = np.minimum(p[:, 1], q[:, 1]), np.maximum(p[:, 1], q[:, 1])
-    r, e = np.nonzero((rows[:, None] >= lo) & (rows[:, None] < hi))
-    t = (rows[r] - p[e, 1]) / (q[e, 1] - p[e, 1])
-    xc = p[e, 0] + t * (q[e, 0] - p[e, 0])
-    xi = np.clip(np.ceil(xc - 0.5).astype(int), 0, WIDTH)
-    toggles = np.zeros((y1 - y0, WIDTH + 1), np.int32)
-    np.add.at(toggles, (r, xi), 1)
-    mask[y0:y1] = (np.cumsum(toggles, axis=1)[:, :WIDTH] % 2) == 1
-    return mask
-
-
 _DISCS: dict[int, np.ndarray] = {}
 
 
@@ -1128,28 +1158,6 @@ def disc(r: int) -> np.ndarray:
         y, x = np.mgrid[-r : r + 1, -r : r + 1]
         _DISCS[r] = x * x + y * y <= r * r + r * 0.6
     return _DISCS[r]
-
-
-def line_mask(path: np.ndarray, width: float | np.ndarray) -> np.ndarray:
-    """The pixels a line of ``width`` along ``path`` covers, (H, W)."""
-    mask = np.zeros((HEIGHT, WIDTH), bool)
-    widths = np.broadcast_to(np.asarray(width, float), (len(path),))
-    for (x, y), w in zip(path, widths, strict=True):
-        r = max(int(round(w / 2)), 1)
-        xi, yi = int(round(x)), int(round(y))
-        x0, x1, y0, y1 = xi - r, xi + r + 1, yi - r, yi + r + 1
-        if x1 <= 0 or y1 <= 0 or x0 >= WIDTH or y0 >= HEIGHT:
-            continue
-        k = disc(r)[
-            max(-y0, 0) : k_end(y1, HEIGHT, 2 * r + 1),
-            max(-x0, 0) : k_end(x1, WIDTH, 2 * r + 1),
-        ]
-        mask[max(y0, 0) : min(y1, HEIGHT), max(x0, 0) : min(x1, WIDTH)] |= k
-    return mask
-
-
-def k_end(end: int, size: int, n: int) -> int:
-    return n - max(end - size, 0)
 
 
 def outline_path(hand: Hand, ring: np.ndarray) -> list[np.ndarray]:
@@ -1168,12 +1176,8 @@ def outline_path(hand: Hand, ring: np.ndarray) -> list[np.ndarray]:
     return [loop]
 
 
-def paint(img: np.ndarray, mask: np.ndarray, colour: str | None) -> None:
-    img[mask] = _rgb(PAPER_HEX if colour is None else colour)
-
-
-def _rgb(hexc: str) -> np.ndarray:
-    h = hexc.lstrip("#")
+def _rgb(code: str) -> np.ndarray:
+    h = code.lstrip("#")
     return np.array([int(h[i : i + 2], 16) for i in (0, 2, 4)], float) / 255.0
 
 
@@ -1182,25 +1186,18 @@ def study(items: Sequence[Item]) -> np.ndarray:
     hand = Hand(SEED + 1)
     img = np.empty((HEIGHT, WIDTH, 3))
     img[:] = _rgb(PAPER_HEX)
-    masks: dict[int, np.ndarray] = {}
+    own = own_regions(items)
     for item in items:
-        if isinstance(item, Part):
-            mask = fill_mask(item.outline)
-            if item.clip is not None:
-                mask &= masks[id(item.clip)]
-            masks[id(item)] = mask
-            paint(img, mask, item.colour)
-            if item.line > 0:
-                for path in outline_path(hand, item.outline):
-                    w = item.line * (
-                        0.85 + 0.3 * noise.value_noise_1d(len(path), 30.0, hand.rng)
-                    )
-                    paint(img, line_mask(path, w), item.ink)
-        else:
-            mask = line_mask(item.path, item.width)
-            if item.clip is not None:
-                mask &= masks[id(item.clip)]
-            paint(img, mask, item.colour)
+        reg = own[id(item)]
+        if reg.m.size:
+            img[reg.box][reg.m] = _rgb(
+                PAPER_HEX if item.colour is None else item.colour
+            )
+        if isinstance(item, Part) and item.line > 0:
+            for path in outline_path(hand, item.outline):
+                line = line_region(path, item.line * hand.u(0.9, 1.1))
+                if line.m.size:
+                    img[line.box][line.m] = _rgb(item.ink)
     return img
 
 
@@ -1213,18 +1210,18 @@ PAPER = papers.CARTRIDGE.with_(grain=3.5, depth=1.1, color=PAPER_HEX, name="draw
 
 #: The crayon taken for each colour of the design.
 CRAYON = {
-    SKY: "#2a72cc",
+    SKY: "#2066c4",
     SUN: "#ffcf12",
     ORANGE: "#f57a12",
-    RED: "#d42018",
+    RED: "#cc180f",
     PINK: "#f492ad",
     ROSE: "#e8517f",
-    GREEN: "#2e9a34",
+    GREEN: "#27922c",
     LIME: "#a4cc1e",
     LEAF: "#17703a",
     BROWN: "#7c3f1a",
     NAVY: "#1f45a0",
-    POND: "#1a64c6",
+    POND: "#1659b8",
     BLACK: "#141212",
     SMOKE: "#7a7a7a",
     CREAM: "#efd98c",
@@ -1234,8 +1231,11 @@ CRAYON = {
 ORDER = [BLACK, SUN, CREAM, LIME, PINK, ORANGE, ROSE, GREEN, RED, SKY, POND, BROWN]
 ORDER += [LEAF, NAVY, SMOKE]
 
+#: A black line is drawn this much wider than the design's: its grainy
+#: edges read thinner than a flat one.
+BOLD = 1.15
 FILL_WIDTH = 12.0  # the width of a crayon filling a shape, in pixels
-FILL_GAP = 0.6  # how far apart its strokes are, in widths
+FILL_GAP = 0.55  # how far apart its strokes are, in widths
 REACH = 300.0  # a shape larger than this is filled patch by patch
 MARGIN = 27.0  # the bare paper left round the picture, in pixels
 
@@ -1373,7 +1373,8 @@ class Plan:
 def runs(keep: np.ndarray) -> list[tuple[int, int]]:
     """The stretches (start, end) where ``keep`` is True."""
     d = np.diff(np.concatenate([[0], keep.astype(np.int8), [0]]))
-    return list(zip(np.nonzero(d == 1)[0], np.nonzero(d == -1)[0], strict=True))
+    starts, ends = np.nonzero(d == 1)[0].tolist(), np.nonzero(d == -1)[0].tolist()
+    return list(zip(starts, ends, strict=True))
 
 
 def pieces(hand: Hand, path: np.ndarray, short=70, long=140) -> list[np.ndarray]:
@@ -1424,7 +1425,7 @@ def line_strokes(
             pts = piece[:: max(1, len(piece) // 30)]
             if len(pts) < 2:
                 pts = piece[[0, -1]]
-            w = width * hand.u(0.92, 1.08)
+            w = width * hand.u(0.92, 1.08) * (BOLD if colour == BLACK else 1.0)
             out.append(Line(pts, colour, w, firm_along(hand, len(pts), base), under))
             if not under and width >= 7 and hand.u(0, 1) < 0.6 and len(pts) > 4:
                 out.append(retrace(hand, pts, colour, w))
@@ -1438,7 +1439,9 @@ def retrace(hand: Hand, pts: np.ndarray, colour: str, width: float) -> Line:
     b = max(a + 3, int(hand.u(0.6, 1.0) * n))
     sub = pts[a:b]
     tan = np.gradient(sub, axis=0)
-    normal = tan[:, ::-1] * [1, -1] / np.maximum(np.linalg.norm(tan, axis=1), 1e-9)[:, None]
+    normal = (
+        tan[:, ::-1] * [1, -1] / np.maximum(np.linalg.norm(tan, axis=1), 1e-9)[:, None]
+    )
     sub = sub + normal * hand.u(-1.6, 1.6)
     return Line(sub, colour, width * 0.9, firm_along(hand, len(sub), 0.68))
 
@@ -1448,7 +1451,7 @@ def plan(items: Sequence[Item], hand: Hand) -> tuple[Plan, np.ndarray]:
     each shape shows of itself once the shapes in front are cut away."""
     own = own_regions(items)
     edge = sheet_edge(hand, MARGIN)
-    loose = erode(~edge, 6) == 0  # lines stop a little further out
+    loose = grow(edge, 6, False)  # lines stop a little further out
     covered = np.zeros((HEIGHT, WIDTH), bool)
     work = Plan()
     for item in reversed(items):
@@ -1480,7 +1483,15 @@ def plan_mark(hand, work: Plan, mark: Mark, covered, loose, reg: Region):
     base = 0.9 if mark.under else 0.85
     within = reg if mark.clip is not None else None
     target += line_strokes(
-        hand, mark.path, mark.colour, mark.width, covered, loose, base, mark.under, within
+        hand,
+        mark.path,
+        mark.colour,
+        mark.width,
+        covered,
+        loose,
+        base,
+        mark.under,
+        within,
     )
 
 
@@ -1661,7 +1672,9 @@ def scribble(sheet, hand: Hand, m, hard, y0, x0, colour, touch: Touch, rim, agai
         if len(path) < 2:
             continue
         cap = 0.98 if colour == BLACK else 0.82
-        pressure = list(np.clip(firm_along(hand, len(path), touch.firm) * bear, 0.1, cap))
+        pressure = list(
+            np.clip(firm_along(hand, len(path), touch.firm) * bear, 0.1, cap)
+        )
         sheet.stroke(path, medium, pressure, width * hand.u(0.92, 1.06))
         mark_reached(reached, path - origin, width - 2.0)
     left = m & ~reached
@@ -1748,10 +1761,7 @@ def fill(sheet: Sheet, hand: Hand, part: Part, m: np.ndarray, hard, y0, x0, rim)
     """Fill one shape, in one go or patch by patch, with a second, looser
     pass across the first where the shape should be solid."""
     h, w = m.shape
-    if max(h, w) <= REACH:
-        parts = [(m, x0 + w / 2)]
-    else:
-        parts = patches(m, hand, 260.0)
+    parts = [(m, x0 + w / 2)] if max(h, w) <= REACH else patches(m, hand, 260.0)
     for patch, cx in parts:
         angle = part_angle(part, cx) + hand.u(-part.drift, part.drift)
         firm = FIRM.get(part.colour or "", 0.76) * hand.u(0.9, 1.06)
@@ -1768,7 +1778,10 @@ def passes(hand: Hand, part: Part, angle: float, firm: float) -> list[Touch]:
     a second across it, lighter and less neat; black is pressed solid."""
     turn = hand.u(40, 62) * hand.rng.choice([-1, 1])
     if part.colour == BLACK:
-        return [Touch(angle, firm=firm, gap=0.5), Touch(angle + turn, firm=0.9, gap=0.55)]
+        return [
+            Touch(angle, firm=firm, gap=0.5),
+            Touch(angle + turn, firm=0.9, gap=0.55),
+        ]
     out = [Touch(angle, firm=firm)]
     if hand.u(0, 1) < part.passes - 1:
         cross = Touch(angle + turn, firm=min(firm * 0.8, 0.58), gap=FILL_GAP * 1.3)
@@ -1805,6 +1818,7 @@ def draw(items: Sequence[Item]) -> Sheet:
     ink = ink_mask([ln for ln in work.ink + work.lines if not ln.under])
     rim = edge & (erode(edge, 10) == 0)
     rank = {colour: k for k, colour in enumerate(ORDER)}
+
     def order(f):
         """Patterns first, then small dabs, then the light colours."""
         return (not f[0].under, f[1].m.sum() > 400, rank[f[0].colour])
