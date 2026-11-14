@@ -65,8 +65,7 @@ camera, and the medium is then laid along the forms that result.
   solids and lit; the pen then works patch by patch, laying bundles of
   strokes that follow each form wherever tone is still wanting. Red is the
   fruit, blue the shadows on white things, the jug's pattern and the cloth's
-  stripes, black the darkest places (about 11,200 strokes, a minute and a
-  half).
+  stripes, black the darkest places (about 11,300 strokes, about a minute).
 
 ![An art deco tower in charcoal](examples/output/deco.png)
 
