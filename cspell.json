@@ -28,6 +28,7 @@
   "words": [
     "allclose",
     "ascontiguousarray",
+    "capsys",
     "corrcoef",
     "embeddeddolt",
     "errstate",
@@ -46,6 +47,7 @@
     "moveaxis",
     "Munk",
     "murex",
+    "nextafter",
     "njit",
     "oilpaint",
     "rfft",
@@ -55,6 +57,7 @@
     "smudger",
     "sRGB",
     "stilllife",
+    "tobytes",
     "tortillon"
   ]
 }
