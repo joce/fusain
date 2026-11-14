@@ -1,7 +1,32 @@
 """A great green macaw, in coloured pencil on white paper.
 
 Run from the repository root: ``python examples/macaw.py``. Writes
-``examples/output/macaw.png``.
+``examples/output/macaw.png`` (in about forty seconds).
+
+A great green macaw (Ara ambiguus) on a bare branch, seen from its left,
+large on the sheet: the body leans forward as a macaw's does when it
+clambers, the head lifts and cocks on the neck, and the long tail runs out
+of the sheet at the lower right.
+
+The bird is drawn as a draughtsman builds it, not copied from a photograph.
+Its proportions were measured on several reference photographs (bill to
+head, head to body, where the eye sits) and its shapes laid out from them:
+the flat crown and the turn of the nape, the massive hooked bill, the bare
+face, the breast swelling under the throat and tucking into the belly, the
+folded wing standing proud at the shoulder with its rows of coverts and
+its long flight feathers, the feathered thigh over the feet, four thick
+toes round the branch. Each mass is a rounded form lit from the upper
+left, so the light turns from yellow-green to deep blue-green across it,
+the head throws its shadow on the throat, the wing on the flank.
+
+The colour is laid as coloured pencil is: darks first while the tooth takes
+them, each green hatched closed and then stroked along the lie of the
+feathers. The wing's coverts are stated by the shadow under their tips,
+only where the light shows them; the flight feathers by the dark edge where
+one overlaps the next. The bill is built in strokes that follow its arch,
+the face left pale with broken rows of tiny dark feathers, the eye's
+catchlight left as paper. The drawing is carried furthest at the head and
+loosens toward the tail and the edge of the sheet.
 """
 
 from __future__ import annotations
@@ -9,6 +34,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from functools import cache
+from itertools import pairwise, starmap
 from pathlib import Path
 
 import numpy as np
@@ -26,31 +52,33 @@ LIGHT = np.array([-0.62, -0.62, 0.48]) / math.sqrt(0.62**2 + 0.62**2 + 0.48**2)
 #: sheet: its head is cocked by HEAD_TILT degrees about the top of the neck
 #: (the neck bending with it), the whole bird leans forward by TURN degrees
 #: about its feet (ANCHOR), which land at PLACE, SCALE times larger.
-NECK, HEAD_TILT = (520.0, 430.0), -10.0
-ANCHOR, PLACE, SCALE, TURN = (600.0, 975.0), (708.0, 1175.0), 1.36, -8.0
+NECK, HEAD_TILT = (520.0, 440.0), 6.0
+ANCHOR, PLACE, SCALE, TURN = (600.0, 975.0), (770.0, 1110.0), 1.25, -16.0
 
 #: The outlines of the bird, each a closed curve through these points.
 HEAD_BODY = [
-    (352, 236), (370, 203), (402, 181), (448, 170), (497, 176), (537, 198),
-    (564, 233), (590, 292), (604, 352), (622, 425), (660, 535), (695, 660),
-    (722, 780), (742, 900), (752, 985), (742, 1030), (700, 1042), (640, 1018),
-    (585, 978), (540, 935), (512, 895), (482, 850), (446, 778), (416, 690),
-    (398, 600), (394, 525), (388, 466), (380, 430), (370, 380), (360, 300),
+    (352, 236), (366, 204), (398, 182), (442, 172), (492, 170), (530, 176),
+    (556, 192), (574, 226), (582, 278), (582, 330), (588, 382), (606, 432),
+    (640, 520), (680, 640), (712, 770), (735, 900), (750, 985), (742, 1030),
+    (700, 1042), (640, 1018), (585, 978), (536, 930), (492, 866), (450, 786),
+    (414, 700), (390, 625), (380, 560), (388, 508), (398, 470), (390, 440),
+    (378, 418), (370, 380), (360, 300),
 ]  # fmt: skip
 HEAD = [
-    (352, 236), (370, 203), (402, 181), (448, 170), (497, 176), (537, 198),
-    (564, 233), (586, 290), (592, 350), (565, 410), (505, 452), (440, 470),
-    (398, 456), (380, 430), (370, 380), (360, 300),
+    (352, 236), (366, 204), (398, 182), (442, 172), (492, 170), (532, 177),
+    (558, 194), (576, 228), (582, 278), (580, 330), (575, 385), (545, 432),
+    (490, 462), (430, 470), (400, 456), (382, 430), (370, 380), (360, 300),
 ]  # fmt: skip
 WING = [
-    (478, 520), (500, 465), (545, 425), (600, 415), (640, 450), (670, 530),
-    (700, 640), (722, 760), (740, 880), (758, 1000), (778, 1110), (800, 1235),
-    (784, 1226), (752, 1110), (712, 1000), (665, 900), (612, 800), (560, 700),
-    (515, 620), (488, 570),
+    (470, 540), (484, 478), (520, 432), (572, 408), (626, 412), (664, 452),
+    (690, 530), (712, 640), (730, 760), (746, 880), (762, 1000), (780, 1110),
+    (800, 1235), (786, 1228), (752, 1110), (712, 1000), (662, 895), (608, 795),
+    (556, 700), (508, 625), (480, 585),
 ]  # fmt: skip
 FACE = [
-    (362, 250), (395, 234), (436, 240), (472, 266), (489, 308), (481, 352),
-    (458, 386), (422, 402), (392, 398), (382, 368), (378, 320), (369, 280),
+    (362, 250), (395, 232), (436, 236), (474, 262), (493, 306), (488, 352),
+    (468, 390), (440, 416), (414, 430), (398, 414), (388, 372), (378, 320),
+    (369, 280),
 ]  # fmt: skip
 BROW = [
     (344, 242), (346, 211), (362, 188), (392, 176), (424, 178), (440, 192),
@@ -73,27 +101,29 @@ LOWER_BILL = [
 ]  # fmt: skip
 #: The rounded lower edge of the lower bill.
 GONYS = [(310, 412), (316, 430), (334, 442), (358, 444), (384, 428), (396, 398)]
-EYE = (426.0, 290.0)
+EYE = (420.0, 282.0)
 IRIS, PUPIL = 14.5, 6.5
 #: The folded wing's axis, from the shoulder to the tip.
 WING_AXIS = ((560.0, 430.0), (797.0, 1232.0))
 #: The feathered thigh, coming down over the tops of the feet.
 THIGH = [
-    (548, 920), (598, 908), (648, 922), (676, 950), (668, 978), (640, 986),
-    (606, 984), (574, 978), (552, 958),
+    (540, 890), (592, 872), (648, 888), (684, 924), (678, 962), (650, 976),
+    (612, 974), (576, 966), (550, 942),
 ]  # fmt: skip
 #: The branch the bird grips: its middle line and half its thickness.
-BRANCH = [(-100, 960), (200, 975), (420, 984), (600, 992), (800, 999), (1000, 1007), (1300, 1020)]
+#: (on the sheet, falling a little to the left, just under the feet; it is
+#: turned into the bird's own coordinates below)
+BRANCH_ON_SHEET = [(-200, 1200), (200, 1176), (560, 1150), (900, 1124), (1300, 1094)]
 BRANCH_HALF = 22.0
 #: The near foot's toes (two forward over the branch, then the tips of the
 #: two back ones under it), and the far foot's, each from its root to its
 #: claw, and how thick each is at its root.
-TOES = [
-    ([(652, 972), (646, 984), (646, 998), (652, 1010)], 8.0),
-    ([(668, 972), (674, 986), (683, 998), (692, 1006)], 8.0),
-    ([(592, 968), (578, 978), (566, 994), (562, 1010), (566, 1020)], 10.0),
-    ([(608, 970), (604, 988), (606, 1004), (614, 1016), (624, 1020)], 10.0),
-    ([(626, 1012), (640, 1018), (652, 1020)], 8.0),
+TOES_ON_SHEET = [
+    ([(846, 1086), (846, 1104), (852, 1122), (864, 1134)], 7.0),
+    ([(826, 1088), (822, 1106), (826, 1124), (838, 1138)], 7.5),
+    ([(818, 1152), (802, 1164), (784, 1166)], 6.0),
+    ([(758, 1090), (748, 1106), (745, 1126), (750, 1144), (762, 1156)], 10.0),
+    ([(782, 1090), (778, 1108), (780, 1128), (788, 1144), (800, 1154)], 10.0),
 ]
 #: The long tail feathers, from the outermost (underneath) to the middle
 #: pair (on top): sideways offset of the root, direction (degrees), length
@@ -111,6 +141,16 @@ TAIL_ROOT = (738.0, 1005.0)
 
 # ----------------------------------------------------------------------
 # geometry
+
+
+def to_bird(points) -> np.ndarray:
+    """Points of the sheet, (N, 2), in the bird's coordinates (below the
+    neck, where the head's cock does not reach)."""
+    p = (np.asarray(points, dtype=np.float64) - np.array(PLACE)) / SCALE
+    c, s = math.cos(math.radians(TURN)), math.sin(math.radians(TURN))
+    x = p[..., 0] * c + p[..., 1] * s + ANCHOR[0]
+    y = -p[..., 0] * s + p[..., 1] * c + ANCHOR[1]
+    return np.stack([x, y], axis=-1)
 
 
 def headness(y):
@@ -241,7 +281,7 @@ def stretch(tone: np.ndarray, where: np.ndarray) -> np.ndarray:
     return np.clip((tone - a) / max(b - a, 1e-6), 0.0, 1.0)
 
 
-def band(x, lo: float, hi: float):
+def band(x, lo, hi):
     """0 below ``lo``, 1 above ``hi``, smooth between (or the other way round
     if ``lo`` > ``hi``)."""
     return smoothstep(lo, hi, x)
@@ -321,10 +361,14 @@ def blade(offset: float, degrees: float, length: float, half: float) -> np.ndarr
     d = np.array([math.cos(math.radians(degrees)), math.sin(math.radians(degrees))])
     n = np.array([-d[1], d[0]])
     s = np.linspace(0.0, 1.0, 40)
-    width = half * np.where(s < 0.8, 0.85 + 0.15 * s / 0.8, np.sqrt(np.clip((1.0 - s) / 0.2, 0.0, 1.0)))
+    width = half * np.where(
+        s < 0.8, 0.85 + 0.15 * s / 0.8, np.sqrt(np.clip((1.0 - s) / 0.2, 0.0, 1.0))
+    )
     root = np.array(TAIL_ROOT) + n * offset
     middle = root + np.outer(s * length, d)
-    return np.concatenate([middle + n * width[:, None], (middle - n * width[:, None])[::-1]])
+    return np.concatenate(
+        [middle + n * width[:, None], (middle - n * width[:, None])[::-1]]
+    )
 
 
 # ----------------------------------------------------------------------
@@ -502,6 +546,14 @@ def toe_outline(toe, root: float) -> np.ndarray:
     return np.concatenate([pts - n * half, (pts + n * half)[::-1]])
 
 
+def ragged(mask: np.ndarray, cell: float, amount: float) -> np.ndarray:
+    """``mask`` with its edge broken up, as where small feathers lie over
+    the edge of a patch: ``cell`` the size of the breaks in pixels."""
+    rng = np.random.default_rng(SEED + int(cell * 10))
+    grain = noise.value_noise_2d(HEIGHT, WIDTH, cell, rng) - 0.5
+    return soft(mask, 3) + amount * grain > 0.5
+
+
 def parts() -> dict[str, np.ndarray]:
     """The parts of the bird, each where it is seen in front of the others."""
     xx, yy = grid()
@@ -509,11 +561,11 @@ def parts() -> dict[str, np.ndarray]:
     across = (yy - np.interp(xx, line[:, 0], line[:, 1])) / BRANCH_HALF
     blades = [fill_polygon(to_sheet(blade(*b))) for b in BLADES]
     p = {
-        "whole": fill(HEAD_BODY),
+        "whole": fill(HEAD_BODY) | (ragged(fill(HEAD_BODY), 7.0, 0.55) & (yy > 640)),
         "skull": fill(HEAD),
         "wing_all": fill(WING),
-        "face": fill(FACE),
-        "brow": fill(BROW),
+        "face": ragged(fill(FACE), 5.0, 1.0),
+        "brow": ragged(fill(BROW), 4.0, 0.9),
         "upper": fill(UPPER_BILL),
         "lower": fill(LOWER_BILL),
         "thigh": fill(THIGH),
@@ -533,7 +585,7 @@ def parts() -> dict[str, np.ndarray]:
     p["branch"] &= ~p["toes"] & ~p["thigh"]
     p["head"] = p["skull"] & p["whole"] & ~front
     p["wing"] = p["wing_all"] & ~p["branch"]
-    hidden = p["head"] | front | p["wing_all"] | p["branch"] | p["thigh"] | p["toes"]
+    hidden = p["head"] | front | p["wing_all"] | p["branch"] | p["toes"]
     p["body"] = p["whole"] & ~hidden
     behind = p["whole"] | p["wing_all"] | p["branch"] | p["thigh"] | p["toes"]
     over = np.zeros((HEIGHT, WIDTH), bool)
@@ -556,7 +608,11 @@ def body_shading(p: dict[str, np.ndarray]) -> np.ndarray:
     shade = 0.5 * form + 0.4 * band(form, 0.45, 0.75)
     shade += 0.4 * band(yy, 420, 1000) + 0.15 * band(xx, 480, 720)
     head = p["skull"] | p["face"] | p["brow"] | p["upper"] | p["lower"]
-    cast = soft(shift(head, int(14 * SCALE), int(34 * SCALE)), 22) * (1.0 - soft(head, 6))
+    cast = (
+        0.7
+        * soft(shift(head, int(14 * SCALE), int(34 * SCALE)), 26)
+        * (1.0 - soft(head, 6))
+    )
     cast = cast * band(xx, 480.0, 400.0)
     t, _ = frame(WING_AXIS)
     slot = soft(p["wing_all"], 16) * ~p["wing_all"] * band(t, 0.15, 0.35)
@@ -565,22 +621,33 @@ def body_shading(p: dict[str, np.ndarray]) -> np.ndarray:
     shade += 0.5 * soft(p["thigh"] | p["toes"], 10) * ~p["thigh"]
     return stretch(shade, p["body"] | p["head"])
 
+
 def shading(p: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     """How dark each part falls under the light from the upper left."""
     _, yy = grid()
     body = body_shading(p)
-    t, _ = frame(WING_AXIS)
-    wing = 0.75 * (1.0 - lambert(dome(p["wing_all"], 30, 90.0) + dome(p["whole"], 70, 120.0)))
+    wing = 0.75 * (
+        1.0 - lambert(dome(p["wing_all"], 30, 90.0) + dome(p["whole"], 70, 120.0))
+    )
     wing += 0.35 * band(yy, 450, 1150) + wing_feathering()
     wing = band(stretch(wing, p["wing"]), 0.0, 1.0)
     u, _ = frame(TAIL_AXIS)
     tail = 1.0 - lambert(dome(p["tail_all"], 10, 25.0))
     near = soft(p["whole"] | p["wing_all"] | p["thigh"], 26)
     tail = stretch(tail + 1.4 * near + 0.4 * band(u, 0.4, 0.0), p["tail"])
-    thigh = 1.0 - lambert(dome(p["thigh"], 16, 50.0))
-    thigh = 0.3 + 0.6 * stretch(thigh + 0.5 * band(grid()[0], 590, 680), p["thigh"])
+    xx, _ = grid()
+    own = stretch(1.0 - lambert(dome(p["thigh"], 18, 60.0)), p["thigh"])
+    thigh = (
+        0.45 * body + 0.35 * own + 0.25 * band(yy, 930, 995) + 0.15 * band(xx, 600, 690)
+    )
     return {"body": body, "wing": wing, "tail": tail, "thigh": thigh}
 
+
+#: The branch, in the bird's coordinates.
+BRANCH = [tuple(p) for p in to_bird(BRANCH_ON_SHEET)]
+
+#: The toes, in the bird's coordinates.
+TOES = [([tuple(q) for q in to_bird(toe)], root / SCALE) for toe, root in TOES_ON_SHEET]
 
 #: The tail's middle line, from its root to past the end of its longest
 #: feathers.
@@ -596,7 +663,9 @@ def build(rng: np.random.Generator) -> Bird:
     lit_side = 1.0 - band(shade["body"], 0.15, 0.45)
     edge = (soft(seen, 2) * (1.0 - lit_side) + soft(seen, 6) * lit_side) * seen
     inner = soft(silhouette, 7)
-    glow = band(inner, 0.45, 0.6) * band(inner, 0.95, 0.8) * band(shade["body"], 0.55, 0.8)
+    glow = (
+        band(inner, 0.45, 0.6) * band(inner, 0.95, 0.8) * band(shade["body"], 0.55, 0.8)
+    )
     glow = glow * (p["body"] | p["head"])
     shade["body"] = np.clip(shade["body"] - 0.3 * glow, 0.0, 1.0)
     names = ["body", "head", "wing", "tail", "face", "brow", "upper", "lower", "thigh"]
@@ -638,7 +707,9 @@ def wing_tips(across, t0: float, size: float, long: float, k: int):
     phase = covert_phase(across, size, k)
     depth = long * size / WING_LENGTH
     wave = 0.008 * np.sin(across / 37.0 + 1.7 * k) + 0.005 * np.sin(across / 13.0 + k)
-    return t0 + wave + depth * np.sqrt(np.clip(1.0 - (2.0 * phase - 1.0) ** 2, 0.0, 1.0))
+    return (
+        t0 + wave + depth * np.sqrt(np.clip(1.0 - (2.0 * phase - 1.0) ** 2, 0.0, 1.0))
+    )
 
 
 def flight_place(t, across):
@@ -661,7 +732,9 @@ def wing_feathering() -> np.ndarray:
         edge = wing_tips(across, t0, size, long, k)
         q = np.clip((t - prev) / np.maximum(edge - prev, 1e-3), 0.0, 1.0)
         inside = (t >= prev) & (t < edge)
-        own = 0.05 * np.sin(np.floor((across + 0.5 * size * (k % 2)) / size) * 12.99 + k * 7.2)
+        own = 0.05 * np.sin(
+            np.floor((across + 0.5 * size * (k % 2)) / size) * 12.99 + k * 7.2
+        )
         mod += inside * (0.22 * (1.0 - q) ** 3 - 0.08 * q + own)
         prev = edge
     _, phase = flight_place(t, across)
@@ -672,8 +745,8 @@ def wing_feathering() -> np.ndarray:
 # ----------------------------------------------------------------------
 # the box of pencils
 
-LEMON, CHARTREUSE, OLIVE, MOSS = "#e2dc6a", "#b4c044", "#7c9032", "#58742c"
-LEAF, PINE, DEEP, NIGHT, INDIGO = "#3c6a2e", "#284834", "#1b3a3c", "#16283a", "#1d2148"
+LEMON, CHARTREUSE, OLIVE, MOSS = "#dcd66a", "#acb544", "#7a8c30", "#55702a"
+LEAF, PINE, DEEP, NIGHT, INDIGO = "#3c5a2c", "#2a4634", "#1e3836", "#17262a", "#1d2148"
 GRASS, SPRUCE, UMBRA = "#5c9a34", "#1f4038", "#172a28"
 OCHRE, STRAW = "#c8a040", "#eee4a0"
 SKY, TURQ, COBALT, ULTRA, NAVY = "#8cc4e2", "#3ab0bf", "#2a6db8", "#2b3c94", "#1d2452"
@@ -693,23 +766,21 @@ UMBER, SEPIA, WARM_GREY = "#7a6450", "#4e3c30", "#a59a8c"
 #: (1: the side of the lead, for the broad lights); and how firmly it is
 #: also hatched in, closed and waxy (0: left open and grainy).
 GREENS = [
-    (UMBRA, (0.8, 0.93, 2.0, 2.1), 0.85, 1.4, 3.0, 0.0, 0.7),
-    (SPRUCE, (0.66, 0.82, 2.0, 2.1), 0.8, 1.6, 3.5, 0.0, 0.6),
-    (DEEP, (0.52, 0.7, 0.95, 1.05), 0.72, 1.6, 4.0, 0.0, 0.5),
-    (PINE, (0.4, 0.56, 0.82, 0.94), 0.62, 1.6, 4.0, 0.0, 0.4),
-    (LEAF, (0.28, 0.42, 0.68, 0.82), 0.56, 1.6, 4.0, 0.0, 0.3),
-    (GRASS, (0.12, 0.25, 0.6, 0.75), 0.52, 1.8, 4.0, 0.0, 0.3),
-    (MOSS, (0.17, 0.3, 0.55, 0.7), 0.46, 1.2, 4.0, 0.0, 0.0),
-    (OLIVE, (0.08, 0.18, 0.42, 0.56), 0.46, 1.5, 4.0, 0.0, 0.0),
-    (CHARTREUSE, (-0.1, 0.03, 0.3, 0.44), 0.44, 1.4, 4.0, 0.0, 0.3),
-    (LEMON, (-0.1, 0.0, 0.14, 0.28), 0.34, 1.0, 4.0, 1.0, 0.2),
+    (NIGHT, (0.8, 0.95, 2.0, 2.1), 0.8, 1.3, 4.0, 0.0, 0.4),
+    (DEEP, (0.62, 0.85, 2.0, 2.1), 0.75, 1.45, 4.0, 0.0, 0.4),
+    (PINE, (0.45, 0.68, 2.0, 2.1), 0.64, 1.45, 4.0, 0.0, 0.4),
+    (LEAF, (0.3, 0.5, 0.9, 1.05), 0.55, 1.45, 4.0, 0.0, 0.4),
+    (MOSS, (0.15, 0.35, 0.7, 0.9), 0.52, 1.5, 4.0, 0.0, 0.4),
+    (OLIVE, (0.0, 0.2, 0.5, 0.7), 0.5, 1.5, 4.0, 0.0, 0.4),
+    (CHARTREUSE, (-0.1, 0.05, 0.35, 0.5), 0.44, 1.35, 4.0, 0.0, 0.4),
+    (LEMON, (-0.2, -0.1, 0.18, 0.35), 0.36, 1.1, 4.0, 0.0, 0.4),
 ]
 BLUES = [
-    (INDIGO, (0.8, 0.93, 2.0, 2.1), 0.85, 1.4, 3.0, 0.0, 0.6),
-    (NAVY, (0.62, 0.8, 2.0, 2.1), 0.75, 1.5, 3.5, 0.0, 0.5),
-    (ULTRA, (0.42, 0.62, 0.9, 1.0), 0.62, 1.5, 4.0, 0.0, 0.4),
-    (COBALT, (0.18, 0.38, 0.7, 0.86), 0.55, 1.6, 4.0, 0.0, 0.0),
-    (TURQ, (-0.1, 0.05, 0.4, 0.6), 0.46, 1.3, 4.0, 0.0, 0.0),
+    (INDIGO, (0.8, 0.93, 2.0, 2.1), 0.85, 1.3, 3.0, 0.0, 0.5),
+    (NAVY, (0.62, 0.8, 2.0, 2.1), 0.75, 1.4, 3.5, 0.0, 0.45),
+    (ULTRA, (0.42, 0.62, 0.9, 1.0), 0.62, 1.4, 4.0, 0.0, 0.4),
+    (COBALT, (0.18, 0.38, 0.7, 0.86), 0.55, 1.4, 4.0, 0.0, 0.4),
+    (TURQ, (-0.1, 0.05, 0.4, 0.6), 0.46, 1.2, 4.0, 0.0, 0.4),
 ]
 RUSTS = [
     (OXBLOOD, (0.72, 0.9, 2.0, 2.1), 0.7, 1.3, 3.5, 0.0, 0.4),
@@ -738,7 +809,13 @@ WING_FLOW = [
     (520, 470, 48), (600, 430, 62), (600, 560, 68), (680, 650, 73),
     (700, 900, 75), (775, 1150, 80), (560, 620, 64),
 ]  # fmt: skip
-BROW_FLOW = [(350, 238, -80), (362, 205, -48), (398, 182, -12), (434, 194, 20), (404, 226, -20)]
+BROW_FLOW = [
+    (350, 238, -80),
+    (362, 205, -48),
+    (398, 182, -12),
+    (434, 194, 20),
+    (404, 226, -20),
+]
 THIGH_FLOW = [(560, 930, 70), (620, 930, 90), (665, 950, 110)]
 
 
@@ -765,7 +842,8 @@ def build_up(hand: Hand, layers, where, s, angle, **how) -> None:
 
 def draw_sketch(hand: Hand) -> None:
     """The first lines, light and searching, which the colour mostly covers."""
-    shapes = [HEAD_BODY, WING, UPPER_BILL, LOWER_BILL, FACE] + [blade(*b) for b in BLADES]
+    shapes = [HEAD_BODY, WING, UPPER_BILL, LOWER_BILL, FACE]
+    shapes += list(starmap(blade, BLADES))
     for points in shapes:
         curve = outline(points, 6.0)
         start, n = 0, len(curve)
@@ -796,7 +874,9 @@ def draw_rows(hand: Hand, where: np.ndarray, s: np.ndarray, rows) -> None:
             show = trapezoid(float(s[y, x]), (0.3, 0.45, 0.68, 0.82))
             if where[y, x] and hand.rng.random() < 0.7 * show:
                 firm = light * hand.rng.uniform(0.7, 1.1)
-                hand.line(PINE, pts, [0.0, firm, firm, 0.6 * firm, 0.0], 3.0, 0.4, where)
+                hand.line(
+                    PINE, pts, [0.0, firm, firm, 0.6 * firm, 0.0], 3.0, 0.4, where
+                )
             across += wide * hand.rng.uniform(0.85, 1.3)
 
 
@@ -807,14 +887,35 @@ def draw_plumage(hand: Hand, bird: Bird) -> None:
     on the body; the warm light thrown back into the shadow at its edge."""
     s, vary = bird.shade["body"], 0.8 + 0.4 * bird.mottle
     clip = bird.clip["body"] | bird.clip["head"]
-    nape = (bird.part["head"] | bird.part["body"]) & (grid()[0] > 455) & (grid()[1] < 500)
+    nape = (
+        (bird.part["head"] | bird.part["body"]) & (grid()[0] > 455) & (grid()[1] < 500)
+    )
     draw_rows(hand, nape, s, (((520, 290), (610, 480)), 20.0, 200.0, 9.0, 9.0, 0.32))
-    draw_rows(hand, bird.part["body"], s, (((440, 470), (640, 1000)), 40.0, 520.0, 18.0, 20.0, 0.36))
+    draw_rows(
+        hand,
+        bird.part["body"],
+        s,
+        (((440, 470), (640, 1000)), 40.0, 520.0, 18.0, 20.0, 0.36),
+    )
     hand.layer(OCHRE, bird.glow, flow(BODY_FLOW), 0.42, length=12, cover=1.4, clip=clip)
-    for name, anchors, length, scale in (("body", BODY_FLOW, 20.0, 1.0), ("head", HEAD_FLOW, 9.0, 0.75)):
+    for name, anchors, length, scale in (
+        ("body", BODY_FLOW, 18.0, 1.12),
+        ("head", HEAD_FLOW, 8.0, 0.85),
+    ):
         where = bird.part[name] * bird.edge
         angle = flow(anchors)
-        build_up(hand, GREENS, where, s, angle, vary=vary, length=length, scale=scale, clip=clip, spread=0.2)
+        build_up(
+            hand,
+            GREENS,
+            where,
+            s,
+            angle,
+            vary=vary,
+            length=length,
+            scale=scale,
+            clip=clip,
+            spread=0.22,
+        )
 
 
 def draw_coverts(hand: Hand, bird: Bird) -> None:
@@ -826,26 +927,40 @@ def draw_coverts(hand: Hand, bird: Bird) -> None:
     wing = bird.part["wing"]
     across = np.arange(-120.0, 120.0, 1.0)
     for k, (t0, size, long) in enumerate(COVERT_ROWS):
+        if k < 3:
+            continue  # (the small shoulder feathers: only the tone says them)
         phase = covert_phase(across, size, k)
         ts = wing_tips(across, t0, size, long, k)
         starts = np.nonzero(np.diff(phase) < -0.5)[0] + 1
-        for a, b in zip(starts[:-1], starts[1:], strict=True):
-            reach = hand.rng.uniform(0.35, 0.7)
+        for a, b in pairwise(starts):
+            reach = hand.rng.uniform(0.45, 0.85)
             seg = np.arange(a, b)[phase[a:b] < reach]
             if len(seg) < 3:
                 continue
-            x, y = pixel(*on_axis(WING_AXIS, float(ts[seg[len(seg) // 2]]), float(across[seg[len(seg) // 2]])))
+            x, y = pixel(
+                *on_axis(
+                    WING_AXIS,
+                    float(ts[seg[len(seg) // 2]]),
+                    float(across[seg[len(seg) // 2]]),
+                )
+            )
             lit = 1.0 - band(float(s[y, x]), 0.35, 0.85)
             if not wing[y, x] or hand.rng.random() > 0.3 + 0.55 * lit:
                 continue
             firm = (0.22 + 0.4 * lit) * hand.rng.uniform(0.7, 1.15) * (0.75 + 0.05 * k)
             bear = firm * np.sin(np.linspace(0.25, 2.9, len(seg)))
             lag = 0.006 + 0.002 * hand.rng.random()
-            under = [on_axis(WING_AXIS, float(ts[i]) + lag, float(across[i])) for i in seg]
-            hand.line(SPRUCE, under, bear.tolist(), 3.0 + 0.3 * k, 0.4, wing)
-            if hand.rng.random() < 0.5:
-                tip = [on_axis(WING_AXIS, float(ts[i]) + 0.001, float(across[i])) for i in seg]
+            under = [
+                on_axis(WING_AXIS, float(ts[i]) + lag, float(across[i])) for i in seg
+            ]
+            hand.line(PINE, under, (0.7 * bear).tolist(), 5.0 + 0.6 * k, 0.8, wing)
+            if hand.rng.random() < 0.25:
+                tip = [
+                    on_axis(WING_AXIS, float(ts[i]) + 0.001, float(across[i]))
+                    for i in seg
+                ]
                 hand.line(UMBRA, tip, (0.8 * bear).tolist(), 1.8, 0.3, wing)
+
 
 def draw_flight_edges(hand: Hand, bird: Bird) -> None:
     """The long flight feathers lying like closed blades: a crisp dark line
@@ -857,10 +972,17 @@ def draw_flight_edges(hand: Hand, bird: Bird) -> None:
         end = FLIGHT_ENDS[j] - 0.01
         ts = np.linspace(0.43, end, 40)
         reach = np.clip(1.0 - 0.85 * (ts - 0.44) / 0.56, 0.15, 1.0)
-        pts = [on_axis(WING_AXIS, float(t), a0 * r + 4.0) for t, r in zip(ts, reach, strict=True)]
+        pts = [
+            on_axis(WING_AXIS, float(t), a0 * r + 4.0)
+            for t, r in zip(ts, reach, strict=True)
+        ]
         x, y = pixel(*pts[20])
         firm = 0.7 - 0.25 * band(float(s[y, x]), 0.6, 0.95)
-        bear = firm * (0.55 + 0.45 * np.sin(np.linspace(0.2, 2.9, 40))) * (1.0 - 0.4 * band(ts, 0.8, 1.0))
+        bear = (
+            firm
+            * (0.55 + 0.45 * np.sin(np.linspace(0.2, 2.9, 40)))
+            * (1.0 - 0.4 * band(ts, 0.8, 1.0))
+        )
         hand.line(NIGHT, pts, bear.tolist(), 2.4, 0.25, wing)
         shadow = [(px, py) for px, py in pts]
         hand.line(NAVY, shadow, (bear * 0.5).tolist(), 5.0, 0.6, wing)
@@ -869,7 +991,14 @@ def draw_flight_edges(hand: Hand, bird: Bird) -> None:
         a_front, a_back = FLIGHT[j], FLIGHT[j + 1]
         reach = 1.0 - 0.85 * (t1 - 0.44) / 0.56
         k = np.linspace(0.0, 1.0, 9)
-        ends = [on_axis(WING_AXIS, t1 + 0.02 * math.sin(math.pi * q), (a_front + (a_back - a_front) * q) * reach + 4.0) for q in k]
+        ends = [
+            on_axis(
+                WING_AXIS,
+                t1 + 0.02 * math.sin(math.pi * q),
+                (a_front + (a_back - a_front) * q) * reach + 4.0,
+            )
+            for q in k
+        ]
         hand.line(NIGHT, ends, [0.0, 0.5, 0.6, 0.5, 0.0], 2.4, 0.3, wing)
 
 
@@ -889,14 +1018,20 @@ def draw_wing(hand: Hand, bird: Bird) -> None:
     covert = t < greater
     secondary = band(k, 2.6, 3.4) * band(t, 0.66, 0.5)
     green = where * np.clip(covert + (~covert) * secondary, 0.0, 1.0)
-    teal = where * (~covert) * band(k, 2.6, 3.4) * trapezoid(t, (0.46, 0.54, 0.64, 0.72))
-    teal += where * covert * band(t, greater - 0.03, greater) * band(across, 20.0, -20.0)
+    teal = (
+        where * (~covert) * band(k, 2.6, 3.4) * trapezoid(t, (0.46, 0.54, 0.64, 0.72))
+    )
+    teal += (
+        where * covert * band(t, greater - 0.03, greater) * band(across, 20.0, -20.0)
+    )
     hand.layer(TURQ, teal, angle, 0.5, length=16, cover=1.5, clip=clip)
-    vary = 0.8 + 0.4 * bird.mottle
-    build_up(hand, GREENS, green, s, angle, vary=vary, length=13, scale=0.9, clip=clip, spread=0.1)
+    vary = 0.75 + 0.5 * bird.mottle
+    build_up(hand, GREENS, green, s, angle, vary=vary, length=12, clip=clip, spread=0.1)
     blue = where * (1.0 - green / np.maximum(where, 1e-6))
     deeper = np.clip(s + 0.25 * band(t, 0.75, 1.0), 0.0, 1.0)
-    build_up(hand, BLUES, blue, deeper, angle, length=40, clip=clip, spread=0.05, bend=0.005)
+    build_up(
+        hand, BLUES, blue, deeper, angle, length=40, clip=clip, spread=0.05, bend=0.005
+    )
     # the light along the bend of the wing, lifted out
     bend = [(548, 431), (508, 464), (487, 510), (490, 562), (514, 610), (545, 660)]
     hand.erase(bend, tools.KNEADED, [0.0, 0.5, 0.6, 0.5, 0.3, 0.0], 5.0)
@@ -907,7 +1042,13 @@ def draw_edges(hand: Hand, bird: Bird) -> None:
     it lies over the flank."""
     lower = outline(WING, 3.0)
     t, _ = frame(WING_AXIS)
-    pts = np.array([p for p in lower if 495 < p[0] < 760 and p[1] > 560 and p[0] < 0.42 * p[1] + 380])
+    pts = np.array(
+        [
+            p
+            for p in lower
+            if 495 < p[0] < 760 and p[1] > 560 and p[0] < 0.42 * p[1] + 380
+        ]
+    )
     del t
     start = 0
     while start < len(pts) - 3:
@@ -924,15 +1065,36 @@ def draw_thigh(hand: Hand, bird: Bird) -> None:
     """The feathered thigh coming down over the tops of the feet, in shadow
     under the belly, its ruffled lower edge over the toes."""
     s = bird.shade["thigh"] + 0.15 * bird.mottle
-    where = bird.part["thigh"] * 1.0
     angle = flow(THIGH_FLOW)
-    clip = grow(bird.part["thigh"], 3) & ~bird.part["wing_all"]
-    build_up(hand, GREENS[:7], where, s, angle, length=9, scale=0.75, clip=clip)
-    for y0 in (930.0, 948.0, 964.0):
-        for x0 in np.arange(560.0, 670.0, 13.0) + hand.rng.uniform(0, 8):
+    clip = (
+        grow(bird.part["thigh"], 8)
+        & ~bird.part["wing_all"]
+        & (bird.part["whole"] | bird.part["thigh"])
+    )
+    where = soft(bird.part["thigh"], 6) * clip
+    build_up(
+        hand,
+        GREENS[:5],
+        where * band(s, 0.35, 0.6),
+        s,
+        angle,
+        length=9,
+        scale=0.75,
+        clip=clip,
+    )
+    for y0 in (942.0, 960.0, 976.0):
+        for x0 in np.arange(548.0, 680.0, 13.0) + hand.rng.uniform(0, 8):
             if hand.rng.random() < 0.55:
-                arc = [(x0 + 11.0 * q, y0 + 3.5 * math.sin(math.pi * q) + hand.rng.normal(0, 0.6)) for q in np.linspace(0, 1, 6)]
-                hand.line(SPRUCE, arc, [0.0, 0.45, 0.45, 0.0], 2.4, 0.3, bird.part["thigh"])
+                arc = [
+                    (
+                        x0 + 11.0 * q,
+                        y0 + 3.5 * math.sin(math.pi * q) + hand.rng.normal(0, 0.6),
+                    )
+                    for q in np.linspace(0, 1, 6)
+                ]
+                hand.line(
+                    SPRUCE, arc, [0.0, 0.45, 0.45, 0.0], 2.4, 0.3, bird.part["thigh"]
+                )
     edge = outline(THIGH, 3.0)
     for x, y in edge[edge[:, 1] > 955]:
         a = math.radians(95.0 + hand.rng.normal(0.0, 15.0))
@@ -951,9 +1113,18 @@ def draw_tail(hand: Hand, bird: Bird) -> None:
         seen = bird.part[f"blade{k}"]
         root = np.array(TAIL_ROOT)
         d = np.array([math.cos(math.radians(degrees)), math.sin(math.radians(degrees))])
-        axis = (tuple(root + np.array([-d[1], d[0]]) * offset), tuple(root + np.array([-d[1], d[0]]) * offset + d * length))
+        axis = (
+            tuple(root + np.array([-d[1], d[0]]) * offset),
+            tuple(root + np.array([-d[1], d[0]]) * offset + d * length),
+        )
         u, v = frame(axis)
-        s = np.clip(bird.shade["tail"] + 0.45 * soft(covered, 5) - 0.15 * band(np.abs(v), 6.0, 0.0), 0.0, 1.0)
+        s = np.clip(
+            bird.shade["tail"]
+            + 0.45 * soft(covered, 5)
+            - 0.15 * band(np.abs(v), 6.0, 0.0),
+            0.0,
+            1.0,
+        )
         draw_blade(hand, bird, seen, s, (u, v, half, degrees, k))
         covered |= fill_polygon(to_sheet(blade(*BLADES[k])))
 
@@ -969,7 +1140,13 @@ def draw_blade(hand: Hand, bird: Bird, seen: np.ndarray, s: np.ndarray, where) -
     blue = np.clip(band(u, 0.62, 0.8) + outer * band(u, 0.2, 0.5), 0.0, 1.0)
     tip = band(u, 0.86, 0.97)
     on = -(degrees + TURN)
-    how = {"clip": clip, "spread": 0.03, "bend": 0.003, "angles": (on, on + 6.0), "hatch": 0.45}
+    how = {
+        "clip": clip,
+        "spread": 0.03,
+        "bend": 0.003,
+        "angles": (on, on + 6.0),
+        "hatch": 0.45,
+    }
     build_up(hand, RUSTS, w * (1.0 - blue), s, angle, length=60, **how)
     build_up(hand, BLUES[1:], w * blue * (1.0 - tip), s, angle, length=56, **how)
     hand.tone(SKY, w * tip, 0.45, (on,), 4.0)
@@ -999,8 +1176,8 @@ def draw_face(hand: Hand, bird: Bird) -> None:
     draw_face_lines(hand, bird)
     hand.tone(COOL, w * turn**1.5, 0.26, (25,), 2.6)
     hand.tone(MAUVE, w * turn**3, 0.22, (70,), 2.6)
-    hand.tone(ROSE, w * flush, 0.24, (-20,), 2.6)
-    hand.tone(BLUSH, w * (0.4 + 0.6 * flush), 0.2, (10,), 2.6)
+    hand.tone(ROSE, w * (0.35 + 0.65 * flush), 0.3, (-20,), 2.6)
+    hand.tone(BLUSH, w, 0.3, (10, 80), 2.6)
 
 
 def draw_face_lines(hand: Hand, bird: Bird) -> None:
@@ -1010,7 +1187,7 @@ def draw_face_lines(hand: Hand, bird: Bird) -> None:
     base of the bill."""
     face = bird.part["face"]
     bx, by = np.meshgrid(np.arange(350.0, 500.0), np.arange(220.0, 420.0))
-    rows = [pixel(x, y) for x, y in zip(bx.ravel(), by.ravel(), strict=True)]
+    rows = list(starmap(pixel, zip(bx.ravel(), by.ravel(), strict=True)))
     on = np.array([face[r, c] for c, r in rows]).reshape(bx.shape)
     seen = on.any(axis=0)
     cols = bx[0, seen]
@@ -1036,9 +1213,11 @@ def draw_face_row(hand: Hand, face: np.ndarray, cols, row, dark: float) -> None:
     x = float(cols[0]) + hand.rng.uniform(0.0, 6.0)
     while x < cols[-1] - 3:
         y = float(np.interp(x, cols, row)) + 1.4 * math.sin(x / 8.0 + phase)
-        near = math.exp(-((math.hypot(x - ex, y - ey) - 24.0) / 28.0) ** 2)
+        near = math.exp(-(((math.hypot(x - ex, y - ey) - 24.0) / 28.0) ** 2))
         crowd = max(near, math.exp(-(((x - 385.0) / 20.0) ** 2)))
-        slope = float(np.interp(x + 2.0, cols, row) - np.interp(x - 2.0, cols, row)) / 4.0
+        slope = (
+            float(np.interp(x + 2.0, cols, row) - np.interp(x - 2.0, cols, row)) / 4.0
+        )
         a = math.atan2(slope, 1.0)
         far = math.hypot(x - ex, y - ey) > IRIS + 8
         if far and face[pixel(x, y)[::-1]] and hand.rng.random() < 0.5 + 0.45 * crowd:
@@ -1049,8 +1228,16 @@ def draw_face_row(hand: Hand, face: np.ndarray, cols, row, dark: float) -> None:
                 tick = [(tx, ty), (tx + ln * math.cos(b), ty + ln * math.sin(b))]
                 firm = dark * hand.rng.uniform(0.45, 0.85)
                 colour = LINE if hand.rng.random() < 0.7 else WINE
-                hand.line(colour, tick, [firm, firm * 0.4], hand.rng.uniform(1.8, 2.4), 0.2, face)
+                hand.line(
+                    colour,
+                    tick,
+                    [firm, firm * 0.4],
+                    hand.rng.uniform(1.8, 2.4),
+                    0.2,
+                    face,
+                )
         x += hand.rng.uniform(2.5, 6.0) * (1.3 - 0.45 * crowd)
+
 
 def draw_fringe(hand: Hand, bird: Bird) -> None:
     """The small green feathers at the edge of the bare face and of the
@@ -1100,11 +1287,15 @@ def draw_eye(hand: Hand) -> None:
     spared = np.hypot(xx - glint[0], yy - glint[1]) > 2.3
     for k in range(9):
         radius = IRIS + 3.0 + 1.6 * k + hand.rng.normal(0.0, 0.5)
-        ring = circle(EYE, radius, 30, hand.rng.uniform(0, 6.3), hand.rng.uniform(1.2, 3.0))
+        ring = circle(
+            EYE, radius, 30, hand.rng.uniform(0, 6.3), hand.rng.uniform(1.2, 3.0)
+        )
         firm = (0.36 - 0.03 * k) * hand.rng.uniform(0.7, 1.1)
         hand.line(MAUVE if k % 3 else COOL, ring, [0.0, firm, firm, 0.0], 1.8, 0.5)
     above = (r > IRIS) & (r < IRIS + 16.0) & (yy < EYE[1] - 2.0)
-    hand.tone(COOL, above * band(yy, EYE[1] - 2.0, EYE[1] - IRIS) * 1.0, 0.32, (30,), 2.4)
+    hand.tone(
+        COOL, above * band(yy, EYE[1] - 2.0, EYE[1] - IRIS) * 1.0, 0.32, (30,), 2.4
+    )
     iris = (r < IRIS) & (yy > lid) & spared
     rim = band(r, IRIS - 3.5, IRIS - 0.8) * iris
     hood = band(yy, lid + 6.0, lid) * iris
@@ -1118,7 +1309,12 @@ def draw_eye(hand: Hand) -> None:
     lower = circle(EYE, IRIS + 1.0, 24, math.pi * 0.1, math.pi * 0.8)
     hand.line(MAUVE, lower, [0.2, 0.45, 0.45, 0.2], 2.0, 0.15)
     for _ in range(3):
-        hand.erase([(glint[0] - 0.8, glint[1]), (glint[0] + 0.8, glint[1])], tools.ERASER, 1.0, 3.0)
+        hand.erase(
+            [(glint[0] - 0.8, glint[1]), (glint[0] + 0.8, glint[1])],
+            tools.ERASER,
+            1.0,
+            3.0,
+        )
 
 
 def draw_brow(hand: Hand, bird: Bird) -> None:
@@ -1132,11 +1328,26 @@ def draw_brow(hand: Hand, bird: Bird) -> None:
     xx, yy = grid()
     shade = np.clip(band(yy, 200, 245) + band(xx, 395, 438), 0.0, 1.0)
     edge = grow(brow, 6) & ~brow & bird.part["head"] & (xx > 390)
-    hand.layer(DEEP, soft(edge, 2) * edge, flow(HEAD_FLOW), 0.5, length=6, width=3.0, cover=1.4, clip=edge)
-    hand.layer(OXBLOOD, w * shade**2, angle, 0.6, length=5, width=2.6, cover=1.8, clip=clip)
-    hand.layer(CRIMSON, w * shade, angle, 0.62, length=6, width=2.6, cover=2.0, clip=clip)
+    hand.layer(
+        DEEP,
+        soft(edge, 2) * edge,
+        flow(HEAD_FLOW),
+        0.5,
+        length=6,
+        width=3.0,
+        cover=1.4,
+        clip=edge,
+    )
+    hand.layer(
+        OXBLOOD, w * shade**2, angle, 0.6, length=5, width=2.6, cover=1.8, clip=clip
+    )
+    hand.layer(
+        CRIMSON, w * shade, angle, 0.62, length=6, width=2.6, cover=2.0, clip=clip
+    )
     hand.layer(SCARLET, w, angle, 0.6, length=6, width=2.8, cover=2.6, clip=clip)
-    hand.layer(FLAME, w * (1.0 - shade), angle, 0.45, length=6, width=2.8, cover=1.2, clip=clip)
+    hand.layer(
+        FLAME, w * (1.0 - shade), angle, 0.45, length=6, width=2.8, cover=1.2, clip=clip
+    )
 
 
 def arch_flow(points) -> np.ndarray:
@@ -1158,7 +1369,7 @@ def bill_tone(bird: Bird) -> np.ndarray:
     edge = distance_to(TOMIUM, upper)
     up = 0.6 + 0.18 * band(ridge, 20.0, 80.0) + 0.1 * band(xx, 330.0, 385.0)
     up -= 0.32 * band(ridge, 26.0, 16.0) * band(yy, 450.0, 320.0)
-    up += 0.1 * band(edge, 30.0, 8.0)
+    up -= 0.12 * band(edge, 9.0, 3.0)
     up -= 0.3 * band(yy, 400.0, 470.0) * band(xx, 305.0, 268.0)
     low = 0.86 + 0.14 * band(distance_to(GONYS, lower), 3.0, 14.0)
     low -= 0.3 * band(distance_to(GONYS, lower), 6.0, 2.0)
@@ -1177,10 +1388,18 @@ def draw_bill(hand: Hand, bird: Bird) -> None:
     low_arch = arch_flow(GONYS[::-1])
     tip = band(yy, 400.0, 465.0) * band(xx, 310.0, 275.0)
     for mask, angle, length in ((upper, arch, 26.0), (lower, low_arch, 14.0)):
-        how = {"clip": mask, "spread": 0.03, "bend": 0.0, "hatch": 0.55, "angles": (55.0, 125.0, 95.0)}
+        how = {
+            "clip": mask,
+            "spread": 0.03,
+            "bend": 0.0,
+            "hatch": 0.55,
+            "angles": (55.0, 125.0, 95.0),
+        }
         build_up(hand, INKS, mask * 1.0, s, angle, length=length, **how)
         hand.tone(HORN, mask * tip, 0.4, (60.0, 120.0), 3.0)
-        hand.layer(HORN, mask * tip, angle, 0.4, length=14, width=3.0, cover=1.4, clip=mask)
+        hand.layer(
+            HORN, mask * tip, angle, 0.4, length=14, width=3.0, cover=1.4, clip=mask
+        )
     draw_bill_lines(hand, bird)
 
 
@@ -1196,7 +1415,9 @@ def draw_bill_lines(hand: Hand, bird: Bird) -> None:
         off = 8.0 + 7.0 * k + hand.rng.normal(0.0, 1.5)
         growth = [(x - off, y + hand.rng.normal(0.0, 0.6)) for x, y in base[1:]]
         firm = hand.rng.uniform(0.2, 0.35)
-        hand.line(SLATE if k % 2 else GREY, growth, [0.0, firm, firm, 0.0], 1.8, 0.4, upper)
+        hand.line(
+            SLATE if k % 2 else GREY, growth, [0.0, firm, firm, 0.0], 1.8, 0.4, upper
+        )
     ridge = [(352, 242), (322, 245), (296, 260), (276, 285), (264, 318), (259, 350)]
     hand.erase(ridge, tools.KNEADED, [0.0, 0.3, 0.4, 0.35, 0.25, 0.0], 6.0)
 
@@ -1211,16 +1432,37 @@ def draw_feet(hand: Hand, bird: Bird) -> None:
         d /= np.maximum(np.linalg.norm(d, axis=1, keepdims=True), 1e-6)
         n = np.stack([-d[:, 1], d[:, 0]], 1)
         half = np.linspace(root, root * 0.55, len(pts))[:, None]
-        under = fill_polygon(to_sheet(np.concatenate([pts + n * half * 0.1, (pts + n * half)[::-1]])))
+        under = fill_polygon(
+            to_sheet(np.concatenate([pts + n * half * 0.1, (pts + n * half)[::-1]]))
+        )
         hand.tone(SLATE, mask * 1.0, 0.65, (30, -50), 2.4)
         hand.tone(CHAR, under * 1.0, 0.7, (70, -20), 2.4)
         hand.tone(GREY, mask * 1.0, 0.45, (110,), 2.4)
         for k in range(3, len(pts) - 2, 3):
-            ring = [pts[k] - n[k] * half[k, 0], pts[k] + d[k] * 1.6, pts[k] + n[k] * half[k, 0]]
-            hand.line(CHAR, ring, [0.0, 0.5, 0.0], 1.6, 0.3, mask)
-        end = pts[-1]
-        claw = [end - 2 * d[-1], end + 7 * d[-1] - 1 * n[-1], end + 13 * d[-1] - 6 * n[-1], end + 14 * d[-1] - 12 * n[-1]]
-        hand.line(BLACK, claw, [0.95, 0.85, 0.6, 0.2], 4.6, 0.15)
+            ring = [
+                pts[k] - n[k] * half[k, 0],
+                pts[k] + d[k] * 1.2,
+                pts[k] + n[k] * half[k, 0],
+            ]
+            hand.line(CHAR, ring, [0.1, 0.65, 0.1], 2.0, 0.3, mask)
+            shine = [
+                pts[k + 1] + n[k + 1] * half[k + 1, 0] * 0.1,
+                pts[k + 1] + n[k + 1] * half[k + 1, 0] * 0.5,
+            ]
+            hand.erase(shine, tools.KNEADED, [0.5, 0.2], 3.0)
+        end, ahead = pts[-1], d[-1]
+        curl = n[-1] if n[-1][0] > 0 else -n[-1]  # (toward the back, round the branch)
+        r = 1.6 * root
+        claw = [
+            end - 0.3 * r * ahead,
+            end + 0.8 * r * ahead + 0.2 * r * curl,
+            end + 1.4 * r * ahead + 0.8 * r * curl,
+            end + 1.5 * r * ahead + 1.5 * r * curl,
+        ]
+        hand.line(BLACK, claw, [0.95, 0.85, 0.6, 0.2], 0.55 * root * SCALE, 0.15)
+        hand.line(
+            SLATE, [c - 0.25 * root * curl for c in claw[:3]], [0.0, 0.4, 0.0], 1.6, 0.1
+        )
     del bird
 
 
@@ -1237,12 +1479,18 @@ def draw_branch(hand: Hand, bird: Bird) -> None:
     angle = np.full((HEIGHT, WIDTH), math.radians(1.5)) + turning()
     dark = np.clip(band(v, 0.0, 0.9) + 0.7 * shadow, 0.0, 1.0)
     hand.tone(SEPIA, w * dark, 0.6, (-5, 30), 2.6)
-    hand.layer(UMBER, w * band(v, -0.6, 0.3), angle, 0.45, length=34, width=4.0, cover=1.6)
+    hand.layer(
+        UMBER, w * band(v, -0.6, 0.3), angle, 0.45, length=34, width=4.0, cover=1.6
+    )
     hand.layer(WARM_GREY, w, angle, 0.32, length=40, width=5.0, cover=1.0, tilt=0.6)
     for off in hand.rng.uniform(-0.8, 0.9, 12):
         pts = line + np.array([0.0, off * BRANCH_HALF])
         fade = np.exp(-(((pts[:, 0] - 640.0) / 230.0) ** 2))
-        grain = fade * hand.rng.uniform(0.25, 0.5) * (0.5 + 0.5 * np.sin(pts[:, 0] / 17.0 + off * 9))
+        grain = (
+            fade
+            * hand.rng.uniform(0.25, 0.5)
+            * (0.5 + 0.5 * np.sin(pts[:, 0] / 17.0 + off * 9))
+        )
         keep = fade > 0.05
         hand.line(SEPIA, pts[keep], grain[keep].tolist(), 2.0, 0.8, ~bird.part["toes"])
 
