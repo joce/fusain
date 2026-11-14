@@ -1752,6 +1752,7 @@ class Pass:
     shortest: int = 14  # points of 2 px
     by_region: bool = False
     once: bool = False  # a patch the strokes cannot reach is not tried again
+    turn: float = 9.0  # how far a bundle may turn from the field (degrees)
 
 
 @dataclass
@@ -1798,7 +1799,7 @@ class Hatcher:
         x, y = int(centre[0]), int(centre[1])
         if goal[y, x] <= 0:
             return False
-        turn = math.radians(rng.normal(0, 9))
+        turn = math.radians(rng.normal(0, ps.turn))
         fan = math.radians(rng.uniform(-2.0, 2.0))
         c, s = math.cos(turn), math.sin(turn)
         f = field[y, x]
@@ -1944,7 +1945,7 @@ def cherry_targets(m: PenMaps):
     cherries touch."""
     S = m.shade
     cherry = masks(m, ("cherry",))
-    glint = filters.box_blur((m.spec > 0.25).astype(float), 1) > 0.15
+    glint = m.spec > 0.4
     bare = ~glint
     red = (0.2 + 0.08 * smoothstep(0.2, 0.5, S)) * bare
     black = (
@@ -1982,12 +1983,11 @@ def wall_targets(m: PenMaps):
     D = m.dark
     wall = masks(m, ("wall",))
     shape = m.keep.shape
-    ragged = smoothstep(0.35, 0.6, m.keep) * (0.4 + 0.9 * blobs(shape, 110, 4))
-    blue = np.where(wall, 0.022 + steps(D, (0.52, 0.64), (0.025, 0.035)), 0) * ragged
-    black = np.where(wall, 0.04 * smoothstep(0.6, 0.72, D), 0) * ragged
-    groups = np.stack([blobs(shape, 150, 20 + k) for k in range(3)])
-    share = groups == groups.max(axis=0)
-    return [blue * g for g in share], black
+    fade = smoothstep(0.3, 0.75, m.keep)
+    fade = fade * (0.85 + 0.15 * blobs(shape, 200, 4))
+    blue = np.where(wall, 0.03 + 0.035 * smoothstep(0.5, 0.66, D), 0) * fade
+    black = np.where(wall, 0.035 * smoothstep(0.6, 0.72, D), 0) * fade
+    return blue, black
 
 
 def small_targets(m: PenMaps):
@@ -2142,12 +2142,13 @@ CLOTH_KW: dict[str, Any] = {
     "count": (5, 10),
     "spacing": (3.5, 13.0),
 }
-CHERRY_KW: dict[str, Any] = {"length": (16, 40), "count": (2, 5), "spacing": (2.8, 7.0),
-                             "shortest": 5, "once": True}  # fmt: skip
+CHERRY_KW: dict[str, Any] = {"length": (16, 40), "count": (3, 6), "spacing": (2.0, 4.5),
+                             "shortest": 5, "once": True, "turn": 4.0}  # fmt: skip
 TABLE_KW: dict[str, Any] = {
-    "length": (160, 360),
-    "count": (4, 8),
-    "spacing": (3.5, 12.0),
+    "length": (220, 460),
+    "count": (6, 11),
+    "spacing": (3.5, 9.0),
+    "turn": 2.5,
 }
 
 
@@ -2175,16 +2176,15 @@ def hatch_cloth(h: Hatcher):
     folds where the cloth hangs."""
     m = h.maps
     blue, red, black = cloth_targets(m)
-    top, hang = ~m.hang, m.hang
+    top = ~m.hang  # the hanging folds are told by the bending stripes alone
     lay_layers(h, BLUE, blue * top, ((0, 0.0, 0.035, 0.22), (8, 0.035, 0.05, 0.25),
                                      (72, 0.085, 0.06, 0.26)), CLOTH_KW)  # fmt: skip
-    lay_layers(h, BLUE, blue * hang, ((0, 0.0, 0.035, 0.22), (7, 0.035, 0.05, 0.25),
-                                      (-7, 0.085, 0.06, 0.27)), CLOTH_KW)  # fmt: skip
-    lay_layers(h, RED, red, ((-10, 0.0, 0.05, 0.22), (60, 0.05, 0.04, 0.24)), CLOTH_KW)
-    lay_layers(h, BLACK, black, ((12, 0.0, 0.06, 0.26),), CLOTH_KW)
+    lay_layers(h, RED, red * top, ((-10, 0.0, 0.05, 0.22), (60, 0.05, 0.04, 0.24)),
+               CLOTH_KW)
+    lay_layers(h, BLACK, black * top, ((12, 0.0, 0.06, 0.26),), CLOTH_KW)
     face, warm = flesh_targets(m)
     lay_layers(h, BLUE, face, ((0, 0.0, 0.05, 0.16),), FRUIT_KW | {"once": True})
-    lay_layers(h, RED, warm, ((90, 0.0, 0.04, 0.16),), FRUIT_KW | {"once": True})
+    del warm
 
 
 def hatch_fruit(h: Hatcher):
@@ -2196,8 +2196,8 @@ def hatch_fruit(h: Hatcher):
     )
     lay_layers(h, BLUE, blue, ((110, 0.0, 0.04, 0.28),), FRUIT_KW)
     red, black = cherry_targets(h.maps)
-    lay_layers(h, RED, red, ((0, 0.0, 0.1, 0.42), (70, 0.1, 0.08, 0.42)), CHERRY_KW)
-    lay_layers(h, BLACK, black, ((25, 0.0, 0.1, 0.45), (-50, 0.1, 0.1, 0.5)), CHERRY_KW)
+    lay_layers(h, RED, red, ((0, 0.0, 0.12, 0.48), (18, 0.12, 0.1, 0.5)), CHERRY_KW)
+    lay_layers(h, BLACK, black, ((8, 0.0, 0.1, 0.45), (-14, 0.1, 0.1, 0.5)), CHERRY_KW)
 
 
 def hatch_darks(h: Hatcher):
@@ -2208,21 +2208,23 @@ def hatch_darks(h: Hatcher):
     red, black = table_targets(h.maps)
     lay_layers(h, RED, red, ((0, 0.0, 0.09, 0.3),), TABLE_KW)
     lay_layers(
-        h, BLACK, black, ((2, 0.0, 0.08, 0.32), (14, 0.08, 0.12, 0.36)), TABLE_KW
+        h, BLACK, black, ((1, 0.0, 0.08, 0.3), (6, 0.08, 0.12, 0.32)), TABLE_KW
     )
 
 
 def hatch_wall(h: Hatcher):
-    blues, black = wall_targets(h.maps)
+    """One open diagonal over the whole wall, a second crossing it only
+    where the wall is darkest, a little black at the very darkest."""
+    blue, black = wall_targets(h.maps)
     kw: dict[str, Any] = {
-        "length": (130, 320),
-        "count": (5, 11),
+        "length": (150, 340),
+        "count": (6, 12),
         "spacing": (5.0, 18.0),
+        "turn": 4.0,
     }
-    for blue, (a1, a2) in zip(blues, ((0, 75), (90, 30), (50, -20)), strict=True):
-        h.lay(Pass(BLUE, a1, 0.0, 0.05, 0.22, **kw), blue)
-        h.lay(Pass(BLUE, a2, 0.05, 0.05, 0.24, **kw), blue)
-    h.lay(Pass(BLACK, 15, 0.0, 0.05, 0.25, **kw), black)
+    h.lay(Pass(BLUE, 0, 0.0, 0.03, 0.22, **kw), blue)
+    h.lay(Pass(BLUE, 90, 0.03, 0.035, 0.24, **kw), blue)
+    h.lay(Pass(BLACK, 30, 0.0, 0.035, 0.25, **kw), black)
 
 
 def hatch_small(h: Hatcher):
@@ -2370,24 +2372,33 @@ def _ascending(x, y):
 
 
 def draw_half_face(h: Hatcher):
-    """The cut face: the skin's red rim, the core's outline, the seed
-    cavity and a few fine radial strokes."""
+    """The cut face, left nearly as paper: the skin's thin red rim, a soft
+    broken outline of the core, two dark seeds and a few faint strokes of
+    moist flesh near the core."""
     y = np.linspace(0.45, 7.1, 160)
     for side in (0.965, -0.965):
         surface_line(h, half_face_point(np.full_like(y, side), y), RED, 0.4, 0.6)
-    a = np.linspace(0, 2 * np.pi, 120)
-    core = half_face_point(0.32 * np.sin(a), 3.9 + 2.3 * np.cos(a))
-    surface_line(h, core, RED, 0.08, 0.12)
-    cavity = half_face_point(0.22 * np.sin(a), 3.6 + 0.8 * np.cos(a))
-    surface_line(h, cavity, BLACK, 0.08, 0.12)
     rng = np.random.default_rng(3)
-    for t in np.linspace(0.4, 5.9, 7):
-        b = t + rng.normal(0, 0.1)
-        u = np.linspace(0, 1, 20)
-        y0, s0 = 3.9 + 2.3 * np.cos(b), 0.32 * np.sin(b)
-        y1, s1 = 3.9 + 2.9 * np.cos(b), np.clip(1.6 * np.sin(b), -0.85, 0.85)
-        line = half_face_point(s0 + (s1 - s0) * u, y0 + (y1 - y0) * u)
-        surface_line(h, line, RED, 0.04, 0.06)
+    a = np.linspace(0, 2 * np.pi, 160)
+    wobble = 1 + 0.08 * np.sin(3 * a + 1.0) + 0.05 * np.sin(5 * a)
+    heart = 0.3 * np.sin(a) * (1 + 0.25 * np.cos(a)) * wobble
+    ys = 3.9 + 2.0 * np.cos(a) * wobble
+    for lo, hi in ((0.03, 0.27), (0.36, 0.6), (0.68, 0.94)):
+        k = slice(int(lo * len(a)), int(hi * len(a)))
+        surface_line(h, half_face_point(heart[k], ys[k]), BLACK, 0.07, 0.1)
+    for sx in (-0.1, 0.1):
+        for k in range(5):
+            off = (k - 2) * 0.012
+            seed = half_face_point(np.full(12, sx + off * (1 - abs(k - 2) / 3)),
+                                   np.linspace(3.2 + 0.08 * abs(k - 2), 4.0, 12))
+            surface_line(h, seed, BLACK, 0.55, 0.65, 0.4)
+    for _ in range(9):
+        t = rng.uniform(0, 2 * np.pi)
+        r0 = rng.uniform(1.05, 1.3)
+        u = np.linspace(0, 1, 8)
+        s0, y0 = r0 * 0.3 * np.sin(t), 3.9 + r0 * 2.0 * np.cos(t)
+        d = rng.normal(0, 1, 2) * [0.05, 0.25]
+        surface_line(h, half_face_point(s0 + d[0] * u, y0 + d[1] * u), BLUE, 0.05, 0.07)
 
 
 def draw_details(h: Hatcher):
