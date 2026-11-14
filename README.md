@@ -73,8 +73,8 @@ medium is then laid along the forms that result.
   rubbed to a haze; the far forest is massed in 2B and pulled down into the
   mist with a stump; the mist and the lights on the water are lifted with
   erasers; the near spruces carry the full weight of 8B; and the boat is
-  drawn with a sharp point (about 37,000 strokes, 700 rubs and 500 passes of
-  an eraser, a little over two minutes).
+  drawn with a sharp point (about 37,000 strokes, 700 rubs and 700 passes of
+  an eraser, about three minutes).
 * `examples/farm.py`: a farm on a hill in wax crayon, as naive art has it:
   no perspective, everything from its most telling side, bold flat colour.
   Wax resists what comes after it, so the order is a crayon's: black
