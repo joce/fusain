@@ -746,10 +746,12 @@ class Sheet:
         Wax holds what it binds, and an eraser slides on it: a light layer
         of coloured pencil comes off a vinyl eraser fairly well, a dense
         one by degrees and a burnished one hardly; a kneaded eraser barely
-        touches them. For a light in those, scratch it out with the point
-        of a knife (``tools.KNIFE``, a fine line back to the paper), rub it
-        out with a sand eraser (``tools.SAND_ERASER``), or keep it from the
-        start by leaving the paper or by indenting it (:meth:`indent`).
+        touches them. And wax stains the paper: a tint always stays where
+        they were, which only what cuts the paper takes. For a light in
+        those, scratch it out with the point of a knife (``tools.KNIFE``, a
+        fine line back to the paper), rub it out with a sand eraser
+        (``tools.SAND_ERASER``), or keep it from the start by leaving the
+        paper or by indenting it (:meth:`indent`).
         Burnished wax levels the tooth: where the wax is taken off, the
         tooth is there again for what is drawn next (but for what a hard
         tip crushed, which a sand eraser or a knife cuts away with the

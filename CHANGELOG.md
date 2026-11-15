@@ -8,6 +8,24 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Coloured pencil, crayon and oil pastel leave a stain that no rubber
+  eraser takes (fusain-d6p). In life wax carries its pigment into the
+  fibres of the paper, and an erased layer always leaves a tint; in the
+  model the last of a light layer came off cleanly. Of what the paper
+  holds of a waxy medium, a thickness of `STAIN` (0.008, on the covered
+  share of the pixel, as far as what it holds is waxy) is now out of reach
+  of any tool but as far as it scrapes: a sand eraser or a knife cuts it
+  away with the surface of the paper. It is a rule on what the sheet
+  holds, not a quantity of its own (the fibres take only so much, so it is
+  a thickness, of whatever mixture the paper holds there). A light layer
+  of a near-black pencil at 0.3, rubbed with a vinyl eraser: on cartridge
+  paper it went to 0.87, 0.99 and 1.00 of the paper's tone in one, two and
+  three rubs, and now goes to 0.79, 0.86 and 0.87 and stays there (0.07 of
+  its pigment); on a smooth paper (depth 0.4) to 0.66, 0.96 and 1.00, now
+  0.48, 0.68 and 0.71 (0.05). Of a red one the tint is 2.5 from the paper
+  on cartridge and 6 on the smooth paper (CIE 1976; nothing before). Two
+  rubs of a sand eraser take most of it. Graphite leaves none.
+
 - A knife or a sand eraser takes the ink of a ballpoint with the surface
   of the paper (fusain-d6p). The ink is a stain in the paper, and no tool
   touched it: a knife drawn through ink left it as it was. What cuts the

@@ -358,9 +358,45 @@ def test_a_light_layer_of_coloured_pencil_comes_off_a_vinyl_eraser():
         before = sheet.copy()
         sheet.rub(AREA, tools.ERASER, 0.9)
         assert _left(sheet, before, RUBBED) < 0.2
-        assert _luminances(sheet, RUBBED).mean() > 0.55 * _paper(sheet)
+        # (0.55 before fusain-d6p: the stain it leaves is a tint, and of so
+        # dark a pencil a grey)
+        assert _luminances(sheet, RUBBED).mean() > 0.45 * _paper(sheet)
         sheet.rub(AREA, tools.ERASER, 0.9)
-        assert _left(sheet, before, RUBBED) < 0.03
+        # (fusain-d6p: what the wax stained the paper with stays; it took
+        # all but 0.007 of it)
+        assert 0.04 < _left(sheet, before, RUBBED) < 0.1
+
+
+@pytest.mark.parametrize("paper", [papers.CARTRIDGE, SMOOTH])
+def test_coloured_pencil_leaves_a_stain_that_only_what_cuts_the_paper_takes(paper):
+    # (fusain-d6p) wax carries its pigment into the fibres of the paper: a
+    # tint stays where a light layer has been erased, however long it is
+    # rubbed (it came off to the last thousandth, and the paper was clean)
+    bare = _sheet(paper)
+    for colour in (DARK, RED):
+        sheet = _sheet(paper)
+        sheet.shade(BOX, pencils.coloured(colour), 0.3)
+        before, scraped = sheet.copy(), sheet.copy()
+        for _ in range(3):
+            sheet.rub(AREA, tools.ERASER, 0.9)
+        stain = _left(sheet, before, RUBBED)
+        for _ in range(2):
+            sheet.rub(AREA, tools.ERASER, 0.9)
+        assert _left(sheet, before, RUBBED) > 0.97 * stain > 0.04
+        tint = float(np.linalg.norm(_lab(sheet, RUBBED) - _lab(bare, RUBBED)))
+        assert tint > 2.0
+        # a vinyl eraser leaves it, and a kneaded one; a sand eraser cuts the
+        # surface of the paper, and takes it
+        for _ in range(2):
+            scraped.rub(AREA, tools.SAND_ERASER, 0.9, 10)
+        assert _left(scraped, before, RUBBED) < 0.3 * stain
+    # graphite, which has no wax, leaves none
+    sheet = _sheet(paper)
+    sheet.shade(BOX, pencils.HB, 0.3)
+    before = sheet.copy()
+    for _ in range(3):
+        sheet.rub(AREA, tools.ERASER, 0.9)
+    assert _left(sheet, before, RUBBED) < 0.01
 
 
 def test_a_dense_dark_hardly_lightens_under_an_eraser():

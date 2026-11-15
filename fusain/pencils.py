@@ -14,8 +14,9 @@ lightly, ten or so layers go on building; a layer pressed hard fills and
 polishes the tooth, little takes over it, and it has a soft gloss under a
 lamp. The colourless blender pressed hard burnishes what it goes over: the
 white flecks of the paper close, and the colour is deeper and smoother. Wax
-holds against an eraser: the lights of a coloured pencil drawing are kept,
-or scratched out with ``tools.KNIFE``.
+holds against an eraser, and stains the paper, so that a tint stays where
+a layer was erased: the lights of a coloured pencil drawing are kept, or
+scratched out with ``tools.KNIFE``.
 """
 
 from __future__ import annotations

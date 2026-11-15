@@ -12,7 +12,8 @@ a crayon line leaves it clean. (The paste of an oil pastel sticks.)
 An eraser takes a dry medium off as far as it lifts. Wax holds: a light
 layer of coloured pencil comes off a vinyl eraser fairly well, a dense one
 badly, a burnished one hardly, and a kneaded eraser barely touches any of
-them. A light is scratched out of those with ``KNIFE`` or rubbed out with
+them, and wax leaves a stain in the paper that no rubber eraser takes. A
+light is scratched out of those with ``KNIFE`` or rubbed out with
 ``SAND_ERASER``, or kept from the start (:meth:`fusain.Sheet.indent`).
 Those two cut the surface of the paper, and take the ink of a ballpoint
 stained into it, which no rubber eraser touches."""

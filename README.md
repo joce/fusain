@@ -227,7 +227,8 @@ burnishes too, less thoroughly, and adds its colour.)
 Wax holds against an eraser. A light layer of coloured pencil comes off a
 vinyl eraser fairly well; a dense one comes off by degrees, a burnished one
 hardly (three rubs to and fro leave it as dark as it was), and a kneaded
-eraser barely touches any of them. So the lights of a coloured pencil
+eraser barely touches any of them; and wax stains the paper, so a tint
+always stays where it was erased. So the lights of a coloured pencil
 drawing are kept from the start, by leaving the paper or by indenting a line
 (`Sheet.indent`), or taken out with something that cuts: the point of a
 knife (`tools.KNIFE`) scratches a fine line back to the paper, and a sand

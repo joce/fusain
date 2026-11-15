@@ -268,6 +268,23 @@ A tool is a tip plus, usually, a medium.
   it touched 0.96 and 0.998 of them, and lay three or four times as
   evenly, the tooth having stayed level. A vinyl eraser leaves most of the
   wax of a burnished dark, which stays level.
+- **Wax stains the paper** (built). A waxy medium carries its pigment into
+  the fibres of the paper: of what the paper holds of it, `STAIN` thick on
+  the covered share of the pixel (as far as what it holds is waxy) is out
+  of reach of an eraser, which takes the rest; a tool that scrapes reaches
+  it as far as it scrapes, cutting the paper. It is a rule on what is
+  stored, not a quantity of its own: the fibres take only so much, so it is
+  a thickness, and the stain is that of whatever the paper holds there,
+  which is one mixture. (A layer of its own would cost a pigment's worth of
+  floats a pixel and a layer more to render, and would tell apart only a
+  stain laid under another colour, which the mixture blends.) So a tint
+  always stays where coloured pencil, crayon or oil pastel has been
+  erased: a light layer of a near-black pencil at 0.3 rubbed out with a
+  vinyl eraser keeps 0.07 of its pigment on cartridge paper and 0.05 on a
+  smooth one, 0.87 and 0.71 of the paper's tone however long it is rubbed
+  (it came off to the last thousandth, back to the paper's tone); a red
+  one leaves a tint 2.5 and 6 from the paper (CIE 1976). A sand eraser
+  takes most of it. Graphite leaves none.
 - **A tool in the hand** (built). A `Smudger` is to a `Tool` what a `Stick`
   is to a medium: the tool as it is held, with what it carries, which it
   keeps from one pass to the next until `clean()`. It lands with its load,
