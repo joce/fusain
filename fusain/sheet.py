@@ -15,6 +15,7 @@ from . import hatching
 from ._engine import FILM, HELD, IS, IV, IW, IX, KINDS, LOOSE, PASTE, SET, N
 from .medium import Medium
 from .paper import Paper
+from .pencils import BINDING as PENCIL_BINDING
 from .pens import HeldPen, Pen
 from .smudger import Smudger
 from .stick import Stick
@@ -48,6 +49,11 @@ SHEEN_HIDE = 0.1
 SHEEN_FLAT = 0.6
 #: How narrow the mirrored light is: graphite is satin, not a mirror.
 SHININESS = 12.0
+#: A pencil drawn over a bed of dust lays a film on it (:attr:`Sheet.film`)
+#: that shines as what the paper holds does. Of the graphite in a layer
+#: with a film, the share that is the film's: what the paper holds of a
+#: pencil's mark. The rest is its crumbs, loose and matte.
+FILM_GRAPHITE = PENCIL_BINDING
 #: The gloss of wax: what a film of wax as slick as it gets
 #: (:data:`fusain._engine.WAX_FULL`), polished flat, adds to the light when
 #: it mirrors the lamp squarely, and how narrow that light is. Less than
@@ -179,7 +185,8 @@ class Sheet:
         slides on it and lifts it only as it lifts what the paper holds: no
         stump or kneaded eraser moves it. The film of a dry medium is only
         as fast as the dust it lies on: a pencil line on loose pastel comes
-        away with the pastel, and one on fixed pastel stays. A view, as
+        away with the pastel, and one on fixed pastel stays; its graphite
+        shines as what the paper holds does (:meth:`shine`). A view, as
         :attr:`fixed` is."""
         return self.bonded[..., FILM]
 
@@ -200,9 +207,11 @@ class Sheet:
         things do, and ``of`` names one of them:
 
         ``"graphite"``: where the paper holds a film of a medium with sheen,
-        the more the thicker it is (a thinner film is enough on a tooth
-        pressed flat, where it lies flat), and the less the more dust of
-        another kind lies over it.
+        or a pencil drawn over a bed of dust laid one on the dust
+        (:attr:`film`), the more the thicker it is (a thinner film is
+        enough on a tooth pressed flat, where it lies flat), and the less
+        the more dust of another kind lies over it. Loose graphite dust is
+        matte.
 
         ``"wax"``: where a film of wax has been polished: as far as the wax
         is thick enough to be slick and the surface is pressed flat
@@ -233,13 +242,62 @@ class Sheet:
         raise ValueError(f"of must be one of {SHINES} or None, got {of!r}")
 
     def _graphite_sheen(self) -> np.ndarray:
-        """The sheen of graphite; see :meth:`shine`."""
+        """The sheen of graphite; see :meth:`shine`. What the paper holds
+        shines through the matte dust of both layers; a film of it on a bed
+        of dust as well (:meth:`_film_sheen`), and the shine of all of it
+        together is no more than the covered share of the pixel."""
         cover = np.maximum(self.cover, np.float32(1e-6))
         full = np.float32(SHEEN_FULL) * (1.0 - np.float32(SHEEN_FLAT) * self.press)
         film = np.minimum(self.held[..., IX] / cover / full, 1.0)
         dust = self.under[..., IV] + self.loose[..., IV]
         matte = np.maximum(dust - self.under[..., IX] - self.loose[..., IX], 0.0)
-        return self.cover * film * np.exp(-matte / cover / np.float32(SHEEN_HIDE))
+        shine = self.cover * film * np.exp(-matte / cover / np.float32(SHEEN_HIDE))
+        if self._has_graphite_films():
+            # (where there is no film it adds nothing, and the shine of what
+            # the paper holds is as it was, to the bit)
+            self._film_sheen(shine)
+        return shine
+
+    def _has_graphite_films(self) -> bool:
+        """Whether any film lies in the layers where there is graphite."""
+        if not self.film.any():
+            return False
+        return bool(self.under[..., IX].any() or self.loose[..., IX].any())
+
+    def _film_sheen(self, shine: np.ndarray) -> None:
+        """Add to ``shine`` the sheen of the films a pencil laid on a bed
+        of dust (:func:`fusain._engine.film_sheen`).
+
+        A layer is one mixture: its film is kept as a volume, and what it
+        is made of, and what lies over what within the layer, are not kept
+        apart from the dust. What can be told is that the graphite in a
+        layer with a film came with a pencil's mark: the film, which the
+        paper would have held, and its crumbs, which it would not. So the
+        film is taken to hold the share of that graphite that the paper
+        holds of a pencil's mark (:data:`FILM_GRAPHITE`), and never more
+        than its own volume: exact for a pencil over pastel, in one pass or
+        in many, and loose graphite dust from elsewhere that lies with a
+        film is taken for its crumbs, matte but for the film's share. In
+        the layer on top the film shines through all the matte that lies
+        with it, the clay of its crumbs and any dust: what a light pass did
+        not bury cannot be told from dust laid over the film later, and it
+        is taken to hide it. That errs on the matte side: a light line over
+        pastel shines less than its film would. A film a later pass buried
+        lies on the older dust underneath, and shines through the clay of
+        its crumbs, as a line on paper does, and the matte on top. Where a
+        pixel has wax, a film there is taken for one of wax (as a tool
+        takes it), and its gloss is the wax's."""
+        how = np.array([SHEEN_FULL, SHEEN_FLAT, SHEEN_HIDE, FILM_GRAPHITE])
+        eng.film_sheen(
+            self.held,
+            self.under,
+            self.loose,
+            self.bonded,
+            self.cover,
+            self.press,
+            shine,
+            how,
+        )
 
     def _wax_gloss(self) -> np.ndarray:
         """The gloss of polished wax; see :meth:`shine`. Seen from above,
@@ -651,7 +709,10 @@ class Sheet:
         )
         for kind, part, sheen, shininess in lobes:
             if not self.held[..., part].any():
-                continue
+                # (graphite also shines as a film on a bed of dust)
+                filmed = kind == "graphite" and self._has_graphite_films()
+                if not filmed:
+                    continue
             mirrored = self.shine(kind) * facing**shininess * (sheen * gloss)
             white = mirrored if white is None else white + mirrored
         if white is not None:

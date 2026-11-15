@@ -20,7 +20,15 @@ from fusain import (
     tools,
 )
 from fusain._engine import BALL_INK, IW
-from fusain.sheet import INK_FULL, IV, IX, SHINES
+from fusain.sheet import (
+    INK_FULL,
+    IV,
+    IX,
+    SHEEN_FLAT,
+    SHEEN_FULL,
+    SHEEN_HIDE,
+    SHINES,
+)
 
 BOX = (20, 20, 180, 130)
 INSIDE = (slice(50, 100), slice(50, 150))
@@ -134,6 +142,183 @@ def test_rubbing_graphite_in_with_a_stump_does_not_dull_it():
         sheet.smudge([(30, 40 + 7 * k), (170, 40 + 7 * k)], tools.STUMP, 0.7)
     # (the stump carries a little of the graphite off with it)
     assert float(sheet.shine()[INSIDE].mean()) >= 0.97 * before
+
+
+# --------------------------------------------------------------------------
+# a film of graphite on a bed of dust (fusain-q5k)
+
+PALE = "#f1e9d8"
+#: Lines across the patch, 4 wide; the shine is taken along their middles.
+LINES = [[(30, y), (170, y)] for y in range(36, 124, 14)]
+ALONG = np.zeros((150, 200), bool)
+for _path in LINES:
+    ALONG[int(_path[0][1]) - 1 : int(_path[0][1]) + 1, 60:140] = True
+
+
+def _bed(fixed=False, layers=2, pressure=0.6) -> Sheet:
+    """Layers of a pale soft pastel, loose or fixed."""
+    sheet = _sheet()
+    for layer in range(layers):
+        sheet.shade(BOX, pastels.soft(PALE), pressure, 14.0, angle=30 - 60 * layer)
+    if fixed:
+        sheet.fix()
+    return sheet
+
+
+def _lined(sheet, medium, pressure) -> Sheet:
+    for path in LINES:
+        sheet.stroke(path, medium, pressure, 4.0)
+    return sheet
+
+
+def _held_shine(sheet) -> np.ndarray:
+    """The shine of what the paper holds alone, through the matte dust of
+    both layers: all the shine of graphite there was before a film shone."""
+    cover = np.maximum(sheet.cover, np.float32(1e-6))
+    full = np.float32(SHEEN_FULL) * (1.0 - np.float32(SHEEN_FLAT) * sheet.press)
+    film = np.minimum(sheet.held[..., IX] / cover / full, 1.0)
+    dust = sheet.under[..., IV] + sheet.loose[..., IV]
+    matte = np.maximum(dust - sheet.under[..., IX] - sheet.loose[..., IX], 0.0)
+    return sheet.cover * film * np.exp(-matte / cover / np.float32(SHEEN_HIDE))
+
+
+def _sum(array) -> float:
+    return float(np.asarray(array).sum(dtype=np.float64))
+
+
+def _filmed(sheet) -> np.ndarray:
+    return (sheet.film > 0).any(axis=-1)
+
+
+def _over_pastel(medium, pressure, fixed=False) -> tuple[Sheet, Sheet]:
+    """The lines on bare paper, and over two layers of pastel."""
+    return _lined(_sheet(), medium, pressure), _lined(_bed(fixed), medium, pressure)
+
+
+def _shine_along(sheet) -> float:
+    return float(sheet.shine("graphite")[ALONG].mean())
+
+
+@pytest.mark.parametrize(
+    ("medium", "pressure"),
+    [(pencils.HB, 1.0), (pencils.B2, 1.0), (pencils.B6, 0.6), (pencils.B6, 1.0)],
+)
+@pytest.mark.parametrize("fixed", [False, True])
+def test_a_pencil_line_drawn_firmly_over_pastel_shines_as_far_as_it_is_a_film(
+    medium, pressure, fixed
+):
+    on_paper, over = _over_pastel(medium, pressure, fixed)
+    shine, bare = _shine_along(over), _shine_along(on_paper)
+    # all but a whisper of it is a film on the pastel, which did not shine
+    # (a 2B at 1.0: 0.001, against 0.431 on bare paper)
+    assert _sum(over.held[..., IX][ALONG]) < 0.02 * _sum(on_paper.held[..., IX][ALONG])
+    # now it shines as the line on paper does, as far as there is as much
+    # of it: 0.88 to 0.90 as much of it, and the shine 0.87 to 0.90 as much
+    # (a 2B 0.381, a 6B 0.684), the clay of its crumbs over it as on paper
+    share = _sum(over.film[ALONG]) / _sum(on_paper.held[..., IV][ALONG])
+    assert share - 0.05 < shine / bare < share + 0.04
+    # and the lamp shows it, in proportion
+    glint, glint_bare = (
+        _tone(s.render(light=OVERHEAD), ALONG)
+        - _tone(s.render(light=OVERHEAD, gloss=0), ALONG)
+        for s in (over, on_paper)
+    )
+    assert glint == pytest.approx(glint_bare * shine / bare, rel=0.1)
+
+
+def test_a_light_line_over_pastel_shines_less_than_its_film_would():
+    # a light pass buries little of the pastel on top, which stays in the
+    # layer with its film: it cannot be told from pastel laid over the film,
+    # and is taken to hide it (2B: 0.33 of the shine on bare paper at 0.3,
+    # 0.80 at 0.6, 0.88 at 1.0; 0.87 to 0.90 as much of it is a film)
+    ratios = []
+    for pressure in (0.3, 0.6, 1.0):
+        on_paper, over = _over_pastel(pencils.B2, pressure)
+        share = _sum(over.film[ALONG]) / _sum(on_paper.held[..., IV][ALONG])
+        ratios.append(_shine_along(over) / _shine_along(on_paper) / share)
+    assert 0.2 < ratios[0] < ratios[1] < ratios[2] <= 1.0
+    assert ratios[1] > 0.8 and ratios[2] > 0.95
+
+
+def test_layers_of_a_pencil_over_pastel_shine_as_they_do_on_paper():
+    on_paper, over = _sheet(), _bed()
+    for layer in range(6):
+        for sheet in (on_paper, over):
+            sheet.shade((40, 40, 160, 110), pencils.B6, 1.0, 6.0, angle=40 + 50 * layer)
+    # (layer on layer the films are buried in the pastel underneath, one
+    # mixture with it: the graphite there is still the films' and their
+    # crumbs'; 0.78 against 0.82)
+    shine = float(over.shine("graphite")[INSIDE].mean())
+    bare = float(on_paper.shine("graphite")[INSIDE].mean())
+    assert 0.85 * bare < shine < bare
+
+
+def test_a_line_on_bare_paper_shines_as_it_did():
+    sheet = _lined(_sheet(), pencils.B4, 0.8)
+    sheet.shade(BOX, pencils.HB, 0.5, angle=-30)
+    for k in range(6):
+        sheet.smudge([(30, 40 + 14 * k), (170, 40 + 14 * k)], tools.STUMP, 0.7)
+    assert not sheet.film.any()
+    assert np.array_equal(sheet.shine("graphite"), _held_shine(sheet))
+
+
+def test_where_there_is_no_film_or_there_is_wax_the_shine_is_as_it_was():
+    sheet = _lined(_bed(layers=1), pencils.B2, 0.8)
+    sheet.shade((100, 20, 180, 130), crayons.wax("#c0392b"), 0.6, 8)
+    sheet.shade((100, 20, 180, 130), pencils.B6, 0.8, 6, angle=-60)
+    shine, held = sheet.shine("graphite"), _held_shine(sheet)
+    as_it_was = ~_filmed(sheet) | (sheet.held[..., IW] > 0)
+    assert as_it_was.any() and not as_it_was.all()
+    assert np.array_equal(shine[as_it_was], held[as_it_was])
+    # (a film where the pixel has wax is taken for one of wax)
+    waxed = _filmed(sheet) & (sheet.held[..., IW] > 0)
+    assert waxed.sum() > 500
+    assert (shine[~as_it_was] > held[~as_it_was]).mean() > 0.9
+    assert shine.max() <= 1.0 and (shine <= sheet.cover).all()
+
+
+def test_loose_graphite_dust_moved_by_a_tool_does_not_shine():
+    for fixed in (False, True):
+        for tool in (tools.STUMP, tools.FINGER):
+            sheet = _bed(fixed)
+            sheet.stroke([(30, 78), (170, 78)], pencils.B6, 1.0, 4.0)
+            line = (slice(76, 80), slice(60, 140))
+            before = float(sheet.shine("graphite")[line].mean())
+            film = _sum(sheet.film[line])
+            for x in range(50, 150, 6):
+                sheet.smudge([(x, 66), (x, 98)], tool, 0.8)
+            # what it spreads is dust where it is laid, no film: what shines
+            # there is what the paper holds of it, as it was
+            beside = (slice(86, 100), slice(60, 140))
+            assert _sum(sheet.under[..., IX][beside] + sheet.loose[..., IX][beside]) > 1
+            assert not sheet.film[beside].any()
+            assert np.array_equal(
+                sheet.shine("graphite")[beside], _held_shine(sheet)[beside]
+            )
+            # on loose pastel the film comes away with the pastel, and its
+            # shine with it; on fixed pastel it stays, and so does its shine,
+            # in proportion (0.83 of the film is left, and 0.87 and 0.81 of
+            # the shine: the stump took its crumbs off it, the finger pressed
+            # its own dust in over it)
+            after = float(sheet.shine("graphite")[line].mean())
+            if fixed:
+                left = _sum(sheet.film[line]) / film
+                assert 0.85 * left * before < after < 1.1 * left * before
+            else:
+                assert after < 0.02 * before
+
+
+def test_a_film_of_charcoal_does_not_shine_and_dust_over_a_film_of_graphite_dulls_it():
+    assert not _lined(_bed(), charcoal.PENCIL, 0.8).shine().any()
+    dulled = []
+    for pressure in (0.5, 0.8):
+        sheet = _lined(_bed(), pencils.B6, 1.0)
+        before = _shine_along(sheet)
+        sheet.shade(BOX, pastels.soft("#c0392b"), pressure, 10, angle=-20)
+        dulled.append(_shine_along(sheet) / before)
+    # (pastel over pastel lays less than over a line on bare paper, which
+    # it dulls to 0.18 and 0.06: here 0.55 and 0.23)
+    assert dulled[1] < 0.3 and dulled[1] < dulled[0] < 0.65
 
 
 # --------------------------------------------------------------------------

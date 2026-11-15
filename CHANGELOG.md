@@ -69,6 +69,52 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   0.9, the line 0.67. The same ink lies on the narrower dot, thicker: at
   its middle 0.011 at 0.05, where it was 0.006.
 
+- A pencil drawn over pastel shines (fusain-q5k). Since fusain-wo4 a pencil
+  over a bed of dust lays the graphite the paper would have held as a film
+  on the dust, and `Sheet.shine("graphite")`, and with it the render under
+  a lamp, counted only what the paper holds: on cartridge paper, along
+  lines 4 wide drawn over two layers of a pale soft pastel, a 2B at full
+  pressure shone 0.001 of its pixels where on bare paper it shines 0.431, a
+  6B 0.003 (0.763), an HB 0.0005 (0.308), and under a lamp overhead the
+  2B line added 0.0001 of the paper's white where on bare paper it adds
+  0.025. The film now shines as what the paper holds does. A layer is one
+  mixture (fusain-r56): what its film is made of, and what lies over what
+  within it, are not kept. What can be told is that the graphite in a
+  layer with a film came with a pencil's mark, the film and its crumbs, so
+  the film is taken to hold the share of it that the paper holds of a
+  pencil's mark (`FILM_GRAPHITE`, 0.85), never more than its own volume:
+  exact for a pencil over pastel, in one pass or in many. In the layer on
+  top the film shines through all the matte that lies with it, the clay of
+  its crumbs as on paper and whatever dust is there: dust a light pass did
+  not bury cannot be told from dust laid over the film later, and is taken
+  to hide it, which errs on the matte side. A film a later pass buried lies
+  on the older dust underneath and shines through the clay of its crumbs
+  and the matte on top. Where a pixel has wax a film there is taken for one
+  of wax, as a tool takes it. Loose graphite dust from elsewhere that lies
+  with a film is taken for its crumbs, matte but for the film's share;
+  where there is no film, or there is wax, the shine is as it was, to the
+  bit. Now, of lines 0.88 to 0.90 of whose graphite is a film: a 2B at full
+  pressure shines 0.381 (0.88 of the line on bare paper), a 6B 0.684
+  (0.90), an HB 0.270 (0.88), and the same over the pastel fixed (0.381,
+  0.684, 0.272); a 6B at 0.6 0.414 (0.87); a 2B at 0.6 0.175 (0.80) and at
+  0.3 0.024 (0.33), a light line burying less of the pastel on top. Over
+  one layer of the pastel a 2B at full pressure 0.323 (0.005 before).
+  Overhead the lamp adds 0.022 to the 2B line and 0.040 to the 6B (0.025
+  and 0.044 on bare paper). Six layers of 6B at full pressure shaded over
+  the pastel shine 0.78, against 0.82 on bare paper (0.63 and 0.70 after
+  the first). A stump or a finger drawn across a 6B line on loose pastel
+  takes the film with the pastel and its shine with it; on fixed pastel
+  0.83 of the film stays, and 0.87 and 0.81 of its shine; what they spread
+  is dust and shines as it did. Soft pastel laid over the 6B lines at 0.5
+  and 0.8 leaves 0.55 and 0.23 of their shine. Every hash of the sheets,
+  the reflectances and the returned numbers of `tools/fingerprint.py` is
+  unchanged on every paper (`--thorough`, 325 drawings); the shine, the
+  render under the default lamp and the raking render change in the 184
+  drawings that lay a pencil over a dustier medium's mark (the sticks,
+  dust, surface, wax and drawing scenes). A render of a sheet with such
+  films takes a kernel's pass more (`fusain._engine.film_sheen`: some
+  0.04 s at 1120 by 820); one without, none.
+
 - A pencil drawn over pastel shows on it (fusain-wo4). What the paper holds
   of a dry medium went in the tooth, under whatever dust lay there, and all
   that lay there was counted in the tip's way: over two layers of a pale
@@ -137,7 +183,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   later passes is one mixture with the dust of its layer, so a second
   layer of a 6B at full pressure leaves the patch a little lighter than
   the first (0.24 of the pastel's tone, then 0.29); and a film of graphite
-  on dust does not shine. No memory is added. Shading takes the time it
+  on dust did not shine (fixed since: fusain-q5k). No memory is added. Shading takes the time it
   took, but a soft pastel over charcoal, which now looks for a bed in the
   dust under it, about 8% more (2.42 to 2.62 s). Rubbing a tone that has
   such films in it (compressed charcoal over vine) takes about a seventh
