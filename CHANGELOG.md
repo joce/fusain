@@ -413,6 +413,54 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Strokes take half the time and rubs four tenths of it, and no picture
+  changes: every array of a sheet after any sequence of calls, every number
+  returned and every rendered image is what it was, to the last bit (the
+  recorded fingerprint, the thorough one, 325 drawings, and every image of
+  `examples/output/`). On a sheet of 1120 by 820 pixels (one core of a
+  2.3 GHz Xeon, best of 5): shading it with an HB of width 6 takes 1.5 s,
+  from 2.9 s, and over a tone 1.6 s, from 3.0 s; with a soft pastel of
+  width 24, 1.1 s, from 2.0 s, and over charcoal 1.6 s, from 2.5 s; with
+  the side of a stick of vine charcoal, 0.75 s, from 1.7 s; with a coloured
+  pencil pressed hard, 1.75 s, from 3.5 s; 2000 short strokes take 0.44 s,
+  from 0.78 s; rubbing the sheet with a finger takes 2.4 s, from 6.6 s;
+  with a stump over graphite, 3.2 s, from 7.1 s; with a kneaded eraser,
+  2.4 s, from 6.2 s. That is what the two options of numba's that its
+  documentation does not list give on the same code, to within 5% (1.46,
+  1.66, 1.08, 1.55, 0.76, 1.82 and 0.45 s; 2.34, 3.25 and 2.36 s), with
+  documented options only (fusain-95m). Compiling the kernels the first
+  time takes what it took, 18 s. What it took:
+  - Numba counts a reference to an array each time a helper is given it,
+    and one back when the helper is done with it, two atomic operations,
+    and drops the pair only where it can see the two as one. With an early
+    return in a helper, or an `if` that holds its last use of an array, it
+    cannot, and these were counted for every pixel: 49 places in the kernel
+    of a stroke, 40 in the one that settles its dust, 120 in that of a rub;
+    half the time of a stroke and two thirds of that of a rub. The helpers
+    are now written so that every pair is dropped. One that reads an array
+    reads what it needs of it first, before its first `if`; what one does
+    to the sheet only sometimes is in a loop that runs once or not at all
+    (`for _ in once(...)`), where the `if` or the early return was; what a
+    tool lifts is worked out from the numbers of the pixel, read once
+    (`layer_at`), and then taken; one helper pushes along for both kinds of
+    tool (`push_along`). The top of `fusain/_engine.py` says why and how.
+  - The kernels called for every step of a stroke or a rub (`bear`,
+    `rub_under`) call no other kernel and allocate nothing, so their own
+    arrays are no longer counted at every call (30 places, and 48 in
+    `slide_on`, a kernel that stood between `lay_stroke` and `bear`): what
+    `sunk_into` works out is compiled into `bear`, `lay_stroke` turns the
+    tip itself where a stroke turns sharply (`in_parts`, `turned`), and
+    `rub_stroke` gives `rub_under` the room it works in.
+  - `tools/refcounts.py` tells what each kernel still counts, from its
+    LLVM, and `tests/test_refcounts.py` fails if one counts anything as it
+    works (nothing, on Python 3.11 to 3.15).
+  For those who call `fusain._engine` themselves: `slide_on`,
+  `slide_graphite`, `drag_wax` and `lift_bonded` are gone (`in_parts` and
+  `turned`, `push_along` and `slip_of`, `take_bonded`); `tip_at` takes the
+  tilt and the length of the side; `bear_on_row` a count of pixels;
+  `rub_under` and `put_tool` room for what the tool lifts; `bond_dust` the
+  volume it bonds (`loose_in`); and `loose_ground`, `bonded_share`,
+  `waxy_share` and `room_for` take the numbers of a pixel, not the arrays.
 - `rub_stroke` (in `fusain._engine`) takes the tool as one array ([radius,
   `lift_loose`, `lift_held`, `lay`, `press`, `smear`, `scrape`]) and the
   pace at which it lands and lifts; what the tool does as it slides one
