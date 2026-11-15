@@ -8,6 +8,7 @@ import pytest
 from murex import spectral as sp
 
 from fusain import Sheet, Smudger, charcoal, crayons, pastels, pencils, tools
+from fusain._engine import IC, IP
 from fusain.sheet import IS, IV, IW, N
 
 TONE = (20, 20, 380, 180)  # the rectangle shaded
@@ -235,6 +236,30 @@ def test_a_stump_fills_slowly_and_takes_no_more_once_it_is_full():
     # an eraser, a chamois or a tool of one's own holds whatever it takes
     eraser = Smudger(tools.KNEADED)
     assert sheet.rub(TONE, eraser, 0.9) > 20 * full
+
+
+@pytest.mark.parametrize(
+    "medium", [charcoal.VINE, pastels.oil(BLUE), pencils.coloured(BLUE)]
+)
+def test_a_tool_never_takes_more_than_it_has_room_for(medium):
+    # a tool that holds less than it would pick up off one pixel takes what
+    # it has room for there, and its load is never more than it holds (it
+    # took a pixel's pickup whole, past what it held, and laid the excess
+    # back later): pigment, paste and wax alike, and none of it lost
+    for tool in (tools.STUMP, tools.ERASER):
+        tiny = tool.with_(holds=1e-6)
+        full = tiny.holds * np.pi * (0.5 * tiny.width + 0.5) ** 2
+        sheet, _ = _toned(medium)
+        total, wax = _total(sheet), _wax(sheet)
+        held = Smudger(tiny)
+        for y in (60, 100, 140):
+            sheet.smudge([(40, y), (360, y)], held, 0.9)
+            assert 0.0 < float(held._carried[0, IV]) <= full * (1 + 1e-6)
+        assert _total(sheet) + held.load == pytest.approx(total, rel=1e-6)
+        assert _wax(sheet) + held.wax == pytest.approx(wax, rel=1e-6, abs=1e-9)
+        # paste and wax in proportion to the pigment: never more than all
+        load = held._carried[0]
+        assert load[IP] <= load[IV] * (1 + 1e-6) and load[IC] <= load[IV]
 
 
 def test_bare_tooth_takes_the_dust_off_a_loaded_stump_and_covered_paper_does_not():

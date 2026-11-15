@@ -8,6 +8,19 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A tool never takes more than it has room for. `Tool.holds` made a tool
+  lift the less the fuller it was, but what it picked up off one pixel was
+  not held to the room it had left, so a tool that holds less than one
+  pixel's pickup ended up holding more than it holds and laid the excess
+  back later: a stump 10 wide that holds 1e-6 for each pixel of its face
+  (1e-4 in all) dragged 60 pixels through vine charcoal carried 17,
+  170,000 times as much. What it takes off a pixel, of the dust, of what
+  the paper holds, of a film and what is set, is now held to the room it
+  has left, and the paste and the wax go with it in proportion: it carries
+  no more than it holds, and the sheet and the tool hold between them what
+  they held. No preset ever reaches the limit: every drawing of
+  `tools/fingerprint.py --thorough` is as it was, to the bit.
+
 - A smudge or an erase is as strong where it lands and lifts as in its
   middle. A tool rubbed only as it slid on, so the paper under it where it
   landed or lifted got from nothing (at its back) to a full pass (at its

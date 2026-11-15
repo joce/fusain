@@ -1527,14 +1527,26 @@ def lift_bonded(layer, bonded, load, iy, ix, which, up_dust, up_paste, up_held):
     there = layer[iy, ix, IV]
     if there <= 0.0:
         return 0.0
+    share = bonded_share(layer, bonded, iy, ix, which, up_dust, up_paste, up_held)
+    paste = bonded[iy, ix, which, PASTE]
+    bonded[iy, ix, which, SET] -= bonded[iy, ix, which, SET] * up_held
+    bonded[iy, ix, which, FILM] -= bonded[iy, ix, which, FILM] * up_held
+    bonded[iy, ix, which, PASTE] -= paste * up_paste
+    load[IP] += paste * up_paste
+    return share
+
+
+@_inlined
+def bonded_share(layer, bonded, iy, ix, which, up_dust, up_paste, up_held):
+    """The share of a layer at a pixel that :func:`lift_bonded` takes, for
+    the same shares, without taking it."""
+    there = layer[iy, ix, IV]
+    if there <= 0.0:
+        return 0.0
     paste = bonded[iy, ix, which, PASTE]
     film = bonded[iy, ix, which, FILM]
     hard = min((bonded[iy, ix, which, SET] + film) / there, 1.0)
     pasty = min(paste / there, 1.0 - hard)
-    bonded[iy, ix, which, SET] -= bonded[iy, ix, which, SET] * up_held
-    bonded[iy, ix, which, FILM] -= film * up_held
-    bonded[iy, ix, which, PASTE] -= paste * up_paste
-    load[IP] += paste * up_paste
     return up_dust * (1.0 - hard - pasty) + up_paste * pasty + up_held * hard
 
 
@@ -1576,21 +1588,56 @@ def waxy_share(held, bonded, iy, ix, up_held, on_top, below):
 
 
 @_inlined
+def room_for(held, under, loose, bonded, iy, ix, lifts, up_held, up_loose, up_under):
+    """The share of what :func:`lift` would take at a pixel with these
+    shares (of what the paper holds, of the dust on top and underneath)
+    that a tool with room for the volume ``lifts[5]`` can take: 1, unless
+    that is less than it would take."""
+    greasy = min(lifts[2], 1.0)
+    on_top, below = up_loose, up_under
+    if (
+        bonded[iy, ix, 1, SET] + bonded[iy, ix, 1, FILM] + bonded[iy, ix, 1, PASTE]
+        > 0.0
+    ):
+        up_paste = up_held + max(up_loose - up_held, 0.0) * greasy
+        on_top = bonded_share(loose, bonded, iy, ix, 1, up_loose, up_paste, up_held)
+    if (
+        bonded[iy, ix, 0, SET] + bonded[iy, ix, 0, FILM] + bonded[iy, ix, 0, PASTE]
+        > 0.0
+    ):
+        up_paste = up_held + max(up_under - up_held, 0.0) * greasy
+        below = bonded_share(under, bonded, iy, ix, 0, up_under, up_paste, up_held)
+    taken = loose[iy, ix, IV] * on_top + under[iy, ix, IV] * below
+    taken += held[iy, ix, IV] * up_held
+    room = max(lifts[5], 0.0)
+    if taken <= room:
+        return 1.0
+    return room / taken
+
+
+@_inlined
 def lift(held, under, loose, bonded, load, iy, ix, lifts, share):
     """Lift onto a tool (``load``) what it takes at a pixel in the ``share``
     of a pass at full pressure. ``lifts`` is [how strongly it lifts the
     dust, how strongly what is held, how strongly it smears, the share of
     its lift it keeps on what is held here (:func:`wax_grip`), how far it
-    reaches the dust underneath (:func:`reach_under`)]: it takes less of the
-    dust underneath than of the dust on top; what is set or a film only as
-    what the paper holds; and paste as dust if it smears, as what is held
-    if it only lifts. The wax of the pixel goes with what the paper holds,
-    the films and the paste, as much of it as of them (:func:`waxy_at`),
-    and is counted on the tool."""
+    reaches the dust underneath (:func:`reach_under`), the volume it has
+    room for]: it takes less of the dust underneath than of the dust on top;
+    what is set or a film only as what the paper holds; and paste as dust
+    if it smears, as what is held if it only lifts. The wax of the pixel
+    goes with what the paper holds, the films and the paste, as much of it
+    as of them (:func:`waxy_at`), and is counted on the tool. It takes no
+    more than it has room for: where that is less than it would take, it
+    takes that share of each, pigment, paste and wax alike."""
     greasy = min(lifts[2], 1.0)
     up_held = min(lifts[1] * lifts[3] * share, 1.0)
     up_loose = min(lifts[0] * share, 1.0)
     up_under = min(UNDER_LIFT * lifts[0] * share, 1.0) * lifts[4]
+    if lifts[5] < math.inf:  # (a tool that holds only so much)
+        fits = room_for(
+            held, under, loose, bonded, iy, ix, lifts, up_held, up_loose, up_under
+        )
+        up_held, up_loose, up_under = fits * up_held, fits * up_loose, fits * up_under
     if held[iy, ix, IW] > 0.0:  # (the wax goes with what it is in)
         on_top = up_held + max(up_loose - up_held, 0.0) * greasy
         below = up_held + max(up_under - up_held, 0.0) * greasy
@@ -1764,7 +1811,7 @@ def rub_under(
     # on, per pixel moved
     per_pixel = tool[3] / (2.0 * bound * math.pi * bound * bound)
     per_near = SPREAD / (2.0 * bound * math.pi * bound * bound)
-    lifts = np.array([lift_loose, lift_held, smear, 1.0, 1.0])
+    lifts = np.array([lift_loose, lift_held, smear, 1.0, 1.0, math.inf])
     load = carried[0]
     near = carried[1]  # the dust on the face of the tool, soon laid back
     slid = carried[2]  # held graphite it is pushing along, likewise
@@ -1812,6 +1859,7 @@ def rub_under(
             lifts[0], lifts[1] = lift_loose * room_left, lift_held * room_left
             lifts[4] = reach
             lifts[3] = wax_grip(held, cover, flat, iy, ix, scrape)
+            lifts[5] = tool[8] - load[IV]  # (the room it has left)
             lift(held, under, loose, bonded, load, iy, ix, lifts, share)
             pushed = slide_graphite(
                 held,
