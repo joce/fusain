@@ -8,6 +8,120 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A white or a pale coloured pencil pressed hard burnishes nearly as the
+  blender does (fusain-d6p). `Medium.melts` was 1 for the blender and 0 for
+  every coloured pencil, so a white pencil, with which artists burnish,
+  polished only as a red one does. A pale lead is mostly wax and white
+  filler: `pencils.coloured` now sets `melts` by how pale the colour is
+  (`pencils.melts_of`: 0.75 of the blender's for white, falling as the
+  square of the colour's distance from white to nothing at 40 (CIE 1976):
+  a cream 0.54, a pale blue 0.31, a pink or a mid grey 0.05, any strong
+  colour 0; assumed, not measured). It lays its own colour as it does,
+  which lightens what it burnishes. One firm layer over three layers of
+  red at 0.5 on cartridge paper (a tenth of the pixels showing the paper):
+  white left 0.044 of the pixels showing the paper and now 0.025 (the
+  blender 0.021), with 0.17 of the gloss of polished wax, now 0.29 (0.48),
+  and `press` 0.47, now 0.69 (0.74); the colour is a paler tint of the
+  red, as light as it was (L* 66.9 before the white, 67.0 after it before,
+  65.6 now; chroma 34, 37 and 40), where the blender deepens it to L* 57
+  and chroma 59. A cream does nearly as well (0.027, 0.26 and 0.64); a
+  lemon or the red itself as before.
+
+- A vinyl eraser smears a dense or burnished layer of wax along its way
+  (fusain-d6p). It lifted less of what wax held, and left the rest where it
+  was: rubbed out of a burnished dark over bare paper, it left the paper
+  as clean as it found it. A tool that does not smear (an eraser) now
+  slides on wax that holds against it and drags some of it along
+  (`WAX_DRAG`, 0.05 of what it would have lifted had the wax not held, so
+  of a light layer next to nothing), and lays it back, held, wax and all,
+  over a width or so (`DRAG_LAY`, 1 for each of its widths) on what is
+  beside it and after it. What it drags is on it until it is laid, and the
+  sheet and the eraser hold between them the pigment and the wax they
+  held. A vinyl eraser rubbed to and fro (at 0.9, 10 wide) out of four
+  firm layers of a near-black pencil, burnished, and on over the bare
+  paper: the paper within a width of the dark is 15 from its own colour
+  (CIE 1976), 12 at one to two widths, 8 at three to five and 2.6 at six
+  to nine (nothing before); not burnished, 13, 9, 5 and 1.4; three layers
+  of a red, burnished, 6, 4, 2.4 and 0.7; one light layer, 0.2. Within the
+  dark it takes about as much as it did (0.726 of the burnished dark is
+  left, from 0.732). The assumption, not a measurement: that the smear of
+  a burnished black is plainly seen a width out and fades within a few.
+
+- Coloured pencil, crayon and oil pastel leave a stain that no rubber
+  eraser takes (fusain-d6p). In life wax carries its pigment into the
+  fibres of the paper, and an erased layer always leaves a tint; in the
+  model the last of a light layer came off cleanly. Of what the paper
+  holds of a waxy medium, a thickness of `STAIN` (0.008, on the covered
+  share of the pixel, as far as what it holds is waxy) is now out of reach
+  of any tool but as far as it scrapes: a sand eraser or a knife cuts it
+  away with the surface of the paper. It is a rule on what the sheet
+  holds, not a quantity of its own (the fibres take only so much, so it is
+  a thickness, of whatever mixture the paper holds there). A light layer
+  of a near-black pencil at 0.3, rubbed with a vinyl eraser: on cartridge
+  paper it went to 0.87, 0.99 and 1.00 of the paper's tone in one, two and
+  three rubs, and now goes to 0.79, 0.86 and 0.87 and stays there (0.07 of
+  its pigment); on a smooth paper (depth 0.4) to 0.66, 0.96 and 1.00, now
+  0.48, 0.68 and 0.71 (0.05). Of a red one the tint is 2.5 from the paper
+  on cartridge and 6 on the smooth paper (CIE 1976; nothing before). Two
+  rubs of a sand eraser take most of it. Graphite leaves none.
+
+- A knife or a sand eraser takes the ink of a ballpoint with the surface
+  of the paper (fusain-d6p). The ink is a stain in the paper, and no tool
+  touched it: a knife drawn through ink left it as it was. What cuts the
+  surface of the paper (as far as a tool scrapes, by that share of its lift
+  of what the paper holds) now takes the ink stained into it, onto the
+  tool, which counts it with what it took (`Sheet.erase` returns it). Two
+  layers of firm black hatching, at a fifth of the paper's tone: a knife
+  at 0.9 scratches a line through them back to 0.98 of the paper's tone,
+  leaving a two-hundredth of the ink on it, and one rub of a sand eraser
+  takes nine tenths of the ink of a patch, which goes to 0.79 of the
+  paper's tone. No rubber eraser and no stump touches the ink, as before.
+
+- Where burnished wax is erased or scraped off, the tooth is there again
+  for what is drawn next (fusain-6k1). Polishing wax raised the `press` of
+  the sheet, as a hard tip that crushes the tooth does, and it stayed when
+  the wax that levelled the tooth was taken off, so a tip touched all of
+  the pixel there. Polished, it is the wax that is level: where a pixel
+  holds wax, its `press` is now taken to be the wax's polish, which keeps
+  the tooth level as far as the wax fills it (`WAX_FAST` thick); as a tool
+  thins the wax below that, the polish goes, and with all of it the tooth
+  is as the paper's own, but for what a dry tip crushed beyond what the
+  wax held up. A sand eraser or a knife also cuts the surface of the paper
+  as far as it scrapes, which takes even that (a tooth three firm layers
+  of 4H crushed by 0.91 comes back to 0.15 under a sand eraser, and stays
+  at 0.91 under a vinyl one). The sheet keeps one `press` for both: a waxy
+  tip does not crush the tooth, and storing the crush apart would cost a
+  float a pixel and an argument through every stroke kernel, for a crush
+  under or over wax that is then taken off, which goes with it. Four firm
+  layers of a dark coloured pencil burnished, then scraped back: a light
+  layer of HB shaded over them touched 0.998 of the pixels where a knife
+  had been and 0.96 where a sand eraser had, and now 0.64 and 0.73, where
+  it touches 0.68 of fresh paper; its grain (the spread of what it laid
+  from pixel to pixel, over its mean) was 0.35 and 0.44 and is 1.34 and
+  1.24 (fresh paper: 1.27). The relief there was a twenty-eighth of the
+  paper's and is as the paper's, `press` was 0.996 and is 0.000 and 0.097,
+  and the gloss of the wax 0.000 and 0.082, now 0.000 and 0.019. A vinyl
+  eraser rubbed three times over the burnished dark leaves most of its wax,
+  and the tooth there as level as it was (`press` 0.996, now 0.991).
+
+- A tool never takes more than it has room for. `Tool.holds` made a tool
+  lift the less the fuller it was, but what it picked up off one pixel was
+  not held to the room it had left, so a tool that holds less than one
+  pixel's pickup ended up holding more than it holds and laid the excess
+  back later: a stump 10 wide that holds 1e-6 for each pixel of its face
+  (1e-4 in all) dragged 60 pixels through vine charcoal carried 17,
+  170,000 times as much. What it takes off a pixel, of the dust, of what
+  the paper holds, of a film and what is set, is now held to the room it
+  has left, and the paste and the wax go with it in proportion: it carries
+  no more than it holds, and the sheet and the tool hold between them what
+  they held. So with the ink of a ballpoint that a sand eraser or a knife
+  cuts out of the paper: it takes it as far as it has room left once it has
+  taken the rest, and where it is full the ink stays on the paper (one
+  that holds 1e-6 drawn through firm hatching took the ink of every pixel
+  it cut, 167 to 351 times what it holds). No preset ever reaches the
+  limit: every drawing of
+  `tools/fingerprint.py --thorough` is as it was, to the bit.
+
 - A smudge or an erase is as strong where it lands and lifts as in its
   middle. A tool rubbed only as it slid on, so the paper under it where it
   landed or lifted got from nothing (at its back) to a full pass (at its
@@ -140,6 +254,16 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Examples
 
+- `colour.png`, `crayons.png` and `macaw.png` change with the erasers and
+  the knife above; every other image is unchanged to the byte. In
+  `colour.png` the band the vinyl eraser rubs across the red keeps a pink
+  stain on the half that was not burnished (its mean luminance goes from
+  220 of 255 to 213) and is as it was on the burnished half. In `crayons.png` the
+  lights the kneaded eraser lifts out of the oil pastel keep a little of
+  the blue, and where it lifts off past the edge of the patch it leaves a
+  faint smear of it. In `macaw.png` the lines the knife scratches through
+  the burnished wax lose the gloss of the wax with the wax, by at most 4
+  levels; its lights under the bill and in the eye stay.
 - Every image is regenerated with the changes above. Seven are unchanged to
   the byte (`farm`, `papers`, `pencils`, `shine`, `stilllife`, `strokes`,
   `tips`: nothing in them is rubbed or erased), and `macaw.png` and

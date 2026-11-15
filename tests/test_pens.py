@@ -1,5 +1,6 @@
 """Ballpoint pens: an even line at any pressure, ink that layers and that no
-tool takes off, measured."""
+rubber eraser takes off (a knife or a sand eraser does, with the paper),
+measured."""
 
 import itertools
 
@@ -8,7 +9,18 @@ import pytest
 from murex import Pigment, Polyline
 from murex import spectral as sp
 
-from fusain import HeldPen, Pen, Sheet, crayons, papers, pastels, pencils, pens, tools
+from fusain import (
+    HeldPen,
+    Pen,
+    Sheet,
+    Smudger,
+    crayons,
+    papers,
+    pastels,
+    pencils,
+    pens,
+    tools,
+)
 from fusain import _engine as eng
 from fusain.sheet import IV
 
@@ -567,7 +579,7 @@ def test_the_lines_of_hatching_lie_side_by_side_unless_told():
 # with the other media
 
 
-def test_no_tool_takes_the_ink_off():
+def test_no_rubber_eraser_nor_a_finger_takes_the_ink_off():
     sheet = Sheet(200, 150, seed=1)
     sheet.shade(BOX, pens.BLUE, 0.6)
     ink, picture = _ink(sheet), sheet.render()
@@ -577,6 +589,32 @@ def test_no_tool_takes_the_ink_off():
     assert sheet.fix() == 0.0
     assert _ink(sheet) == ink
     assert np.array_equal(sheet.render(), picture)
+
+
+def test_a_knife_or_a_sand_eraser_takes_the_ink_with_the_paper():
+    # (the ink is a stain in the paper: what cuts the surface of the paper
+    # takes it, and has it; a knife or a sand eraser touched none of it)
+    sheet = Sheet(200, 150, seed=1)
+    for layer in range(2):
+        sheet.shade(BOX, pens.BLACK, 0.7, angle=30 + 60 * layer)
+    before, ink = sheet.copy(), _ink(sheet)
+    dark = _tone(sheet)
+    assert sheet.ink is not None and before.ink is not None
+    # a fine light line scratched out with the point of a knife
+    took = sheet.erase([(40, 76), (160, 76)], tools.KNIFE, 0.9)
+    line, beside = (slice(75, 77), slice(50, 150)), (slice(60, 72), slice(50, 150))
+    assert sheet.ink[line][..., IV].sum() < 0.05 * before.ink[line][..., IV].sum()
+    assert _tone(sheet, line) > 0.6 > 0.3 > dark
+    assert np.array_equal(sheet.ink[beside], before.ink[beside])
+    assert took == pytest.approx(ink - _ink(sheet), rel=1e-5)
+    # a patch rubbed back with a sand eraser, most of the way
+    ink = _ink(sheet)
+    took = sheet.rub((60, 90, 140, 125), tools.SAND_ERASER, 0.9, 10)
+    patch = (slice(96, 119), slice(66, 134))
+    assert sheet.ink[patch][..., IV].sum() < 0.2 * before.ink[patch][..., IV].sum()
+    assert _tone(sheet, patch) > 2.0 * dark
+    assert took == pytest.approx(ink - _ink(sheet), rel=1e-5)
+    assert float(sheet.ink[..., IV].min()) >= 0.0
 
 
 def test_an_eraser_takes_the_pencil_and_leaves_the_ink():
@@ -592,6 +630,38 @@ def test_an_eraser_takes_the_pencil_and_leaves_the_ink():
     assert _ink(sheet) == ink
     assert _tone(sheet, beside) > 0.85
     assert _tone(sheet, line) < 0.25
+
+
+@pytest.mark.parametrize("over", [False, True], ids=["ink", "ink over wax"])
+def test_a_scraping_tool_takes_no_more_ink_than_it_has_room_for(over):
+    # a sand eraser or a knife that holds next to nothing fills on the first
+    # pixels it cuts, and leaves the ink of the rest on the paper (it took
+    # the ink of every pixel it cut, whatever it held: 167 to 351 times as
+    # much as it holds)
+    for tool in (tools.SAND_ERASER, tools.KNIFE):
+        tiny = tool.with_(holds=1e-6)
+        full = tiny.holds * np.pi * (0.5 * tiny.width + 0.5) ** 2
+        sheet = Sheet(200, 150, seed=1)
+        if over:
+            sheet.shade(BOX, pencils.coloured("#c0392b"), 0.6)
+        for layer in range(2):
+            sheet.shade(BOX, pens.BLACK, 0.7, angle=30 + 60 * layer)
+        before, ink = sheet.copy(), _ink(sheet)
+        pigment = float(sheet.pigment().sum(dtype=np.float64))
+        held = Smudger(tiny)
+        for y in (60, 76, 92):
+            sheet.erase([(40, y), (160, y)], held, 0.9)
+            # (what it has lifted: what it drags along on its face it lays
+            # back, as a stump does)
+            assert 0.0 < float(held._carried[0, IV]) <= full * (1 + 1e-6)
+        # what the tool holds is what left the sheet, ink and pigment alike
+        left = _ink(sheet) + float(sheet.pigment().sum(dtype=np.float64))
+        assert left + held.load == pytest.approx(ink + pigment, rel=1e-6)
+        assert _ink(sheet) <= ink
+        # and the ink of the lines it cut once full is on the paper still
+        assert sheet.ink is not None and before.ink is not None
+        line = (slice(91, 93), slice(100, 150))
+        assert sheet.ink[line][..., IV].sum() > 0.99 * before.ink[line][..., IV].sum()
 
 
 def test_a_pencil_draws_over_light_ink_as_on_bare_paper():

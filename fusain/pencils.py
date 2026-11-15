@@ -13,14 +13,19 @@ mix to the eye, and waxy, so that the tooth turns slick as it fills. Laid
 lightly, ten or so layers go on building; a layer pressed hard fills and
 polishes the tooth, little takes over it, and it has a soft gloss under a
 lamp. The colourless blender pressed hard burnishes what it goes over: the
-white flecks of the paper close, and the colour is deeper and smoother. Wax
-holds against an eraser: the lights of a coloured pencil drawing are kept,
-or scratched out with ``tools.KNIFE``.
+white flecks of the paper close, and the colour is deeper and smoother; a
+white or a pale pencil pressed hard does too, nearly as well the paler it
+is, and lightens the colour as it does. Wax
+holds against an eraser, and stains the paper, so that a tint stays where
+a layer was erased: the lights of a coloured pencil drawing are kept, or
+scratched out with ``tools.KNIFE``.
 """
 
 from __future__ import annotations
 
+import numpy as np
 from murex import ColorLike, Pigment
+from murex import spectral as sp
 
 from .medium import Medium
 
@@ -79,11 +84,35 @@ COLOURED_STRENGTH = 1.6
 COLOURED_SOFTNESS = 0.55
 COLOURED_BINDING = 0.92
 COLOURED_WAX = 0.5
+#: A pale lead is mostly wax and white filler, and little pigment: pressed
+#: hard it melts into the film under it as a blender does, the more the
+#: paler it is. A white lead melts PALE_MELTS as far as the blender, and
+#: one PALE_RANGE or more from white (as a colour difference, CIE 1976)
+#: not at all; in between, as the square of how far short of that it is,
+#: so a cream or a pale tint melts nearly as a white, and a mid grey or a
+#: pink hardly.
+PALE_MELTS = 0.75
+PALE_RANGE = 40.0
+
+
+def melts_of(color: ColorLike) -> float:
+    """How far a coloured lead of that colour melts into a film of wax it is
+    pressed hard on (:attr:`fusain.Medium.melts`): as far as it is pale. A
+    white or a cream pencil burnishes nearly as the blender does, a pale
+    blue or a pink one somewhat, a yellow or a red one not (assumed: a pale
+    lead holds little pigment, and the wax and filler that make up the rest
+    are what a blender is made of)."""
+    srgb = np.asarray(Pigment(color).color, dtype=np.float64)
+    lab = sp.srgb_to_lab(srgb)
+    far = float(np.linalg.norm(lab - np.array([100.0, 0.0, 0.0])))
+    return PALE_MELTS * max(1.0 - far / PALE_RANGE, 0.0) ** 2
 
 
 def coloured(color: ColorLike, name: str | None = None) -> Medium:
     """A coloured pencil of that colour: how a full layer of it looks on
-    white paper."""
+    white paper. A pale one pressed hard also burnishes what is under it,
+    as the blender does, the more the paler it is (:func:`melts_of`), and
+    lays its own pale colour as it does."""
     lead = Pigment(color, COLOURED_OPACITY, COLOURED_STRENGTH, name)
     return Medium(
         lead,
@@ -91,6 +120,7 @@ def coloured(color: ColorLike, name: str | None = None) -> Medium:
         binding=COLOURED_BINDING,
         wax=COLOURED_WAX,
         name=name or f"{lead.hex} pencil",
+        melts=melts_of(color),
     )
 
 

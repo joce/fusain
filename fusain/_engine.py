@@ -304,10 +304,27 @@ UNDER_LIFT = 0.7
 #: it has been polished flat: a light layer of coloured pencil comes off
 #: fairly well, a dense one badly, a burnished one hardly. A blade or grit
 #: does not slide: as far as a tool scrapes, it takes what it would take of
-#: a medium without wax.
+#: a medium without wax. Polished wax keeps the tooth level as far as it is
+#: WAX_FAST thick, and as a tool takes it off the tooth comes back
+#: (:func:`bare_tooth`).
 WAX_FAST = 0.1
 WAX_HOLDS = 0.6
 POLISH_HOLDS = 0.9
+#: Wax carries its pigment into the fibres of the paper, which it stains: of
+#: what the paper holds of a waxy medium, this thickness (on the covered
+#: share of the pixel) is out of reach of any eraser that does not cut the
+#: paper, so a tint stays where a layer has been erased (:func:`stained`).
+#: The fibres take only so much, so it is a thickness and not a share: the
+#: stain of a light layer is most of what a heavy one leaves. A knife or a
+#: sand eraser takes it as far as it scrapes.
+STAIN = 0.008
+#: An eraser slides on wax that holds against it, and drags some of it
+#: along: this share of what it would have lifted, had the wax not held
+#: (:func:`drag_wax`). It lays that back, held, DRAG_LAY of it over each
+#: of its widths, on what is beside it and after it: a vinyl eraser smears
+#: a burnished dark a width or so along its way.
+WAX_DRAG = 0.05
+DRAG_LAY = 1.0
 #: Graphite slides. A tool that smears moves, in one pass at full pressure,
 #: this share (times how strongly it smears) of the graphite the paper
 #: holds; the clay of a lead holds the rest back, and the less graphite a
@@ -1518,6 +1535,49 @@ def slide_graphite(held, loose, slid, giving, bonded, cover, iy, ix, rubbed, bac
 
 
 @_inlined
+def drag_wax(held, slid, giving, bonded, iy, ix, drag, back):
+    """Drag the share ``drag`` of what the paper holds at a pixel, with its
+    wax, onto the face of a tool that slides on the wax (``slid``, packed as
+    what a tool carries is), and lay the share ``back`` of what its face is
+    giving in this step (``giving``) down again, held, wax and all: wax
+    sticks to paper and to wax alike. Returns the volume laid down."""
+    if drag > 0.0 and held[iy, ix, IW] > 0.0:
+        gone = min(held[iy, ix, IV] * drag / waxy_at(held, bonded, iy, ix), 1.0)
+        wax = held[iy, ix, IW] * gone
+        held[iy, ix, IW] -= wax
+        slid[IC] += wax
+    elif slid[IV] <= 0.0:
+        return 0.0  # (no wax here, and none on the tool)
+    given, _ = spread_dust(held, slid, giving, iy, ix, drag, back)
+    wax = giving[IC] * back
+    slid[IC] -= wax
+    held[iy, ix, IW] += wax
+    return given
+
+
+@_inlined
+def push_along(
+    held, loose, slid, giving, bonded, cover, iy, ix, lifts, share, back, slides
+):
+    """What a tool pushes along of what the paper holds at a pixel, in the
+    ``share`` of a pass at full pressure (``lifts`` as for :func:`lift`),
+    onto its face (``slid``), which lays the share ``back`` of what it gives
+    in this step (``giving``) down again: a tool that smears slides the
+    graphite (:func:`slide_graphite`, laying the share ``slides``, which wax
+    refuses); one that does not, an eraser, slides on wax that holds
+    against it, and drags some of it along (WAX_DRAG of what it would have
+    lifted, had the wax not held), which sticks wherever it is laid
+    (:func:`drag_wax`). Returns the volume laid down."""
+    if lifts[2] > 0.0:
+        rubbed = lifts[2] * share
+        return slide_graphite(
+            held, loose, slid, giving, bonded, cover, iy, ix, rubbed, slides
+        )
+    drag = WAX_DRAG * min(lifts[1] * share, 1.0) * (1.0 - lifts[3]) * lifts[6]
+    return drag_wax(held, slid, giving, bonded, iy, ix, drag, back)
+
+
+@_inlined
 def lift_bonded(layer, bonded, load, iy, ix, which, up_dust, up_paste, up_held):
     """The share of a layer at a pixel that a tool takes when not all of it
     is loose dust: the shares ``up_dust`` of its loose dust, ``up_paste`` of
@@ -1527,14 +1587,26 @@ def lift_bonded(layer, bonded, load, iy, ix, which, up_dust, up_paste, up_held):
     there = layer[iy, ix, IV]
     if there <= 0.0:
         return 0.0
+    share = bonded_share(layer, bonded, iy, ix, which, up_dust, up_paste, up_held)
+    paste = bonded[iy, ix, which, PASTE]
+    bonded[iy, ix, which, SET] -= bonded[iy, ix, which, SET] * up_held
+    bonded[iy, ix, which, FILM] -= bonded[iy, ix, which, FILM] * up_held
+    bonded[iy, ix, which, PASTE] -= paste * up_paste
+    load[IP] += paste * up_paste
+    return share
+
+
+@_inlined
+def bonded_share(layer, bonded, iy, ix, which, up_dust, up_paste, up_held):
+    """The share of a layer at a pixel that :func:`lift_bonded` takes, for
+    the same shares, without taking it."""
+    there = layer[iy, ix, IV]
+    if there <= 0.0:
+        return 0.0
     paste = bonded[iy, ix, which, PASTE]
     film = bonded[iy, ix, which, FILM]
     hard = min((bonded[iy, ix, which, SET] + film) / there, 1.0)
     pasty = min(paste / there, 1.0 - hard)
-    bonded[iy, ix, which, SET] -= bonded[iy, ix, which, SET] * up_held
-    bonded[iy, ix, which, FILM] -= film * up_held
-    bonded[iy, ix, which, PASTE] -= paste * up_paste
-    load[IP] += paste * up_paste
     return up_dust * (1.0 - hard - pasty) + up_paste * pasty + up_held * hard
 
 
@@ -1562,17 +1634,61 @@ def wax_grip(held, cover, flat, iy, ix, scrape):
 
 
 @_inlined
-def waxy_share(held, bonded, iy, ix, up_held, on_top, below):
+def stained(held, cover, iy, ix, scrape):
+    """The share of what the paper holds at a pixel that a tool reaches: all
+    of it but the stain a waxy medium leaves in the fibres of the paper,
+    STAIN thick on the share of the pixel that is covered (as far as what
+    it holds is waxy), which a tool reaches only as far as it scrapes
+    (``scrape``, 0..1), cutting the surface of the paper."""
+    there = held[iy, ix, IV]
+    if there <= 0.0 or held[iy, ix, IW] <= 0.0:
+        return 1.0
+    waxy = min(held[iy, ix, IW] / there / STICKS, 1.0)
+    stain = STAIN * cover[iy, ix] * waxy * (1.0 - scrape)
+    return max(there - stain, 0.0) / there
+
+
+@_inlined
+def waxy_share(held, bonded, iy, ix, up_paper, up_held, on_top, below):
     """The share of the wax of a pixel that goes with what a tool takes
-    there: the shares ``up_held`` of what the paper holds and of the films,
-    ``on_top`` of the paste in the layer on top and ``below`` of the paste
-    underneath, of all that the wax is in (:func:`waxy_at`)."""
+    there: the shares ``up_paper`` of what the paper holds, ``up_held`` of
+    the films, ``on_top`` of the paste in the layer on top and ``below`` of
+    the paste underneath, of all that the wax is in (:func:`waxy_at`)."""
     waxy = waxy_at(held, bonded, iy, ix)
     if waxy <= 0.0:
         return 0.0
-    gone = held[iy, ix, IV] + bonded[iy, ix, 0, FILM] + bonded[iy, ix, 1, FILM]
-    gone = gone * up_held + bonded[iy, ix, 1, PASTE] * on_top
+    gone = held[iy, ix, IV] * up_paper
+    gone += (bonded[iy, ix, 0, FILM] + bonded[iy, ix, 1, FILM]) * up_held
+    gone += bonded[iy, ix, 1, PASTE] * on_top
     return min((gone + bonded[iy, ix, 0, PASTE] * below) / waxy, 1.0)
+
+
+@_inlined
+def room_for(held, under, loose, bonded, iy, ix, lifts, up_held, up_loose, up_under):
+    """The share of what :func:`lift` would take at a pixel with these
+    shares (of what the paper holds, of the dust on top and underneath)
+    that a tool with room for the volume ``lifts[5]`` can take: 1, unless
+    that is less than it would take."""
+    greasy = min(lifts[2], 1.0)
+    on_top, below = up_loose, up_under
+    if (
+        bonded[iy, ix, 1, SET] + bonded[iy, ix, 1, FILM] + bonded[iy, ix, 1, PASTE]
+        > 0.0
+    ):
+        up_paste = up_held + max(up_loose - up_held, 0.0) * greasy
+        on_top = bonded_share(loose, bonded, iy, ix, 1, up_loose, up_paste, up_held)
+    if (
+        bonded[iy, ix, 0, SET] + bonded[iy, ix, 0, FILM] + bonded[iy, ix, 0, PASTE]
+        > 0.0
+    ):
+        up_paste = up_held + max(up_under - up_held, 0.0) * greasy
+        below = bonded_share(under, bonded, iy, ix, 0, up_under, up_paste, up_held)
+    taken = loose[iy, ix, IV] * on_top + under[iy, ix, IV] * below
+    taken += held[iy, ix, IV] * up_held * lifts[6]
+    room = max(lifts[5], 0.0)
+    if taken <= room:
+        return 1.0
+    return room / taken
 
 
 @_inlined
@@ -1581,21 +1697,30 @@ def lift(held, under, loose, bonded, load, iy, ix, lifts, share):
     of a pass at full pressure. ``lifts`` is [how strongly it lifts the
     dust, how strongly what is held, how strongly it smears, the share of
     its lift it keeps on what is held here (:func:`wax_grip`), how far it
-    reaches the dust underneath (:func:`reach_under`)]: it takes less of the
-    dust underneath than of the dust on top; what is set or a film only as
-    what the paper holds; and paste as dust if it smears, as what is held
-    if it only lifts. The wax of the pixel goes with what the paper holds,
-    the films and the paste, as much of it as of them (:func:`waxy_at`),
-    and is counted on the tool."""
+    reaches the dust underneath (:func:`reach_under`), the volume it has
+    room for, the share of what the paper holds it reaches (:func:`stained`)]:
+    it takes less of the dust underneath than of the dust on top;
+    what is set or a film only as what the paper holds; and paste as dust
+    if it smears, as what is held if it only lifts. The wax of the pixel
+    goes with what the paper holds, the films and the paste, as much of it
+    as of them (:func:`waxy_at`), and is counted on the tool. It takes no
+    more than it has room for: where that is less than it would take, it
+    takes that share of each, pigment, paste and wax alike."""
     greasy = min(lifts[2], 1.0)
     up_held = min(lifts[1] * lifts[3] * share, 1.0)
     up_loose = min(lifts[0] * share, 1.0)
     up_under = min(UNDER_LIFT * lifts[0] * share, 1.0) * lifts[4]
+    if lifts[5] < math.inf:  # (a tool that holds only so much)
+        fits = room_for(
+            held, under, loose, bonded, iy, ix, lifts, up_held, up_loose, up_under
+        )
+        up_held, up_loose, up_under = fits * up_held, fits * up_loose, fits * up_under
+    up_paper = up_held * lifts[6]  # (what the paper holds, but its stain)
     if held[iy, ix, IW] > 0.0:  # (the wax goes with what it is in)
         on_top = up_held + max(up_loose - up_held, 0.0) * greasy
         below = up_held + max(up_under - up_held, 0.0) * greasy
         wax = held[iy, ix, IW] * waxy_share(
-            held, bonded, iy, ix, up_held, on_top, below
+            held, bonded, iy, ix, up_held * lifts[6], up_held, on_top, below
         )
         held[iy, ix, IW] -= wax
         load[IC] += wax
@@ -1618,9 +1743,55 @@ def lift(held, under, loose, bonded, load, iy, ix, lifts, share):
         taken = under[iy, ix, part] * up_under
         under[iy, ix, part] -= taken
         load[part] += taken
-        taken = held[iy, ix, part] * up_held
+        taken = held[iy, ix, part] * up_paper
         held[iy, ix, part] -= taken
         load[part] += taken
+
+
+@_inlined
+def bare_tooth(flat, held, cover, iy, ix, waxed, cut):
+    """Give a pixel back the tooth that a tool has bared there, now that its
+    wax has gone from ``waxed`` to what it holds. ``flat`` is the ``press``
+    of the sheet, which counts both what polished wax levels and what a
+    dry tip crushed of the tooth itself. Polished wax keeps the tooth level
+    as far as it is thick enough to fill it, WAX_FAST thick (the press it
+    holds up is at most its thickness over that): as it thins below that,
+    the polish it held up goes, and with all the wax gone, all of it. What
+    a dry tip crushed stays, as far as it is more than the wax held up. And
+    where a tool cuts the surface of the paper itself (``cut``, the share
+    of it: a blade or grit), it takes the paper's flattening with it."""
+    pressed = flat[iy, ix]
+    if pressed <= 0.0:
+        return
+    covered = max(cover[iy, ix], 1e-6)
+    if waxed > held[iy, ix, IW]:
+        before = min(waxed / covered / WAX_FAST, 1.0)
+        after = min(held[iy, ix, IW] / covered / WAX_FAST, 1.0)
+        pressed -= max(min(pressed, before) - after, 0.0)
+    flat[iy, ix] = pressed * (1.0 - cut)
+
+
+@_inlined
+def scrape_ink(ink, inked, load, iy, ix, cut, room):
+    """Cut the share ``cut`` of the surface of the paper at a pixel off
+    onto a tool (``load``), with the ink stained into it: that share of the
+    ink, which the tool carries as it carries pigment, as far as it has
+    room for it (``room``, the volume it can still take: where it is full,
+    the ink stays on the paper). (The colour it bronzes is the ink's on the
+    paper, and goes with what is taken.) ``ink`` has no rows if no pen has
+    drawn on the sheet."""
+    if cut <= 0.0 or ink.shape[0] == 0 or ink[iy, ix, IV] <= 0.0:
+        return
+    if ink[iy, ix, IV] * cut > room:  # (a tool that holds only so much)
+        cut = max(room, 0.0) / ink[iy, ix, IV]
+    for part in range(LOOSE):
+        taken = ink[iy, ix, part] * cut
+        ink[iy, ix, part] -= taken
+        load[part] += taken
+    for part in range(IB, INK):
+        ink[iy, ix, part] -= ink[iy, ix, part] * cut
+    if ink[iy, ix, IV] <= 0.0:  # (scraped clean)
+        inked[iy, ix] = 0.0
 
 
 @_inlined
@@ -1725,6 +1896,8 @@ def rub_under(
     under,
     loose,
     bonded,
+    ink,
+    inked,
     carried,
     giving,
     tool,
@@ -1738,13 +1911,14 @@ def rub_under(
     dust, and what the paper holds, the share of what it carries that it
     lays back over each of its own widths, how strongly it presses the dust
     in, how strongly it smears, how far it scrapes through wax, how its
-    face bears, summed over it (:func:`face_of`), and the volume it holds
-    when it is full]; ``now`` is [x, y,
+    face bears, summed over it (:func:`face_of`), the volume it holds
+    when it is full, and the share of what it pushes along that it lays
+    back over each of its widths]; ``now`` is [x, y,
     heading (x, y), its pressure, and, for a tool landing or lifting, the x
     and y of where it does so (else NaN): it rubs then only the paper it
-    covers there]. ``carried``, ``flat`` and ``streaks`` are as for
-    :func:`rub_stroke`, and ``giving`` is room to work in: two rows as long
-    as those of ``carried``.
+    covers there]. ``carried``, ``flat``, ``ink``, ``inked`` and
+    ``streaks`` are as for :func:`rub_stroke`, and ``giving`` is room to
+    work in: two rows as long as those of ``carried``.
 
     To what it has lifted (its load) the tool adds the less the fuller it
     is, and it gives the dust of it to bare tooth only (:func:`hunger`).
@@ -1764,13 +1938,14 @@ def rub_under(
     # on, per pixel moved
     per_pixel = tool[3] / (2.0 * bound * math.pi * bound * bound)
     per_near = SPREAD / (2.0 * bound * math.pi * bound * bound)
-    lifts = np.array([lift_loose, lift_held, smear, 1.0, 1.0])
+    per_slid = tool[9] / (2.0 * bound * math.pi * bound * bound)
+    lifts = np.array([lift_loose, lift_held, smear, 1.0, 1.0, math.inf, 1.0])
     load = carried[0]
     near = carried[1]  # the dust on the face of the tool, soon laid back
     slid = carried[2]  # held graphite it is pushing along, likewise
     # (what its face gives in this step, and how much of it there is to give)
     room = face_gives(giving[0], near, per_near * step * pressure * tool[7])
-    face_gives(giving[1], slid, per_near * step * pressure * tool[7])
+    room_slid = face_gives(giving[1], slid, per_slid * step * pressure * tool[7])
     x0 = max(int(math.floor(x - bound)), 0)
     x1 = min(int(math.ceil(x + bound)), width)
     y0 = max(int(math.floor(y - bound)), 0)
@@ -1794,14 +1969,16 @@ def rub_under(
             sticks = min(per_pixel * local * step, 1.0)
             back = min(per_near * local * step, room)
             room -= back
+            glides = min(per_slid * local * step, room_slid)
+            room_slid -= glides
             # what is on its face, and the graphite it pushes, it lays
             # anywhere but on wax, where dust hardly clings; the dust of its
             # load on bare tooth, and no other; its paste sticks to anything
-            takes, clings, slides = 1.0, back, back
+            takes, clings, slides = 1.0, back, glides
             if held[iy, ix, IW] > 0.0:
                 takes = 1.0 - wax_refuses(held, cover, iy, ix)
                 clings = back * (1.0 - (1.0 - takes) * dry_share(giving[0]))
-                slides = back * takes
+                slides = glides * takes
             down = sticks
             if sticks > 0.0:  # (not an eraser, which lays nothing)
                 takes *= hunger(cover, held, under, loose, iy, ix)
@@ -1812,8 +1989,17 @@ def rub_under(
             lifts[0], lifts[1] = lift_loose * room_left, lift_held * room_left
             lifts[4] = reach
             lifts[3] = wax_grip(held, cover, flat, iy, ix, scrape)
+            lifts[5] = tool[8] - load[IV]  # (the room it has left)
+            lifts[6] = stained(held, cover, iy, ix, scrape)
+            waxed = held[iy, ix, IW]
             lift(held, under, loose, bonded, load, iy, ix, lifts, share)
-            pushed = slide_graphite(
+            # (the tooth comes back as the wax that levelled it goes, and
+            # as far as a blade or grit cuts the paper, all of it, with the
+            # ink stained into it)
+            cut = scrape * min(lifts[1] * share, 1.0)
+            bare_tooth(flat, held, cover, iy, ix, waxed, cut)
+            scrape_ink(ink, inked, load, iy, ix, cut, tool[8] - load[IV])
+            pushed = push_along(
                 held,
                 loose,
                 slid,
@@ -1822,7 +2008,9 @@ def rub_under(
                 cover,
                 iy,
                 ix,
-                smear * share,
+                lifts,
+                share,
+                glides,
                 slides,
             )
             # lay, as dust all over the pixel (here, and not in a helper:
@@ -1871,6 +2059,8 @@ def put_tool(
     under,
     loose,
     bonded,
+    ink,
+    inked,
     carried,
     giving,
     tool,
@@ -1898,6 +2088,8 @@ def put_tool(
             under,
             loose,
             bonded,
+            ink,
+            inked,
             carried,
             giving,
             tool,
@@ -1917,6 +2109,8 @@ def rub_stroke(
     under,
     loose,
     bonded,
+    ink,
+    inked,
     xs,
     ys,
     pressures,
@@ -1966,6 +2160,13 @@ def rub_stroke(
     and on dust that is set: what is loose in the layer underneath it
     reaches only as far as those do not cover it (:func:`reach_under`).
 
+    As far as a tool scrapes, it cuts the surface of the paper too (the
+    share ``scrape`` of its lift of what the paper holds): the tooth it
+    bares is the paper's own again (:func:`bare_tooth`), and the ink of pens
+    stained into it (``ink``, packed as the ink of a sheet is, and
+    ``inked``; arrays with no rows if no pen has drawn) comes off with it,
+    onto the tool (:func:`scrape_ink`). No other tool touches the ink.
+
     ``carried`` is what the tool carries, three rows packed as dust is with
     the volume of paste and the volume of wax after ([K (N bands), S,
     volume, sheen, paste, wax]): what it has lifted, the dust on its face,
@@ -1985,10 +2186,13 @@ def rub_stroke(
     """
     streaks = streaks_of(salt)
     count = xs.shape[0]
-    gear = np.empty(9)  # (the tool, as rub_under takes it)
+    gear = np.empty(10)  # (the tool, as rub_under takes it)
     gear[:7] = tool[:7]
     gear[7] = face_of(tool[0])
     gear[8] = tool[7] * math.pi * (tool[0] + 0.5) ** 2
+    # (what it pushes along it lays back as it does the dust on its face,
+    # if it smears; the wax it drags, if it does not, further on)
+    gear[9] = SPREAD if tool[5] > 0.0 else DRAG_LAY
     now = np.empty(7)
     now[5], now[6] = math.nan, math.nan
     # what the face of the tool gives in a step, of its dust and of the
@@ -2017,6 +2221,8 @@ def rub_stroke(
                     under,
                     loose,
                     bonded,
+                    ink,
+                    inked,
                     carried,
                     giving,
                     gear,
@@ -2033,6 +2239,8 @@ def rub_stroke(
                     under,
                     loose,
                     bonded,
+                    ink,
+                    inked,
                     carried,
                     giving,
                     gear,

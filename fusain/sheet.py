@@ -362,7 +362,8 @@ class Sheet:
         its own width and no side (``tilt`` stays 0), and its ends are
         round; its line is nearly as dark at a light touch as at a firm one,
         and its ink is a stain in the paper (:attr:`ink`), under everything
-        else, which no tool takes off. Its ball gathers ink as it rolls and
+        else, which no rubber eraser takes off (a knife or a sand eraser
+        cuts it out with the paper). Its ball gathers ink as it rolls and
         leaves a blob where the line turns sharply and, now and then, where
         it starts, the lighter the lighter the line (as much as the pen's
         ``blots`` says); and it presses a groove into the paper (``dent``),
@@ -745,10 +746,19 @@ class Sheet:
         Wax holds what it binds, and an eraser slides on it: a light layer
         of coloured pencil comes off a vinyl eraser fairly well, a dense
         one by degrees and a burnished one hardly; a kneaded eraser barely
-        touches them. For a light in those, scratch it out with the point
-        of a knife (``tools.KNIFE``, a fine line back to the paper), rub it
-        out with a sand eraser (``tools.SAND_ERASER``), or keep it from the
-        start by leaving the paper or by indenting it (:meth:`indent`).
+        touches them. What holds against it, a vinyl eraser drags along
+        and smears onto what is beside it and after it. And wax stains the
+        paper: a tint always stays where they were, which only what cuts
+        the paper takes. For a light in
+        those, scratch it out with the point of a knife (``tools.KNIFE``, a
+        fine line back to the paper), rub it out with a sand eraser
+        (``tools.SAND_ERASER``), or keep it from the start by leaving the
+        paper or by indenting it (:meth:`indent`).
+        Burnished wax levels the tooth: where the wax is taken off, the
+        tooth is there again for what is drawn next (but for what a hard
+        tip crushed, which a sand eraser or a knife cuts away with the
+        surface of the paper). Those two take the ink of a ballpoint with
+        it, which is a stain in the paper; no rubber eraser touches it.
 
         ``path`` and ``pressure`` are as for :meth:`stroke`; ``width`` is the
         width of the eraser in pixels (by default the tool's own; a
@@ -872,6 +882,10 @@ class Sheet:
             points, np.clip(bearing, 0.0, 1.0), spacing
         )
         before = smudger.load
+        ink, inked = self.ink, self.inked
+        if ink is None or inked is None:  # (no pen has drawn here)
+            ink = np.zeros((0, 0, eng.INK), np.float32)
+            inked = np.zeros((0, 0), np.float32)
         eng.rub_stroke(
             self.cover,
             self.press,
@@ -879,6 +893,8 @@ class Sheet:
             self.under,
             self.loose,
             self.bonded,
+            ink,
+            inked,
             xs,
             ys,
             bearing,

@@ -12,8 +12,11 @@ a crayon line leaves it clean. (The paste of an oil pastel sticks.)
 An eraser takes a dry medium off as far as it lifts. Wax holds: a light
 layer of coloured pencil comes off a vinyl eraser fairly well, a dense one
 badly, a burnished one hardly, and a kneaded eraser barely touches any of
-them. A light is scratched out of those with ``KNIFE`` or rubbed out with
-``SAND_ERASER``, or kept from the start (:meth:`fusain.Sheet.indent`)."""
+them, and wax leaves a stain in the paper that no rubber eraser takes. A
+light is scratched out of those with ``KNIFE`` or rubbed out with
+``SAND_ERASER``, or kept from the start (:meth:`fusain.Sheet.indent`).
+Those two cut the surface of the paper, and take the ink of a ballpoint
+stained into it, which no rubber eraser touches."""
 
 from __future__ import annotations
 
@@ -62,7 +65,11 @@ class Tool:
         eraser slides on it: of a coloured pencil, a crayon or an oil
         pastel it lifts the less the thicker the wax is, and hardly
         anything once the wax is polished. A tool that scrapes (grit, a
-        blade) takes that share of what the wax would have kept from it.
+        blade) takes that share of what the wax would have kept from it,
+        and cuts the surface of the paper by that share of what it lifts of
+        what the paper holds: with it go the stain a waxy medium leaves in
+        the paper, the ink of a ballpoint, and the flattening of the tooth,
+        which is the paper's own again where it has been cut.
     holds:
         How much pigment it holds when it is full, as a volume for each
         pixel of its face (a firm layer of charcoal is about half a unit
@@ -123,7 +130,8 @@ CHAMOIS = Tool(1.6, 0.04, lay=0.12, press=0.1, smear=1.0, width=30.0, name="cham
 #: wax.
 KNEADED = Tool(2.5, 0.3, width=12.0, name="kneaded eraser")
 #: A vinyl eraser: it rubs off nearly everything but wax, on which it
-#: slides: it lightens a dense layer of coloured pencil only by degrees.
+#: slides: it lightens a dense layer of coloured pencil only by degrees, and
+#: smears a dense or burnished one along its way.
 ERASER = Tool(4.0, 2.5, width=10.0, name="vinyl eraser")
 #: A sand eraser (an ink eraser, or the tip of an electric one): grit in
 #: rubber, which abrades the wax a vinyl eraser slides on.

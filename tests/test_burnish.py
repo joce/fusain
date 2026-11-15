@@ -267,20 +267,36 @@ def test_the_blender_drags_a_film_over_dust_across_an_edge_as_wax_in_the_tooth()
     assert smeared(True) > 0.75 * smeared(False) > 0.0
 
 
-def test_a_white_pencil_pressed_hard_burnishes_too_but_less_than_the_blender():
+def test_a_white_pencil_pressed_hard_burnishes_nearly_as_the_blender_and_lightens():
+    # (fusain-d6p) a pale lead is mostly wax and white filler: pressed hard
+    # it melts into the film under it as the blender does, the more the
+    # paler it is, and lays its own pale colour as it does. (It burnished
+    # only as a red pencil does: twice the flecks of the blender, a third of
+    # its gloss, 0.47 of polish to the blender's 0.74)
     base = _sheet()
     _layers(base, pencils.coloured(RED), 3, 0.5)
     flecks = _flecks(base)
-    white, blender = base.copy(), base.copy()
-    white.shade(BOX, pencils.coloured("#f4f1ea"), 1.0, angle=20)
+    white, blender, red = base.copy(), base.copy(), base.copy()
+    white.shade(BOX, pencils.coloured("#ffffff"), 1.0, angle=20)
     blender.shade(BOX, pencils.BLENDER, 1.0, angle=20)
-    # (the white pencil lays its own wax and colour in the flecks it
-    # reaches; the blender melts into what is there, and stirs it)
-    assert _flecks(white) < 0.5 * flecks and _gloss(white) > 0.1
-    assert _flecks(blender) < 0.6 * _flecks(white)
-    assert _gloss(blender) > 2.0 * _gloss(white)
-    assert blender.press[INSIDE].mean() > 1.5 * white.press[INSIDE].mean()
-    assert pencils.BLENDER.melts == 1.0 and pencils.coloured(RED).melts == 0.0
+    red.shade(BOX, pencils.coloured(RED), 1.0, angle=20)
+    assert _flecks(white) < 0.3 * flecks
+    assert _flecks(white) < 1.3 * _flecks(blender)
+    assert _gloss(white) > 0.5 * _gloss(blender) > 1.2 * _gloss(red)
+    assert white.press[INSIDE].mean() > 0.9 * blender.press[INSIDE].mean()
+    assert white.press[INSIDE].mean() > 1.3 * red.press[INSIDE].mean()
+    # the blender deepens the colour; the white pencil leaves it a paler
+    # tint of it, as light as it was
+    lightness, chroma = _lab(white)[0], _chroma(white)
+    assert lightness > _lab(blender)[0] + 5.0 and chroma < _chroma(blender) - 10.0
+    assert abs(lightness - _lab(base)[0]) < 3.0
+    # how far a pencil melts goes with how pale it is
+    melts = [pencils.coloured(c).melts for c in ("#ffffff", "#f4f1ea", "#cfe8f5")]
+    assert pencils.BLENDER.melts == 1.0 > melts[0] > melts[1] > melts[2] > 0.25
+    for tint in ("#e8b4b8", "#a9a9ae"):  # (a pink, a mid grey)
+        assert 0.0 < pencils.coloured(tint).melts < 0.1
+    for strong in (RED, YELLOW, BLUE, DARK, "#f2e24a"):
+        assert pencils.coloured(strong).melts == 0.0
     with pytest.raises(ValueError, match="melts must be between 0 and 1"):
         pencils.BLENDER.with_(melts=1.5)
 
@@ -358,9 +374,45 @@ def test_a_light_layer_of_coloured_pencil_comes_off_a_vinyl_eraser():
         before = sheet.copy()
         sheet.rub(AREA, tools.ERASER, 0.9)
         assert _left(sheet, before, RUBBED) < 0.2
-        assert _luminances(sheet, RUBBED).mean() > 0.55 * _paper(sheet)
+        # (0.55 before fusain-d6p: the stain it leaves is a tint, and of so
+        # dark a pencil a grey)
+        assert _luminances(sheet, RUBBED).mean() > 0.45 * _paper(sheet)
         sheet.rub(AREA, tools.ERASER, 0.9)
-        assert _left(sheet, before, RUBBED) < 0.03
+        # (fusain-d6p: what the wax stained the paper with stays; it took
+        # all but 0.007 of it)
+        assert 0.04 < _left(sheet, before, RUBBED) < 0.1
+
+
+@pytest.mark.parametrize("paper", [papers.CARTRIDGE, SMOOTH])
+def test_coloured_pencil_leaves_a_stain_that_only_what_cuts_the_paper_takes(paper):
+    # (fusain-d6p) wax carries its pigment into the fibres of the paper: a
+    # tint stays where a light layer has been erased, however long it is
+    # rubbed (it came off to the last thousandth, and the paper was clean)
+    bare = _sheet(paper)
+    for colour in (DARK, RED):
+        sheet = _sheet(paper)
+        sheet.shade(BOX, pencils.coloured(colour), 0.3)
+        before, scraped = sheet.copy(), sheet.copy()
+        for _ in range(3):
+            sheet.rub(AREA, tools.ERASER, 0.9)
+        stain = _left(sheet, before, RUBBED)
+        for _ in range(2):
+            sheet.rub(AREA, tools.ERASER, 0.9)
+        assert _left(sheet, before, RUBBED) > 0.97 * stain > 0.04
+        tint = float(np.linalg.norm(_lab(sheet, RUBBED) - _lab(bare, RUBBED)))
+        assert tint > 2.0
+        # a vinyl eraser leaves it, and a kneaded one; a sand eraser cuts the
+        # surface of the paper, and takes it
+        for _ in range(2):
+            scraped.rub(AREA, tools.SAND_ERASER, 0.9, 10)
+        assert _left(scraped, before, RUBBED) < 0.3 * stain
+    # graphite, which has no wax, leaves none
+    sheet = _sheet(paper)
+    sheet.shade(BOX, pencils.HB, 0.3)
+    before = sheet.copy()
+    for _ in range(3):
+        sheet.rub(AREA, tools.ERASER, 0.9)
+    assert _left(sheet, before, RUBBED) < 0.01
 
 
 def test_a_dense_dark_hardly_lightens_under_an_eraser():
@@ -397,6 +449,54 @@ def test_burnished_wax_holds_faster_than_wax_that_kept_its_tooth():
     spot = (slice(74, 77), slice(99, 102))
     assert 0.7 < _left(burnished, before, spot) < 0.85
     assert _luminances(burnished, spot).mean() < 0.03
+
+
+def _smeared(colour, layers, pressure, burnished):
+    """A patch of coloured pencil, burnished or not, rubbed to and fro with
+    a vinyl eraser in the hand from inside it out over the bare paper: how
+    far from the paper's colour that is, at one, two, three to five and six
+    to nine widths of the eraser out (CIE 1976), and the share of the
+    pigment and of the wax that the sheet and the eraser hold between
+    them."""
+    sheet = Sheet(300, 150, paper=papers.CARTRIDGE, seed=1)
+    for layer in range(layers):
+        sheet.shade(
+            (20, 20, 150, 130),
+            pencils.coloured(colour),
+            pressure,
+            angle=30 - 55 * layer,
+        )
+    if burnished:
+        for angle in (20, -50):
+            sheet.shade((20, 20, 150, 130), pencils.BLENDER, 1.0, angle=angle)
+    bare = Sheet(300, 150, paper=papers.CARTRIDGE, seed=1)
+    total, wax = _total(sheet), float(sheet.held[..., IW].sum(dtype=np.float64))
+    eraser = Smudger(tools.ERASER)
+    sheet.rub((60, 45, 240, 105), eraser, 0.9)
+    tints = []
+    for x0, x1 in ((156, 166), (166, 176), (176, 196), (200, 236)):
+        where = (slice(55, 95), slice(x0, x1))
+        tints.append(float(np.linalg.norm(_lab(sheet, where) - _lab(bare, where))))
+    kept = (_total(sheet) + eraser.load) / total
+    kept_wax = (float(sheet.held[..., IW].sum(dtype=np.float64)) + eraser.wax) / wax
+    return tints, (kept, kept_wax)
+
+
+def test_a_vinyl_eraser_smears_a_dense_or_burnished_dark_along_its_way():
+    # (fusain-d6p) wax that holds against an eraser is dragged along by it,
+    # and laid on what is beside it and after it: a dirty halo a width or
+    # so out of the dark, fading over several (there was none: the eraser
+    # left the paper beside the dark as clean as it found it)
+    for burnished, near in ((True, 12.0), (False, 9.0)):
+        tints, kept = _smeared(DARK, 4, 0.8, burnished)
+        assert tints[0] > near
+        assert tints[0] > tints[1] > tints[2] > tints[3] > 0.5
+        assert kept == pytest.approx((1.0, 1.0), abs=1e-5)
+    # of a red, a tint; of a light layer, which the eraser takes, nothing
+    tints, _ = _smeared(RED, 3, 0.7, True)
+    assert 3.0 < tints[0] < 10.0
+    tints, _ = _smeared(DARK, 1, 0.3, False)
+    assert tints[0] < 0.5
 
 
 def test_a_kneaded_eraser_barely_touches_coloured_pencil():
@@ -491,6 +591,71 @@ def test_a_sand_eraser_takes_what_a_vinyl_one_slides_on():
         assert _left(sand, before, RUBBED) < 0.15 < 0.5 < _left(vinyl, before, RUBBED)
         assert _luminances(sand, RUBBED).mean() > 0.3 * _paper(sand)
         assert took == pytest.approx(_total(before) - _total(sand), rel=1e-5)
+
+
+def _over(sheet) -> np.ndarray:
+    """A light layer of HB shaded over the sheet: what it laid at each pixel."""
+    before = sheet.pigment().copy()
+    sheet.shade(BOX, pencils.HB, 0.3, 6.0, angle=-20)
+    return sheet.pigment() - before
+
+
+def _touched(new: np.ndarray, where=RUBBED) -> float:
+    """The share of the pixels of an area that a layer touched."""
+    return float((new[where] > 0.02 * new[where].mean()).mean())
+
+
+def _grain(new: np.ndarray, where=RUBBED) -> float:
+    return float(new[where].std() / new[where].mean())
+
+
+def _relief(sheet, where=RUBBED) -> float:
+    return float(sheet.surface_height()[where].std())
+
+
+@pytest.mark.parametrize(
+    "tool, spacing", [(tools.KNIFE, 1.0), (tools.SAND_ERASER, None)]
+)
+def test_the_tooth_comes_back_where_burnished_wax_is_scraped_off(tool, spacing):
+    # (fusain-6k1) the polish of wax is the wax's: it levels the tooth as
+    # far as it fills it, and what is drawn where it has been scraped off
+    # meets the tooth again, as on fresh paper. (It stayed level: a light
+    # layer of HB touched 0.96 to 0.998 of the pixels there, where it
+    # touches 0.68 of fresh paper, and lay three or four times as evenly)
+    sheet, fresh = _dense(True), _sheet()
+    sheet.rub(AREA, tool, 0.9, 10, spacing=spacing)
+    assert sheet.press[RUBBED].mean() < 0.15  # (0.996)
+    assert _gloss(sheet, RUBBED) < 0.025  # (none and 0.08)
+    assert _relief(sheet) > 0.9 * _relief(fresh)  # (a twenty-eighth)
+    new, bare = _over(sheet), _over(fresh)
+    assert _touched(new) < _touched(bare) + 0.1
+    assert _grain(new) > 0.85 * _grain(bare)
+
+
+def test_where_burnished_wax_holds_against_an_eraser_it_stays_level():
+    # a vinyl eraser leaves most of the wax, which keeps the tooth level
+    sheet = _dense(True)
+    pressed = sheet.press[RUBBED].mean()
+    for _ in range(3):
+        sheet.rub(AREA, tools.ERASER, 0.9)
+    assert sheet.press[RUBBED].mean() > 0.95 * pressed
+    assert _touched(_over(sheet)) > 0.9
+
+
+def test_a_tooth_a_hard_lead_crushed_stays_crushed_unless_it_is_cut():
+    # an eraser takes the graphite and leaves the tooth as the lead left it;
+    # a sand eraser or a knife takes the surface of the paper with it
+    sheet = _sheet()
+    _layers(sheet, pencils.H4, 3, 1.0)
+    crushed = sheet.press[RUBBED].mean()
+    assert crushed > 0.5
+    erased, sanded = sheet.copy(), sheet.copy()
+    for _ in range(3):
+        erased.rub(AREA, tools.ERASER, 0.9)
+    assert erased.pigment()[RUBBED].mean() < 0.1 * sheet.pigment()[RUBBED].mean()
+    assert erased.press[RUBBED].mean() == pytest.approx(crushed)
+    sanded.rub(AREA, tools.SAND_ERASER, 0.9, 10)
+    assert sanded.press[RUBBED].mean() < 0.2 * crushed
 
 
 @pytest.mark.parametrize("scrape", [-0.1, 1.5, float("nan")])

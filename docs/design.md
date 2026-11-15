@@ -48,7 +48,7 @@ Per pixel, all `float32`:
 | Field | What it holds |
 | --- | --- |
 | `tooth` | Height of the paper surface, 0 (valley) to 1 (peak). Set once from the paper's texture. |
-| `press` | How far the tooth has been flattened or polished here (0 to 1): by a hard tip pressed firmly, and by burnishing wax. A tooth pressed flat is level: a tip touches all of it, as it would its peaks, and in the relief its peaks have come down to its valleys. |
+| `press` | How far the tooth has been flattened or polished here (0 to 1): by a hard tip pressed firmly, and by burnishing wax. A tooth pressed flat is level: a tip touches all of it, as it would its peaks, and in the relief its peaks have come down to its valleys. Polished, it is the wax that is level, and the tooth comes back as the wax that filled it is taken off; what a hard tip crushed stays, unless a blade or grit cuts it away. |
 | `dent` | How far the paper has been indented here: the depth of a groove below the peaks of the tooth, in depths of the tooth of a paper of depth 1. By a stylus, and by the ball of a pen. |
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
 | `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. The wax counts all the wax at the pixel, wherever it lies: in what the paper holds, in a film or in paste. |
@@ -159,7 +159,7 @@ code runs all of them; only the numbers change.
 | `wax` | Binder that films over the tooth: resist, burnishing | graphite, charcoal | coloured pencil, crayon, oil pastel |
 | opacity (of the pigment) | How strongly it hides what is underneath | coloured pencil | pastel |
 | `sheen` | How much of it mirrors the light once the paper holds it, as a metal does | everything else | graphite, the more the softer the lead |
-| `melts` | How far it melts into a film of wax it is pressed hard on, and stirs it | everything else | a colourless blender |
+| `melts` | How far it melts into a film of wax it is pressed hard on, and stirs it | everything else | a colourless blender; a white or a pale coloured pencil, nearly |
 
 Presets group by family: `pencils.HB`, `pencils.B6`, `charcoal.VINE`,
 `charcoal.COMPRESSED`, `pastels.soft("#c0392b")`, `pastels.oil(...)`,
@@ -251,7 +251,51 @@ A tool is a tip plus, usually, a medium.
   on its line, and the wax with it, so the line takes pencil again). What
   they take off is on the tool, as for any eraser. The lights of a coloured
   pencil drawing are therefore kept (bare paper, or a line indented first)
-  or scratched out, as they are in life.
+  or scratched out, as they are in life. Where wax has been polished it is
+  the wax that is level, not the paper: the sheet keeps one `press`, and
+  where a pixel holds wax that press is taken to be its polish (a waxy tip
+  does not crush the tooth, a dry one does). Polished wax keeps the tooth
+  level as far as it fills it, `WAX_FAST` thick: as a tool thins it below
+  that, the polish goes, and with the wax all gone the tooth is as the
+  paper's own, but for what a dry tip crushed beyond what the wax held up
+  (that stays, as it does under an eraser on graphite). A sand eraser or a
+  knife cuts the surface of the paper as far as it scrapes, and takes the
+  crush with it. Storing the two apart would cost a float a pixel and an
+  argument through every stroke kernel, for a crush under or over wax that
+  is then taken off. So a light layer of HB shaded over a burnished dark
+  scraped back with a sand eraser or a knife touches 0.73 and 0.64 of the
+  pixels there, where it touches 0.68 of fresh paper, and is as grainy;
+  it touched 0.96 and 0.998 of them, and lay three or four times as
+  evenly, the tooth having stayed level. A vinyl eraser leaves most of the
+  wax of a burnished dark, which stays level.
+- **An eraser smears wax** (built). An eraser that slides on wax that holds
+  against it drags some of it along (`WAX_DRAG` of what it would have
+  lifted, had the wax not held: so of a dense or burnished layer, and next
+  to nothing of a light one) and lays it back, held, `DRAG_LAY` of it over
+  each of its widths, on what is beside it and after it; wax sticks
+  wherever it is laid. A vinyl eraser rubbed to and fro out of four firm
+  layers of a near-black pencil, burnished, over the bare paper leaves a
+  grey halo 15 from the paper's colour (CIE 1976) within a width of the
+  dark, 8 at three to five widths and 2.6 at six to nine; not burnished,
+  13, 5 and 1.4; of a red, 6. (It left the paper clean.) What it drags is
+  on the tool until it is laid, and counted with what it carries.
+- **Wax stains the paper** (built). A waxy medium carries its pigment into
+  the fibres of the paper: of what the paper holds of it, `STAIN` thick on
+  the covered share of the pixel (as far as what it holds is waxy) is out
+  of reach of an eraser, which takes the rest; a tool that scrapes reaches
+  it as far as it scrapes, cutting the paper. It is a rule on what is
+  stored, not a quantity of its own: the fibres take only so much, so it is
+  a thickness, and the stain is that of whatever the paper holds there,
+  which is one mixture. (A layer of its own would cost a pigment's worth of
+  floats a pixel and a layer more to render, and would tell apart only a
+  stain laid under another colour, which the mixture blends.) So a tint
+  always stays where coloured pencil, crayon or oil pastel has been
+  erased: a light layer of a near-black pencil at 0.3 rubbed out with a
+  vinyl eraser keeps 0.07 of its pigment on cartridge paper and 0.05 on a
+  smooth one, 0.87 and 0.71 of the paper's tone however long it is rubbed
+  (it came off to the last thousandth, back to the paper's tone); a red
+  one leaves a tint 2.5 and 6 from the paper (CIE 1976). A sand eraser
+  takes most of it. Graphite leaves none.
 - **A tool in the hand** (built). A `Smudger` is to a `Tool` what a `Stick`
   is to a medium: the tool as it is held, with what it carries, which it
   keeps from one pass to the next until `clean()`. It lands with its load,
@@ -395,7 +439,14 @@ At each step, for each pixel under the tip:
    full pressure leaves a fifth of those (two layers a twenty-fifth), the
    chroma of the patch goes from 34 to 59 (69), its lightness from 67 to 57
    (54), it is half as grainy, and it has 0.48 (0.80) of the gloss of
-   polished wax; at a pressure of 0.7 the blender closes two fifths of the
+   polished wax. A pale coloured pencil is mostly wax and white filler, and
+   melts the more the paler it is (`pencils.melts_of`: a white one 0.75 as
+   far as the blender, a cream 0.54, a pale blue 0.31, a pink or a mid grey
+   hardly, a strong colour not at all; assumed, not measured): one firm
+   layer of white over the red leaves a quarter of the flecks (two fifths
+   before, when it melted no more than the red), 0.29 of gloss (0.17), and
+   a paler tint of the red as light as it was (L* 65.6, chroma 40, where
+   the blender takes it to 57 and 59). At a pressure of 0.7 the blender closes two fifths of the
    flecks, and at 0.5 a twentieth. (In the first build the blender was a
    coloured pencil without colour: one firm layer left two fifths of the
    flecks.) Two colours laid over each other are stirred into one, and
@@ -644,8 +695,15 @@ kernel and its own layer:
   seventh of the firmest) and on a slow unevenness along the line. It is a
   clear dye: lines that cross and layers of hatching darken towards black.
 - **It is a stain** in the paper, rendered under whatever the paper carries,
-  and no tool touches it: an eraser takes the pencil sketch and leaves the
-  ink. A pencil draws over it as on bare paper.
+  and no rubber eraser touches it: an eraser takes the pencil sketch and
+  leaves the ink. A pencil draws over it as on bare paper. What cuts the
+  surface of the paper takes the ink stained into it: a knife or a sand
+  eraser, by the share it scrapes of what it lifts of what the paper holds
+  (`scrape_ink`), and the ink is then on the tool, counted with what it
+  took. Two layers of firm black hatching (a fifth of the paper's tone): a
+  knife drawn across them at 0.9 scratches a line back to 0.98 of the
+  paper's tone, leaving half a hundredth of the ink, and one rub of a sand
+  eraser takes nine tenths of it, to 0.79. (No tool touched the ink.)
 - **The ball skids** on a thick film of pigment and on wax, and lays little
   there; over a light pencil sketch it writes as on bare paper.
 - **The ball presses a groove** (`dent`), as a stylus does but less deep
