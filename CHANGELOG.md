@@ -37,6 +37,21 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   - The dense points of a path are worked out once for a stroke, where
     they were worked out twice (to sample it and for its length): murex
     0.2.0 keeps them.
+- A ballpoint no longer leaves a drop at every point of a gently curving
+  line: what its ball brings round stays on the rim until it would show (a
+  drop of `BALL_SHOWS`, 0.05, firm passes over the square of its radius, 2%
+  as thick at its middle as the line), and the line has turned that far
+  since the last drop. Nearly every step of a pen laid a drop nobody could
+  see, at about 30% of its time. Hatching a sheet of 1120 by 820 pixels
+  with a ballpoint takes 0.29 s, from 0.35 s, and over graphite 0.33 s,
+  from 0.49 s. The picture changes a little: on a gentle arc the drops
+  reach seven tenths of the pixels of the line, from all of them, and the
+  ink of five arcs changes by a ten-thousandth; four layers of hatching are
+  as dark to the third decimal. A drop also inks all of a pixel that holds
+  a pass's worth of ink, so white specks in heavy hatching are no longer
+  filled by drops nobody could see: in the pen drawings of
+  `tools/fingerprint.py`, 0.4% of the pixels move by more than two levels
+  (of 255), some by half their tone.
 - fusain requires murex 0.2.0.
 - `lay_stroke` and `rub_stroke` (in `fusain._engine`) take what they took;
   `bear`, `put_down` and `streak_at` take the streaks of the pass

@@ -290,6 +290,23 @@ def test_a_gentle_curve_leaves_no_blob():
         assert 0.99 < bent / ruled < 1.0 + eng.BALL_GATHER
 
 
+def test_a_gentle_curve_leaves_its_ink_in_a_few_drops():
+    """Not a drop too small to show at every point of the line, which took
+    a third of the pen's time: what comes round stays on the rim until it
+    would show. (Every pixel of the line had some of a drop.)"""
+    arc = [(100 + 60 * np.cos(a), 75 - 60 * np.sin(a)) for a in np.linspace(0, 3, 40)]
+    for seed in (1, 20, 40):
+        inks = []
+        for blots in (0.0, 1.0):
+            sheet = _clean(200, 100, seed)
+            sheet.stroke(arc, pens.BLUE.with_(blots=blots), 0.5)
+            assert sheet.ink is not None
+            inks.append(sheet.ink[..., IV])
+        line = inks[0] > 0.0
+        reached = (inks[1][line] != inks[0][line]).mean()
+        assert 0.3 < reached < 0.8
+
+
 def test_a_freer_pen_and_a_bigger_ball_gather_more():
     seed = _loaded()
 

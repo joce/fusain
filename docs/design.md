@@ -491,8 +491,11 @@ kernel and its own layer:
 - **The ball gathers ink.** The share `BALL_GATHER` of what it lays stays on
   its rim as it rolls, up to a drop (`BALL_BLOB`), and a turn brings it
   round onto the paper: nearly all of it when the line turns back on itself,
-  about two thirds at a square corner, a little at a time on a gentle curve, where
-  it does not show. The paper takes of what comes round as much as the ball
+  about two thirds at a square corner, a little at a time on a gentle curve,
+  where it does not show. A drop too small to show stays on the rim until
+  the line has turned far enough to bring round one that would
+  (`BALL_SHOWS`): a gently curving line had a drop at every point, which
+  took a third of the pen's time. The paper takes of what comes round as much as the ball
   bears on it (the share of a firm pass the line lays there, from
   `BALL_LIGHT` to all of it), and the rest stays on the rim for the next
   turn: a light line blots as lightly as it is drawn, where it had blobs as

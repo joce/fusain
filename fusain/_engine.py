@@ -242,6 +242,12 @@ BALL_BLOB = 4.0
 BALL_TURN = 2.0
 BALL_START = 0.8
 BALL_SELDOM = 6.0
+#: A drop too small to show stays on the rim, until the line has turned far
+#: enough to bring round one that does: one of BALL_SHOWS firm passes over
+#: the square of the ball's radius (what the ball holds at most is BALL_BLOB
+#: of them), which lies at the middle of its dot about 2% as thick as the
+#: line it is left on.
+BALL_SHOWS = 0.05
 #: A drop of ink is left as a round dot BLOB_WIDE times as wide as the ball,
 #: thickest at its middle: a little wider than the line, and darker.
 BLOB_WIDE = 1.2
@@ -1550,8 +1556,10 @@ def roll_stroke(
     # what the pen lands with
     most = BALL_BLOB * BALL_INK * flow * blots * bound * bound
     gathered = most * BALL_START * unit_noise(0, 2, salt + 3) ** BALL_SELDOM
+    least = BALL_SHOWS * BALL_INK * flow * bound * bound  # (a drop that shows)
     wx, wy = 1.0, 0.0  # the way it was last going
     down = False  # whether it was on the paper at the last point
+    turned = 0.0  # how far the line has turned since the ball left a drop
     travel = 0.0
     total = 0.0
     for i in range(xs.shape[0]):
@@ -1565,14 +1573,17 @@ def roll_stroke(
         tx, ty = heading(xs, ys, i)
         # (the share of a firm pass it lays here)
         firm = BALL_LIGHT + (1.0 - BALL_LIGHT) * pressure
-        # where it lands it leaves what it had gathered; where the line
-        # turns, as much of it as the turn brings round; and of that, as
-        # much as it bears on the paper
-        drop = gathered * firm
+        # where it lands all it had gathered comes round; where the line
+        # turns, as much of it as the turn brings round
         if down:
-            drop *= min(turn_of(tx, ty, wx, wy) / BALL_TURN, 1.0)
+            turned += turn_of(tx, ty, wx, wy)
+            comes = gathered * min(turned / BALL_TURN, 1.0)
+        else:
+            comes, turned = gathered, 0.0
         wx, wy, down = tx, ty, True
-        if drop > 1e-9:
+        if comes >= least:
+            # it leaves as much of it as it bears on the paper
+            drop = comes * firm
             left = blot(
                 cover,
                 held,
@@ -1590,6 +1601,7 @@ def roll_stroke(
             )
             gathered = max(gathered - left, 0.0)
             total += left
+            turned = 0.0
         rate = BALL_INK * flow * firm
         rate *= surge_at(travel, salt) * per_pass * step
         sink = BALL_DENT * yields * pressure
