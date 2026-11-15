@@ -8,20 +8,21 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- Drawing is about twice as fast, and no picture changes: every array of a
-  sheet after any sequence of calls, every number returned and every
-  rendered image is what it was, to the last bit. On a sheet of 1120 by 820
-  pixels (best of five runs, one core of a 2.1 GHz Xeon): shading it with an
-  HB of width 6 takes 1.8 s, from 3.1 s; with a soft pastel of width 24,
-  1.2 s, from 2.5 s; with the side of a stick of vine charcoal, 1.3 s, from
-  2.9 s; rubbing it with a finger, 2.3 s, from 5.9 s; with a kneaded eraser,
-  2.7 s, from 6.5 s; with a stump over graphite, 4.2 s, from 7.7 s; hatching
-  it with a ballpoint, 0.54 s, from 0.83 s; rendering it, 1.4 s, from 3.2 s;
-  and `Sheet.reflectance()`, 1.05 s, from 3.1 s. `examples/lake.py` takes
-  under two minutes, from nearly four, and `deco.py` and `broadway.py` a
-  third less; the examples that mostly plan their strokes in numpy
-  (`stilllife.py`, `farm.py`, `macaw.py`) a fifth less at most. What it
-  took:
+- Strokes and rubs are about twice as fast, and no picture changes: every
+  array of a sheet after any sequence of calls, every number returned and
+  every rendered image is what it was, to the last bit. On a sheet of 1120
+  by 820 pixels (best of five runs, one core of a 2.1 GHz Xeon): shading it
+  with an HB of width 6 takes 1.8 s, from 3.1 s; with a soft pastel of width
+  24, 1.2 s, from 2.5 s; with the side of a stick of vine charcoal, 1.3 s,
+  from 2.9 s; rubbing it with a finger, 2.3 s, from 5.9 s; with a kneaded
+  eraser, 2.7 s, from 6.5 s; with a stump over graphite, 4.2 s, from 7.7 s;
+  and hatching it with a ballpoint, 0.54 s, from 0.83 s. Rendering it takes
+  what it took, 3.2 s, most of it Kubelka-Munk, which is murex's to make
+  faster. `examples/lake.py` takes three minutes, from nearly four (about
+  half of what is left is its looking at the sheet as it goes), and
+  `deco.py` and `broadway.py` a quarter to a third less; the examples that
+  mostly plan their strokes in numpy (`stilllife.py`, `farm.py`,
+  `macaw.py`) a seventh less at most. What it took:
   - What a kernel calls for every pixel is compiled without numba's
     reference counting (`_nrt=False`: it allocates nothing and keeps no
     array) and into its caller (`forceinline=True`). Counting a reference to
@@ -37,9 +38,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
     square around it); the streaks of a pass are looked up in a table; the
     dust of a pass settles in one visit of each pixel; and the loops over
     the bands of a pigment are vectorised.
-  - A render lays the three layers of a pixel over each other in two
-    compiled passes, which give `murex.spectral.km_layer` to the bit, and a
-    path is sampled once for a stroke where it was sampled twice.
+  - The dense points of a path are worked out once for a stroke, where
+    they were worked out twice (to sample it and for its length).
 - `lay_stroke` and `rub_stroke` (in `fusain._engine`) take what they took;
   `bear`, `put_down` and `streak_at` take the streaks of the pass
   (`streaks_of`), and the first two the row they work in.

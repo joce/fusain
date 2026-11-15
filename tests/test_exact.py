@@ -1,17 +1,16 @@
 """What makes the engine fast changes no result: a table holds the values of
 the expression it replaces, a loop skips only pixels it would have left as
-they were, and the compiled Kubelka-Munk of a render is murex's to the bit.
+they were, and a path worked out once is the path it was.
 (``tests/test_fingerprint.py`` checks whole drawings.)"""
 
 import math
 
 import numpy as np
 import pytest
-from murex import spectral as sp
 
 from fusain import Sheet, charcoal, pastels, pencils
 from fusain import _engine as eng
-from fusain.sheet import IS, N, _Dense, _lay_over, _sample
+from fusain.sheet import _Dense, _sample
 
 
 def test_the_streaks_of_a_pass_are_those_worked_out_one_by_one():
@@ -98,43 +97,6 @@ def test_dust_settles_once_wherever_the_tip_went():
         assert not sheet._fresh.any()
     sheet.shade((5, 5, 85, 65), pencils.B4, 0.6, tilt=0.8)
     assert not sheet._fresh.any()
-
-
-def _layers(rng, count):
-    """Layers as a sheet packs them, of every kind Kubelka-Munk tells apart."""
-    packed = rng.uniform(0.0, 3.0, (count, N + 3))
-    packed[:, IS] = rng.uniform(0.0, 4.0, count)
-    packed[::7] *= 1e-6  # thin: the series for a small depth
-    packed[1::7] = 0.0  # empty: what is under it shows as it was
-    packed[2::7, IS] = 0.0  # a dye: nothing scattered
-    packed[3::7] *= 40.0  # thick and dark
-    packed[4::7, :5] = -1e-9  # what rounding may leave below nothing
-    packed[5::7, IS] = -1e-9
-    return packed
-
-
-@pytest.mark.parametrize("seed", range(3))
-def test_a_layer_is_laid_over_as_murex_lays_it_to_the_bit(seed):
-    rng = np.random.default_rng(seed)
-    packed = _layers(rng, 2000)
-    seen = rng.uniform(0.0, 1.0, (2000, N))
-    seen[::11] = 1.0
-    seen[5::11] = 0.0
-    want = sp.km_layer(packed[:, :N], packed[:, IS], seen)
-    got = seen.copy()
-    _lay_over(got, packed)
-    assert got.tobytes() == want.tobytes()
-    # a second layer over the first, and one over a ground that is the same
-    # everywhere (as the paper is)
-    more = _layers(rng, 2000)
-    want = sp.km_layer(more[:, :N], more[:, IS], want)
-    _lay_over(got, more)
-    assert got.tobytes() == want.tobytes()
-    paper = rng.uniform(0.2, 1.0, N).astype(np.float32)
-    over = np.empty((2000, N))
-    over[:] = paper
-    _lay_over(over, packed)
-    assert over.tobytes() == sp.km_layer(packed[:, :N], packed[:, IS], paper).tobytes()
 
 
 def test_a_path_sampled_once_gives_what_it_gave():

@@ -1,7 +1,7 @@
 """Morning mist on a mountain lake, in graphite pencil.
 
 Run from the repository root: ``python examples/lake.py``. Writes
-``examples/output/lake.png`` (about two minutes). With a folder as argument
+``examples/output/lake.png`` (about three minutes). With a folder as argument
 (``python examples/lake.py studies/``) it also writes there the tonal study
 the drawing is planned from, and its maps.
 

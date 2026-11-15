@@ -1654,47 +1654,6 @@ def indent_stroke(dent, xs, ys, pressures, steps, radius, paper):
                     dent[iy, ix] = max(dent[iy, ix], sink * (1.0 - across))
 
 
-@njit(cache=True, error_model="numpy")
-def km_depth(packed, depth):
-    """The optical depth of each of a batch of layers (``packed``, one row
-    each: K per band, then S, as a layer is packed) in each band: what
-    :func:`murex.spectral.km_layer` works out first, to the bit. (A value
-    that is not above 0 counts as 0, as ``np.maximum(value, 0.0)`` has it.)"""
-    for i in range(packed.shape[0]):
-        s = packed[i, IS]
-        if s <= 0.0:
-            s = 0.0
-        for band in range(N):
-            k = packed[i, band]
-            if k <= 0.0:
-                k = 0.0
-            depth[i, band] = math.sqrt(k * k + 2.0 * k * s)
-
-
-@njit(cache=True, error_model="numpy")
-def km_over(packed, depth, tanh_depth, seen):
-    """Lay each of a batch of layers over what is seen under it (``seen``, a
-    reflectance per band for each, changed in place): what
-    :func:`murex.spectral.km_layer` returns, to the bit, given the optical
-    depths (:func:`km_depth`) and their hyperbolic tangents as numpy works
-    them out. The same operations in the same order, and plain IEEE
-    arithmetic, which numba neither reorders nor fuses."""
-    for i in range(packed.shape[0]):
-        s = packed[i, IS]
-        if s <= 0.0:
-            s = 0.0
-        for band in range(N):
-            k = packed[i, band]
-            if k <= 0.0:
-                k = 0.0
-            b = depth[i, band]
-            tau = 1.0 - b * b / 3.0 if b < 1e-4 else tanh_depth[i, band] / b
-            g = seen[i, band]
-            num = s * tau - g * ((s + k) * tau - 1.0)
-            den = (s + k - g * s) * tau + 1.0
-            seen[i, band] = num / den
-
-
 def as_kernel_arrays(points: np.ndarray, pressure: np.ndarray, spacing: float):
     """The arguments :func:`lay_stroke` takes for a sampled path: contiguous
     float64 x, y, pressure, and the distance moved at each sample (half a

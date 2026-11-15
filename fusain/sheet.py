@@ -280,10 +280,10 @@ class Sheet:
             # thicker; the rest of the pixel is bare paper (inked or not)
             share = np.clip(self.cover[rows][marked].astype(np.float64), 1e-6, 1.0)
             bare = out[marked] if stained else self.ground
-            seen = np.empty((share.size, N))
-            seen[:] = bare
+            seen = bare
             for layer in layers:  # from the paper up
-                _lay_over(seen, layer[marked].astype(np.float64) / share[:, None])
+                packed = layer[marked].astype(np.float64) / share[:, None]
+                seen = sp.km_layer(packed[:, :N], packed[:, IS], seen)
             out[marked] = share[:, None] * seen + (1.0 - share[:, None]) * bare
         return out
 
@@ -913,30 +913,23 @@ class Sheet:
         write_png(path, np.round(img * 255).astype(np.uint8))
 
 
-def _lay_over(seen: np.ndarray, packed: np.ndarray) -> None:
-    """Lay a layer over what is seen at each of some pixels (``seen``, a
-    reflectance per band, changed in place; ``packed`` is the layer there,
-    as a layer is packed, float64). It is ``sp.km_layer(packed[:, :N],
-    packed[:, IS], seen)`` to the last bit, in two compiled passes and
-    numpy's ``tanh`` between them (so that too is the very same function)
-    instead of some twenty numpy passes: most of the time of a render."""
-    depth = np.empty_like(seen)
-    eng.km_depth(packed, depth)
-    eng.km_over(packed, depth, np.tanh(depth), seen)
-
-
 class _Dense(Path):
     """A path that works out its dense points once: sampling it and asking
-    its length each work them out otherwise."""
+    its length each work them out otherwise. It relies on what murex says a
+    path is: a subclass of :class:`murex.Path` that gives its dense points
+    in ``_dense``, from which ``sample`` and ``length`` are worked out.
+    (murex is to do this itself; this class goes when fusain asks for that
+    release.)"""
 
     def __init__(self, path: Path):
-        self._path, self.n_knots = path, path.n_knots
-        self._points: tuple[np.ndarray, np.ndarray] | None = None
+        self.n_knots = path.n_knots
+        self.__path = path
+        self.__points: tuple[np.ndarray, np.ndarray] | None = None
 
     def _dense(self) -> tuple[np.ndarray, np.ndarray]:
-        if self._points is None:
-            self._points = self._path._dense()
-        return self._points
+        if self.__points is None:
+            self.__points = self.__path._dense()
+        return self.__points
 
 
 Ends = str | tuple[str, str]
