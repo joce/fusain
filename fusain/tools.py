@@ -34,7 +34,8 @@ class Tool:
         How strongly it lifts the dust, and the pigment the paper holds,
         into its load (0 = not at all; 1 takes about two thirds in a pass;
         more, nearly all). Dust that is set, by fixative or under a film of
-        wax, and the film itself come off as what the paper holds does. An
+        wax, and the film itself come off as what the paper holds does (the
+        film of a dry medium on loose dust, as the dust). An
         eraser lifts strongly. A stump or a finger lifts little: most of
         what they move is the dust on their face (``smear``), which goes a
         fraction of their width; what is lifted is carried far, and fills

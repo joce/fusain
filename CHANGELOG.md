@@ -8,6 +8,89 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A pencil drawn over pastel shows on it (fusain-wo4). What the paper holds
+  of a dry medium went in the tooth, under whatever dust lay there, and all
+  that lay there was counted in the tip's way: over two layers of a pale
+  soft pastel a 2B line laid a fiftieth of what it lays on bare paper and
+  an HB a hundredth, and 0.85 of that little under the pastel, so the line
+  was a hundredth as dark as on bare paper; over the same pastel fixed, a
+  seventh, and a thirtieth as dark. A dry medium now lies on what it meets,
+  as a waxy one does, but its own crumbs are not in its way: its binding
+  is how much the paper holds of its mark on its own ground, crumbs and
+  all. What keeps it from the paper is dust beyond those, loose or set:
+  more than its own mark would have for what is fast at the pixel
+  (`(1 - binding) / binding` of what the paper holds, of a film and of
+  paste), by more than `BED_FROM`. That much is a bed between the tip and
+  the paper. As far as the bed covers the paper, the tip rides on it and
+  what the paper would have held of its mark is a film on the dust
+  (`Sheet.film`), which binds none of it; the bed takes none of the room in
+  the tooth, nor does what the paper holds under it, out of the tip's
+  reach; and dust scrapes less off a tip than paper does, so riding on a
+  bed a pass lays a fifth less (`BED_BITE`). On cartridge paper, means of
+  39 lines 4 wide drawn at 0.6 (one line varies by a quarter from the
+  next), as shares of what the line lays on bare paper and of how dark it
+  is there against its ground, before and now: over two layers of a pale
+  soft pastel laid at 0.6, a 2B 0.02 and 0.01, now 0.78 and 0.80; an HB
+  0.01 and 0.00, now 0.77 and 0.72; a charcoal pencil 0.02 and 0.02, now
+  0.77 and 0.91; a 6B 0.13 and 0.04, now 0.79 and 0.88; compressed
+  charcoal 0.08 and 0.14, now 0.78 and 0.99. Over the same fixed: 2B 0.15
+  and 0.03, now 0.79 and 0.81; HB 0.05 and 0.01, now 0.78 and 0.74;
+  charcoal pencil 0.14 and 0.13, now 0.78 and 0.92. Over one layer a 2B
+  0.19 and 0.07, now 0.77 and 0.78; over one laid lightly (0.3) 0.57 and
+  0.31, now 0.80 and 0.79; over the dust of vine charcoal 0.69 and 0.66,
+  now 0.82 and 0.67. A 2B shaded at 0.5 over the two layers 0.01 and 0.00,
+  now 0.82 and 0.70 (fixed: 0.09 and 0.02, now 0.83 and 0.71). Of the
+  line's graphite, 0.15 lay over the pastel (its crumbs); all of it does
+  now, 0.8 of it over the light layer and 0.7 over the charcoal dust,
+  through which the point reaches the paper. Twelve layers of a 2B at 0.6
+  over the pastel take 0.94 of what they take on bare paper, each less
+  than the one before, and the tone goes from 0.65 of the pastel's to
+  0.46. A medium over its own layers, or on a ground no dustier than its
+  own mark, meets no bed and draws as before, to the bit: every hash of
+  the graphite and ballpoint drawings of `tools/fingerprint.py` is as it
+  was, on every paper, and vine charcoal over pastel, dust on dust, lays
+  what it laid (a tenth over the two layers). Over its own dust that a
+  stump or a finger has moved a medium changes by next to nothing (a 2B
+  shaded over a 6B rubbed with a stump lays 0.4% more). A firmer stick
+  over a dustier one's mark changes, by the same rule: compressed charcoal
+  over vine, a pencil over charcoal pencil. A film without wax is as fast
+  as the dust it lies on: where a pixel has no wax, a tool lifts a film
+  and spreads it with the dust, as far as the dust of the two layers is
+  loose (`fusain._engine.loose_ground`), and reaches the dust under it,
+  where it slides on a film of wax; a film of wax over dust is lifted and
+  shields what is under it as it did, to the bit. Of a 2B line on loose
+  pastel a kneaded eraser takes 0.79 in a pass, with the pastel under it
+  (0.26 of a line on bare paper, 0.25 on fixed pastel), and a vinyl eraser
+  0.93 (0.81 and 0.81); lifted as what the paper holds, the film was a
+  lid, and the kneaded eraser took 0.36 of the line and left 0.80 of the
+  pastel under it where it left 0.42 beside it (now 0.46). A finger drawn
+  three times across the line carries off 0.20 of its graphite (0.07 on
+  bare paper, 0.03 on fixed pastel) and leaves it 0.67 as dark (0.93,
+  0.96). The film has no wax and leaves no stain: six passes of a vinyl
+  eraser take all of the line on any of the three grounds, and the point
+  of a knife along it leaves a hundredth of what lay in its way. Limits: pastel rubbed into the paper takes a
+  pencil while dust is left on it (blended once with a finger, a 2B line
+  0.77 as dark as on bare paper, from nothing; blended again crosswise,
+  0.23), and a stick with more crumbs of its own finds such a tooth full
+  (a charcoal pencil over the pastel blended once, 0.21); a film buried by
+  later passes is one mixture with the dust of its layer, so a second
+  layer of a 6B at full pressure leaves the patch a little lighter than
+  the first (0.24 of the pastel's tone, then 0.29); and a film of graphite
+  on dust does not shine. No memory is added. Shading takes the time it
+  took, but a soft pastel over charcoal, which now looks for a bed in the
+  dust under it, about 8% more (2.42 to 2.62 s). Rubbing a tone that has
+  such films in it (compressed charcoal over vine) takes about a seventh
+  more, the paths for what is not loose dust being taken (with a finger
+  5.90 to 6.71 s, with a kneaded eraser 5.52 to 6.34); rubbing graphite,
+  which has none, stays within the noise (6.9 to 7.2 s). Thirteen of the
+  sixteen example images are unchanged to the byte. In `broadway.png` the
+  ironwork drawn in hard pastel over the soft pastel of the fronts shows
+  (the post and the arm of the street lamp, the rails of the fire escapes:
+  0.66% of the pixels, by up to 167 levels); in `deco.png` the darks that
+  compressed charcoal and the charcoal pencil lay over the tones of vine
+  are denser (a tenth of the pixels, most of them in the rubbed sky and by
+  a level or two; on the tower by up to 56, 410 pixels by over 15);
+  `lake.png` moves by a rounding (0.38%, up to 11).
 - A white or a pale coloured pencil pressed hard burnishes nearly as the
   blender does (fusain-d6p). `Medium.melts` was 1 for the blender and 0 for
   every coloured pencil, so a white pencil, with which artists burnish,

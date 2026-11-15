@@ -179,6 +179,22 @@ def test_what_leaves_the_tip_is_on_the_paper():
     assert sheet.pigment()[:6].max() == 0 and sheet.pigment()[55:].max() == 0
 
 
+def test_layer_on_layer_a_pencil_lies_in_the_tooth_and_never_on_its_own_dust():
+    # a pencil's crumbs are no bed between its point and the paper
+    # (fusain-wo4): over its own layers, or those of another grade, firm
+    # over light and light over firm, the paper holds the share the lead
+    # binds and none of it lies on the dust as a film
+    pairs = (("HB", "HB"), ("6B", "6B"), ("6B", "HB"), ("2H", "8B"), ("8B", "2H"))
+    for first, second in pairs:
+        for paper in (papers.CARTRIDGE, papers.ROUGH, papers.BRISTOL):
+            sheet = _sheet(paper)
+            laid = _shade(sheet, pencils.grade(first), 0.9, 3)
+            laid += _shade(sheet, pencils.grade(second), 0.4, 3)
+            assert not sheet.bonded.any(), (first, second, paper.name)
+            held = sheet.held[..., IV].sum(dtype=np.float64)
+            assert held >= 0.999 * laid * pencils.BINDING
+
+
 def test_off_the_sheet_nothing_is_laid_and_nothing_is_worn():
     sheet = _sheet()
     assert sheet.stroke([(-50, -20), (-10, -5)], pencils.B4, 0.8, 4.0) == 0.0
