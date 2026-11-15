@@ -101,13 +101,33 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   to a stick: a white crayon line over rubbed charcoal still greys where a
   stump crosses it (0.60 of the paper's tone to 0.41, from 0.33).
 
+- The wax of an oil pastel goes with the paste a finger smears. The sheet
+  counts the wax of a pixel wherever it lies there, and a tool moved the
+  paste without it: the smear had no wax and was not slick, the place it
+  left kept all of it, and what an eraser took off with the held pigment
+  was counted nowhere. The wax now goes with what it is in (what the paper
+  holds, the films and the paste): a tool that takes a share of those takes
+  that share of the wax, carries it (`Smudger.wax`) and lays it back with
+  its paste. Three firm layers of oil pastel smeared out over bare paper
+  with a finger: the smear, 0.84 thick, held no wax and holds 0.297 of its
+  volume (the pastel's is 0.3); what was left where the pastel was laid
+  held 0.478 of its volume and holds 0.296; the wax on the sheet and on the
+  finger together was 18 short of the 5,668 laid and is all there. Charcoal
+  shaded over the smear took a third of what bare paper takes (the tooth
+  was full) and takes a thirtieth (it is slick).
+
+### Added
+
+- `Smudger.wax`: the volume of wax in what a tool in the hand carries.
+
 ### Changed
 
 - `rub_stroke` (in `fusain._engine`) takes the tool as one array ([radius,
   `lift_loose`, `lift_held`, `lay`, `press`, `smear`, `scrape`]) and the
   pace at which it lands and lifts; what the tool does as it slides one
-  step is `rub_under`. A rub takes up to a tenth longer than it did (the
-  landing and the lifting).
+  step is `rub_under`. What a tool carries has a sixth part, the wax that
+  came with it. A rub takes up to a tenth longer than it did (the landing
+  and the lifting).
 - `tools.STUMP`, `tools.TORTILLON` and `tools.FINGER` lift less into their
   load and lay it back more slowly (see Fixed). A `Tool` of one's own with
   the old numbers still carries far, though it too now gives or takes, not

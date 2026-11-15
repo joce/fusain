@@ -51,7 +51,7 @@ Per pixel, all `float32`:
 | `press` | How far the tooth has been flattened or polished here (0 to 1): by a hard tip pressed firmly, and by burnishing wax. A tooth pressed flat is level: a tip touches all of it, as it would its peaks, and in the relief its peaks have come down to its valleys. |
 | `dent` | How far the paper has been indented here: the depth of a groove below the peaks of the tooth, in depths of the tooth of a paper of depth 1. By a stylus, and by the ball of a pen. |
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
-| `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. |
+| `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. The wax counts all the wax at the pixel, wherever it lies: in what the paper holds, in a film or in paste. |
 | `ink`, `inked` | The ink of pens, a stain in the paper under everything else: K, S and volume, and the colour it bronzes (linear RGB, times the volume); and the share of the pixel it is on. Allocated when a pen first draws. |
 | `under`, `loose` | Pigment lying on what the paper holds: K, S, volume and sheen, in two layers. `loose` is on top; what a new pass covers goes `under`. Most of it is dust. |
 | `bonded` | Of what lies in each of the two layers, the volume that is not loose dust, of three kinds: `fixed`, dust that is set, by fixative or under a film; `film`, what a waxy medium laid on the dust and not on the paper; `paste`, what the paper does not hold of a greasy medium. |
@@ -462,7 +462,16 @@ on. The paste of an oil pastel sticks to wax, on a tool as on a stick. And
 a tool slides on a film of wax laid over dust, as on dust that fixative has
 set: the loose dust in the layer underneath is stirred up and lifted only
 as far as what is set or a film on top does not cover it (all of it, under
-a layer of those `COVERS` thick). (In the first build a tool lifted two thirds
+a layer of those `COVERS` thick).
+
+The wax of a pixel is in what the paper holds there, in the films and in
+the paste, and it goes with them: a tool that takes a share of those takes
+that share of the wax, carries it, and lays it back with its paste. So a
+finger that smears an oil pastel out over bare paper leaves a smear as
+waxy as the pastel (three tenths of its volume), and as slick to charcoal,
+and leaves what it rubbed no waxier than it was; and what an eraser or a
+knife takes off, wax included, is on the tool. Wax is conserved as pigment
+is: on the sheet, or on the tool (`Smudger.wax`). (In the first build a tool lifted two thirds
 of the dust into its load in a pass and laid it back over several widths:
 a rubbed join was one even mix over all that was rubbed, and the trail of
 a stump on bare paper halved every four widths.)

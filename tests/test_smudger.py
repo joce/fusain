@@ -8,7 +8,7 @@ import pytest
 from murex import spectral as sp
 
 from fusain import Sheet, Smudger, charcoal, crayons, pastels, pencils, tools
-from fusain.sheet import IS, IV, N
+from fusain.sheet import IS, IV, IW, N
 
 TONE = (20, 20, 380, 180)  # the rectangle shaded
 INNER = (120, 50, 300, 150)  # the part of it that is rubbed
@@ -290,6 +290,76 @@ def test_a_finger_slides_on_a_film_of_wax_laid_over_dust(layers, least):
     assert loose_underneath() > least * before
 
 
+def _wax(sheet) -> float:
+    return float(sheet.held[..., IW].sum(dtype=np.float64))
+
+
+def test_the_wax_of_an_oil_pastel_goes_with_the_paste_a_finger_smears():
+    # (fusain-9i8: the wax stayed where the pastel was laid; the smear had
+    # none, and what was left behind had more than its share)
+    oil = pastels.oil("#c0392b")
+    sheet = Sheet(300, 150, seed=1)
+    for layer in range(3):
+        sheet.shade((20, 20, 150, 130), oil, 0.8, 9.0, angle=30 + 50 * layer)
+    wax = _wax(sheet)
+    assert wax == pytest.approx(oil.wax * _total(sheet), rel=1e-4)
+    finger = Smudger(tools.FINGER)
+    for _ in range(4):
+        for k in range(6):
+            sheet.smudge([(60, 50 + 10 * k), (200, 50 + 10 * k)], finger, 0.8)
+    smear, left = (slice(55, 100), slice(160, 200)), (slice(55, 100), slice(40, 120))
+    pigment = sheet.pigment().astype(np.float64)
+    assert pigment[smear].mean() > 0.5
+    for where in (smear, left):  # as waxy as the pastel, here and there
+        there = float(sheet.held[where][..., IW].sum(dtype=np.float64))
+        assert there == pytest.approx(oil.wax * pigment[where].sum(), rel=0.05)
+    # the wax is on the sheet or on the finger, which gives it up when cleaned
+    assert finger.wax > 0
+    assert _wax(sheet) + finger.wax == pytest.approx(wax, rel=1e-6)
+    finger.clean()
+    assert finger.wax == 0.0
+    # and the smear is slick: charcoal shaded over it hardly takes
+    before = sheet.pigment().astype(np.float64)
+    sheet.shade((155, 50, 205, 105), charcoal.VINE, 0.5, 9.0)
+    bare = Sheet(300, 150, seed=1)
+    bare.shade((155, 50, 205, 105), charcoal.VINE, 0.5, 9.0)
+    took = (sheet.pigment() - before)[smear].sum()
+    assert took < 0.1 * bare.pigment()[smear].sum()
+
+
+@pytest.mark.parametrize(
+    "tool",
+    [
+        tools.FINGER,
+        tools.STUMP,
+        tools.CHAMOIS,
+        tools.KNEADED,
+        tools.ERASER,
+        tools.SAND_ERASER,
+        tools.KNIFE,
+    ],
+    ids=lambda tool: tool.name,
+)
+def test_the_wax_a_tool_takes_off_is_on_the_tool(tool):
+    sheet = Sheet(200, 150, seed=1)
+    box = (20, 20, 180, 130)
+    sheet.shade(box, charcoal.VINE, 0.5, 9.0)
+    sheet.shade((20, 20, 100, 130), pastels.oil("#2456a6"), 0.7, 9.0, angle=-30)
+    for layer in range(2):
+        sheet.shade(
+            (100, 20, 180, 130), pencils.coloured("#c0392b"), 0.8, angle=60 * layer
+        )
+    sheet.shade((60, 60, 140, 130), crayons.wax("#f2c40f"), 0.9, 9.0, angle=80)
+    wax, total = _wax(sheet), _total(sheet)
+    held = Smudger(tool)
+    taken = sheet.rub((30, 30, 170, 100), held, 0.8)
+    taken += sheet.smudge([(40, 110), (195, 116)], held, 0.9)
+    assert held.wax >= 0.0 and _wax(sheet) < wax
+    assert _wax(sheet) + held.wax == pytest.approx(wax, rel=1e-6)
+    assert _total(sheet) + taken == pytest.approx(total, rel=1e-5)
+    assert float(sheet.held[..., IW].min()) >= 0.0
+
+
 # --------------------------------------------------------------------------
 # what it carries
 
@@ -328,7 +398,7 @@ def test_a_bare_tool_and_a_cleaned_one_bring_nothing_to_bare_paper():
     assert sheet.smudge([(200, 60), (480, 60)], tools.STUMP, 0.6) == 0.0
     load = stump.load
     assert stump.clean() == pytest.approx(load) and load > 0
-    assert stump.load == 0.0 and not stump.carried.any()
+    assert stump.load == 0.0 and not stump.carried.any() and stump.wax == 0.0
     assert sheet.smudge([(200, 100), (480, 100)], stump, 0.6) == 0.0
     assert sheet.pigment()[:, 150:].max() == 0
     # what was cleaned off is no longer anywhere

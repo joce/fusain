@@ -180,8 +180,8 @@ class Sheet:
     def paste(self) -> np.ndarray:
         """Volume of paste in each of the two layers, (H, W, 2): what the
         paper does not hold of a greasy medium (an oil pastel), and the dust
-        it was laid over and took up. A finger smears it; a kneaded eraser
-        does not lift it. A view, as :attr:`fixed` is."""
+        it was laid over and took up. A finger smears it, with its wax; a
+        kneaded eraser does not lift it. A view, as :attr:`fixed` is."""
         return self.bonded[..., PASTE]
 
     def pigment(self) -> np.ndarray:
