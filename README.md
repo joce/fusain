@@ -275,10 +275,16 @@ kneaded eraser pulled through soft pastel, which it lifts, and through oil
 pastel, which it does not.
 
 ```python
-from fusain import pens
+from fusain import HeldPen, pens
 
 sheet.stroke([(100, 300), (400, 320)], pens.BLUE, pressure=0.6)
 sheet.shade((100, 60, 300, 200), pens.BLACK, pressure=0.4, angle=35)   # hatching
+sheet.stroke(path, pens.BLUE.with_(blots=0))                           # a pen that never blots
+
+pen = HeldPen(pens.BLUE)        # in the hand: it lands with the ink its ball gathered
+sheet.stroke(path, pen)
+sheet.shade((100, 60, 300, 200), pen, pressure=0.4)
+pen.wipe()
 ```
 
 ![Ballpoint pens](examples/output/ballpoint.png)
@@ -289,7 +295,8 @@ firmer. Right: a pencil sketch inked over, its right half then rubbed with an
 eraser, which takes the pencil and leaves the ink; and a red pen skidding
 across a patch of wax crayon. Bottom left: the ball gathers ink as it rolls,
 and leaves a blob where the line turns sharply and, now and then, where it
-starts. Bottom middle: the ball presses a groove, which a soft pencil shaded
+starts; the scribble is written with a pen in the hand that lands with what
+it gathered on the line under it. Bottom middle: the ball presses a groove, which a soft pencil shaded
 over it skips where the pen was firm. Bottom right: loops written with a pen
 that has run dry (`sheet.indent`), shaded over.
 
@@ -351,7 +358,8 @@ half burnished; a crayon and an oil pastel pressed hard; and blue, black and
 red ballpoint hatched eight times over. Three things shine, each in its own
 way: graphite like metal; wax softly, once it is polished (the harder it was
 pressed, the more), under any lamp; and heavy ink like bronze, in the colour
-it absorbs most, with the lamp overhead.
+it absorbs most (black ink, a blend of dyes, in its violet's), with the lamp
+overhead.
 
 ![The papers under a raking light](examples/output/papers.png)
 

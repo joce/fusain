@@ -15,7 +15,7 @@ from . import hatching
 from ._engine import FILM, HELD, IS, IV, IW, IX, KINDS, LOOSE, PASTE, SET, N
 from .medium import Medium
 from .paper import Paper
-from .pens import Pen
+from .pens import HeldPen, Pen
 from .smudger import Smudger
 from .stick import Stick
 from .tools import KNEADED, STUMP, Tool
@@ -134,8 +134,9 @@ class Sheet:
         # (1), the volume at each pixel that is not loose dust: set, film
         # and paste
         self.bonded = np.zeros((H, W, 2, KINDS), np.float32)
-        # the ink of pens: a stain in the paper, packed as dust is, and the
-        # share of each pixel it is on (None until a pen has drawn)
+        # the ink of pens: a stain in the paper, packed as dust is with the
+        # colour it bronzes after, and the share of each pixel it is on
+        # (None until a pen has drawn)
         self.ink: np.ndarray | None = None
         self.inked: np.ndarray | None = None
 
@@ -305,7 +306,7 @@ class Sheet:
     def stroke(
         self,
         path,
-        medium: Medium | Stick | Pen,
+        medium: Medium | Stick | Pen | HeldPen,
         pressure: Profile = 0.5,
         width: Profile | None = None,
         tilt: Profile = 0.0,
@@ -346,15 +347,17 @@ class Sheet:
         anywhere along the stroke, so a stroke is as strong at its ends as
         in its middle, and a short one as strong as a long one.
 
-        ``medium`` can also be a :class:`fusain.Pen`, a ballpoint: it has its
-        own width and no side (``tilt`` stays 0), and its ends are round;
-        its line is nearly as dark
-        at a light touch as at a firm one, and its ink is a stain in the
-        paper (:attr:`ink`), under everything else, which no tool takes off.
-        Its ball gathers ink as it rolls and leaves a blob where the line
-        turns sharply and, now and then, where it starts; and it presses a
-        groove into the paper (``dent``), as :meth:`indent` does, the
-        deeper the firmer the pen.
+        ``medium`` can also be a :class:`fusain.Pen`, a ballpoint: it has
+        its own width and no side (``tilt`` stays 0), and its ends are
+        round; its line is nearly as dark at a light touch as at a firm one,
+        and its ink is a stain in the paper (:attr:`ink`), under everything
+        else, which no tool takes off. Its ball gathers ink as it rolls and
+        leaves a blob where the line turns sharply and, now and then, where
+        it starts, the lighter the lighter the line (as much as the pen's
+        ``blots`` says); and it presses a groove into the paper (``dent``),
+        as :meth:`indent` does, the deeper the firmer the pen. A bare pen is
+        picked up afresh for each line; a :class:`fusain.HeldPen`, a pen in
+        the hand, lands with the ink its ball gathered on the line before.
 
         A dry tip pressed firmly (harder than about 0.6) flattens the tooth
         (``press``), the more the harder the tip: a hard pencil does, a
@@ -375,7 +378,7 @@ class Sheet:
         or a pen), the pressures are finite, ``tilt`` is between 0 and 1 all
         along and ``ends`` is ``"round"``, ``"flat"`` or a pair of those.
         """
-        if isinstance(medium, Pen):
+        if isinstance(medium, Pen | HeldPen):
             return self._roll(path, medium, pressure, width, tilt, ends)
         if isinstance(medium, Stick):
             if width is not None:
@@ -388,8 +391,8 @@ class Sheet:
             width = point = 4.0 if width is None else width
         else:
             raise TypeError(
-                "medium must be a Medium, such as pencils.HB, a Stick or a Pen: "
-                f"{medium!r}"
+                "medium must be a Medium, such as pencils.HB, a Stick, a Pen or "
+                f"a HeldPen: {medium!r}"
             )
         square = _square(ends)
         known = medium.medium if isinstance(medium, Stick) else medium
@@ -449,20 +452,33 @@ class Sheet:
             stick.worn = max(stick.worn + laid, 0.0)
         return laid
 
-    def _roll(self, path, pen: Pen, pressure: Profile, width, tilt, ends) -> float:
+    def _roll(
+        self, path, pen: Pen | HeldPen, pressure: Profile, width, tilt, ends
+    ) -> float:
         """One pass of a ballpoint pen along ``path``; see :meth:`stroke`."""
         if width is not None:
-            raise TypeError("a Pen has its own width: give none with it")
+            kind = type(pen).__name__
+            raise TypeError(f"a {kind} has its own width: give none with it")
         if not (isinstance(tilt, int | float) and tilt == 0.0):
             raise ValueError(
                 f"a pen has no side to draw with: tilt must be 0: {tilt!r}"
             )
         if _square(ends) != (0.0, 0.0):
             raise ValueError(f"a ballpoint's line ends round: {ends!r}")
-        xs, ys, bearing, steps = self._sampled(path, pressure, pen.width)
+        line, points, u, knot, spacing, pace = _sample(path, pen.width)
+        bearing = _profile("pressure", pressure, line, u, knot)
+        xs, ys, bearing, steps = eng.as_kernel_arrays(
+            points, np.clip(bearing, 0.0, 1.0), spacing
+        )
+        # (where it lands and lifts, the ball goes at its own pace, however
+        # short the line: a line of no length is a dot)
+        landing = spacing if spacing >= 0.5 * pace else pace
         if self.ink is None or self.inked is None:
-            self.ink = np.zeros((self.height, self.width, LOOSE), np.float32)
+            self.ink = np.zeros((self.height, self.width, eng.INK), np.float32)
             self.inked = np.zeros((self.height, self.width), np.float32)
+        # (a bare pen is picked up afresh: the kernel draws what it lands with)
+        rim = pen._rim if isinstance(pen, HeldPen) else np.full(1, np.nan)
+        pen = pen.pen if isinstance(pen, HeldPen) else pen
         paper = self.paper
         return float(
             eng.roll_stroke(
@@ -479,12 +495,16 @@ class Sheet:
                 ys,
                 bearing,
                 steps,
+                landing,
                 0.5 * float(pen.width),
                 np.ascontiguousarray(pen.ink.K, dtype=np.float64),
-                np.array([pen.ink.S, pen.flow], dtype=np.float64),
+                np.array(
+                    [pen.ink.S, pen.flow, pen.blots, *pen.mirrors], dtype=np.float64
+                ),
                 np.array(
                     [paper.depth, paper.bite, paper.give, paper.hold], dtype=np.float64
                 ),
+                rim,
                 int(self._rng.integers(1 << 31)),
             )
         )
@@ -603,15 +623,15 @@ class Sheet:
 
     def _add_bronze(self, lin: np.ndarray, bronze: np.ndarray, rows: slice) -> None:
         """Add the bronze of the ink of these rows to their light (``lin``,
-        linear RGB). Ink mirrors most the light it absorbs most, as the
-        square of its absorption: blue ink, which absorbs the reds, shines
-        copper."""
+        linear RGB), in the colour each ink mirrors (:attr:`fusain.Pen.mirrors`:
+        blue ink, which absorbs the reds, shines copper), mixed as the inks
+        are."""
         shining = bronze > 0
         if self.ink is None or not shining.any():
             return
-        absorbed = self.ink[rows][shining][:, :N].astype(np.float64)
-        absorbed /= np.maximum(absorbed.max(axis=1), 1e-12)[:, None]
-        colour = np.maximum(sp.reflectance_to_linear_rgb(absorbed**2), 0.0)
+        ink = self.ink[rows][shining].astype(np.float64)
+        colour = ink[:, eng.IB : eng.IB + 3]
+        colour /= np.maximum(ink[:, IV], 1e-12)[:, None]
         lin[shining] += bronze[shining][:, None] * colour
 
     def indent(self, path, pressure: Profile = 0.7, width: float = 3.0) -> None:
@@ -839,7 +859,7 @@ class Sheet:
     def shade(
         self,
         area,
-        medium: Medium | Stick | Pen,
+        medium: Medium | Stick | Pen | HeldPen,
         pressure: hatching.Pressure = 0.5,
         width: float | None = None,
         angle: float = 30.0,
@@ -875,7 +895,7 @@ class Sheet:
         above 0, ``angle`` is finite, ``hand`` is finite and not negative and
         ``tilt`` is between 0 and 1.
         """
-        own = isinstance(medium, Stick | Pen)  # (it has its own width)
+        own = isinstance(medium, Stick | Pen | HeldPen)  # (it has its own width)
         if own:
             if width is not None:
                 kind = type(medium).__name__
@@ -885,8 +905,8 @@ class Sheet:
             width = 6.0 if width is None else width
         else:
             raise TypeError(
-                "medium must be a Medium, such as pencils.HB, a Stick or a Pen: "
-                f"{medium!r}"
+                "medium must be a Medium, such as pencils.HB, a Stick, a Pen or "
+                f"a HeldPen: {medium!r}"
             )
         if not 0.0 <= tilt <= 1.0:
             raise ValueError(f"tilt must be between 0 (point) and 1 (side): {tilt!r}")
@@ -895,7 +915,8 @@ class Sheet:
         inset = (0.5 * (1.0 - flat_start), 0.5 * (1.0 - flat_end))
         outline = hatching.as_outline(area)
         broad = _breadth(medium, width, tilt)  # how wide a stroke's mark is
-        apart = PEN_SPACING if isinstance(medium, Pen) else hatching.SPACING
+        pen = isinstance(medium, Pen | HeldPen)
+        apart = PEN_SPACING if pen else hatching.SPACING
         gap = apart * broad if spacing is None else spacing
         _check_hatching(width, gap, angle, hand)
         laid = 0.0
@@ -987,7 +1008,9 @@ def _in_hand(tool: Tool | Smudger, width: float | None) -> Smudger:
     return Smudger(tool, width)
 
 
-def _breadth(medium: Medium | Stick | Pen, width: float, tilt: float) -> float:
+def _breadth(
+    medium: Medium | Stick | Pen | HeldPen, width: float, tilt: float
+) -> float:
     """How wide a tip ``width`` wide of ``medium`` marks at this tilt."""
     if isinstance(medium, Stick):
         side = medium.side

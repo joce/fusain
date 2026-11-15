@@ -12,13 +12,14 @@ from . import charcoal, crayons, papers, pastels, pencils, pens, tools
 from ._about import __version__
 from .medium import Medium
 from .paper import Paper
-from .pens import Pen
+from .pens import HeldPen, Pen
 from .sheet import Sheet
 from .smudger import Smudger
 from .stick import Stick
 from .tools import Tool
 
 __all__ = [
+    "HeldPen",
     "Medium",
     "Paper",
     "Pen",

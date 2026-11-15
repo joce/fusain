@@ -37,13 +37,56 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   - The dense points of a path are worked out once for a stroke, where
     they were worked out twice (to sample it and for its length): murex
     0.2.0 keeps them.
+- A ballpoint no longer leaves a drop at every point of a gently curving
+  line: what its ball brings round stays on the rim until it would show (a
+  drop of `BALL_SHOWS`, 0.05, firm passes over the square of its radius, 2%
+  as thick at its middle as the line), and the line has turned that far
+  since the last drop. Nearly every step of a pen laid a drop nobody could
+  see, at about 30% of its time. Hatching a sheet of 1120 by 820 pixels
+  with a ballpoint takes 0.29 s, from 0.35 s, and over graphite 0.33 s,
+  from 0.49 s. The picture changes a little: on a gentle arc the drops
+  reach seven tenths of the pixels of the line, from all of them, and the
+  ink of five arcs changes by a ten-thousandth; four layers of hatching are
+  as dark to the third decimal. A drop also inks all of a pixel that holds
+  a pass's worth of ink, so white specks in heavy hatching are no longer
+  filled by drops nobody could see: in the pen drawings of
+  `tools/fingerprint.py`, 0.4% of the pixels move by more than two levels
+  (of 255), some by half their tone.
 - fusain requires murex 0.2.0.
+- `roll_stroke` (in `fusain._engine`) takes, in `pen`, how much the pen
+  blots and the colour its ink bronzes, and the ink on the rim of its ball
+  (`rim`, NaN for a pen just picked up); `blot` takes the pen.
 - `lay_stroke` and `rub_stroke` (in `fusain._engine`) take what they took;
   `bear`, `put_down` and `streak_at` take the streaks of the pass
   (`streaks_of`), and the first two the row they work in.
 
 ### Added
 
+- `HeldPen(pen)`: a ballpoint in the hand, as a `Stick` is a medium and a
+  `Smudger` a tool in the hand. It keeps the ink its ball gathers from one
+  line to the next until `wipe()` (which returns it); `load` is how much
+  there is. It lands with what its last line gathered and did not leave:
+  where it lands a share drawn at random comes round, as for a pen just
+  picked up (mostly next to none), and the rest at the first sharp turn.
+  A bare `Pen` is picked up afresh for every line, as before: it lands
+  with a drop drawn at random, which it leaves there, and takes away what
+  it gathers. `Sheet.stroke` and `Sheet.shade` take either, and return the
+  ink laid; what a `HeldPen` gathered is on the paper or on its ball.
+  Measured: a pen in the hand that drew a straight line of 6.53 of ink
+  holds 0.327 (`BALL_GATHER`, 0.05, of it), and where the next line lands
+  at 0.7 with a share of 0.52 coming round it leaves 0.1272 more than a pen
+  that gathers nothing, 0.745 of 0.52 of 0.327, to four digits.
+  `tools/fingerprint.py` draws one.
+- `Pen.bronze`, and `pens.ballpoint(..., bronze=...)`: the colour heavy ink
+  mirrors under a lamp. By default the light the ink absorbs most, as
+  before; a black ink is a blend of dyes, which bronzes as the one that
+  bronzes most (see Fixed). `Pen.mirrors` is that light in linear RGB.
+- `Pen.blots`: how much ink a ballpoint's ball gathers, to leave as a blob
+  where the line turns sharply and, now and then, where it lands. 1 for a
+  usual pen (the presets), 0 for one that never blots, more for a leaky
+  one. It scales the drop the ball can hold and what it gathers, and leaves
+  the line as it is: `Pen.flow` was the only control, and it darkens the
+  line with the blobs.
 - `tools/fingerprint.py`: whether a change has altered the picture. It
   draws a suite of small drawings (every family of medium, sticks and tilt,
   width profiles and flat ends, shading, tools bare and in the hand, a
@@ -75,6 +118,47 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A ballpoint line is as strong at its ends as in its middle. Where the
+  ball landed and lifted, the paper under it had only the passes of the
+  path's first and last points, so a line faded over the width of the
+  ball, from half strength at the ends of its path, and a dot had a tenth
+  of the ink of a line. The paper the ball meets where it lands and where
+  it lifts (where its surface comes down to the peaks of the tooth: all of
+  it pressed firmly, a narrower disc pressed lightly) now gets what it
+  would have had if the ball had rolled onto it and off it, as a stick's
+  does (`put_down`). Measured on a line of `pens.BLUE` that never blots,
+  the ink of each column of pixels against the middle's: half a pixel
+  behind where it lands, 0.28 at a pressure of 0.2 and 0.31 at 1.0, now
+  1.04 and 1.03; half a pixel past where it lifts, 0.28 and 0.29, now
+  1.03 and 0.98; a pixel and a half behind, 0.01 and 0.03, now 1.05 and
+  1.04 (the round of the ball, as wide as the line). A dot is 0.91 to 1.0
+  as dark as a line, from 0.09. Hatching a sheet with a ballpoint takes
+  0.32 s, from 0.29 s.
+- Black ballpoint ink bronzes a red between copper and violet, as a real
+  one does, where it bronzed grey: its ink was one neutral colour, which
+  absorbs all light alike, and so mirrors it alike. `pens.BLACK` is a blend
+  of dyes whose violet bronzes. Eight layers of it hatched at 0.7, under a
+  lamp overhead, add (0.0221, 0.0072, 0.0106) of light in linear RGB, from
+  (0.0221, 0.0221, 0.0199): a chroma of 41 at a hue of 1 degree, from 6.
+  The sheet keeps for each pixel the colour of its ink's bronze, mixed as
+  the inks are (`Sheet.ink` has three more parts, after the volume: linear
+  RGB, times the volume); blue and red ink bronze as they did.
+- A light ballpoint line blots as lightly as it is drawn. The ball left all
+  the ink it had gathered where it landed and where the line turned, so a
+  faint line had blobs as big and as dark as a firm one's, and they showed
+  on the light side of a hatching. The paper now takes of that drop as much
+  as the ball bears on it, the share of a firm pass the line lays there
+  (`BALL_LIGHT`, 0.15, at the lightest touch, all of it at full pressure);
+  the rest stays on the rim, for the next turn. Measured on a pen that
+  lands with a drop, the ink within five pixels of where the line lands,
+  more than at its end: 3.5 times as much again at a pressure of 0.15, 1.4
+  times at 0.5 and 0.86 at 0.9; now 0.98, 0.82 and 0.79. Over eighty lines,
+  the darkest start is 1.87 times as dark as its line at 0.15 (2.60
+  before), 1.49 at 0.5 (1.63) and 1.36 at 0.9 (1.38), and a fifth of the
+  starts of the faintest lines are a third darker than their line (a third
+  of them before; at 0.9 hardly any, as before). A square corner after 140
+  pixels at 0.5 has 1.38 times the ink of the line beyond it, from 1.58; at
+  full pressure blobs are as they were.
 - The blender shows. `pencils.BLENDER` was a coloured pencil without
   colour, and pressed hard it made little difference: one firm layer of it
   over three layers of red at 0.5 on cartridge paper left two fifths of the

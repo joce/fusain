@@ -13,8 +13,10 @@ wax crayon, on which it skids.
 
 Bottom. Left: a zigzag and a scribble to and fro: the ball gathers ink as it
 rolls and leaves a blob where the line turns sharply, and now and then where
-it starts. Middle: five lines pressed from lightest to firmest, and a soft
-pencil shaded lightly over them: the ball presses a groove, which the pencil
+it starts. The scribble is written with a pen in the hand that has just drawn
+the long line under it, so it lands with the ink it gathered there.
+Middle: five lines pressed from lightest to firmest, and a soft pencil
+shaded lightly over them: the ball presses a groove, which the pencil
 skips where the pen was firm. Right: loops written with a pen that has run
 dry (``Sheet.indent``) and shaded over: the grooves stay white.
 """
@@ -28,7 +30,7 @@ from pathlib import Path
 import numpy as np
 from murex import Polyline, write_png
 
-from fusain import Sheet, crayons, papers, pencils, pens, tools
+from fusain import HeldPen, Sheet, crayons, papers, pencils, pens, tools
 
 
 def lines(sheet: Sheet) -> None:
@@ -85,8 +87,10 @@ def blobs(sheet: Sheet) -> None:
     """Sharp turns, where the ball leaves the ink it has gathered."""
     zigzag = [(40 + 25 * j, 372 if j % 2 else 322) for j in range(11)]
     sheet.stroke(Polyline(zigzag), pens.BLUE, 0.5)
+    pen = HeldPen(pens.BLACK)  # (it lands with what the line under gathered)
+    sheet.stroke([(40, 444), (290, 446)], pen, 0.45)
     scribble = [(40 + 250 * (j % 2), 396 + 5 * j) for j in range(8)]
-    sheet.stroke(Polyline(scribble), pens.BLACK, 0.45)
+    sheet.stroke(Polyline(scribble), pen, 0.45)
 
 
 def grooves(sheet: Sheet) -> None:

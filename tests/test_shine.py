@@ -378,15 +378,18 @@ def test_what_is_drawn_over_heavy_ink_hides_its_bronze():
     assert _bronze(sheet) < 0.1 * bronze
 
 
-def test_blue_ink_bronzes_copper_and_red_ink_green():
-    """Ink mirrors most the light it absorbs most."""
+def test_blue_ink_bronzes_copper_red_ink_green_and_black_ink_violet():
+    """Ink mirrors most the light it absorbs most; a black ink is a blend of
+    dyes, and mirrors as its violet does, copper with a violet cast. (It
+    bronzed grey: red, green and blue within a tenth of one another.)"""
     blue = _added(_hatched(pens.BLUE, 8), OVERHEAD)
     assert blue[0] > 1.3 * blue[1] > 3 * blue[2] > 0.0
     assert blue[0] > 0.01
     red = _added(_hatched(pens.RED, 8), OVERHEAD)
     assert red[1] > 0.01 and red[2] > 0.01 and red[0] < 0.1 * red[1]
     black = _added(_hatched(pens.BLACK, 8), OVERHEAD)
-    assert black.min() > 0.8 * black.max() > 0.008
+    assert black[0] > 1.5 * black[2] > 1.5 * 1.2 * black[1] > 0.0
+    assert black[0] > 0.01
 
 
 def test_the_bronze_shows_with_the_lamp_overhead_and_hardly_otherwise():

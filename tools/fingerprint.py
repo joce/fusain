@@ -3,8 +3,9 @@ code changes the picture.
 
 A fixed suite of drawings (every family of medium, sticks and tilt, width
 profiles and flat ends, shading, tools bare and in the hand, a knife, a
-blender, fixative, a stylus, ballpoint pens, on several papers and seeds) is
-drawn on small sheets, and every array a sheet, a smudger and a stick hold
+blender, fixative, a stylus, ballpoint pens bare and in the hand, on several
+papers and seeds) is drawn on small sheets, and every array a sheet, a
+smudger, a stick and a pen in the hand hold
 is hashed, with the numbers the calls return and the rendered images. The
 hashes are compared with those recorded in ``tools/fingerprint.json``::
 
@@ -41,6 +42,7 @@ import numpy as np
 from numba import njit
 
 from fusain import (
+    HeldPen,
     Paper,
     Sheet,
     Smudger,
@@ -326,7 +328,9 @@ def surface(trace: Trace, sheet: Sheet) -> None:
 
 
 def ballpoint(trace: Trace, sheet: Sheet) -> None:
-    """Ballpoint pens: lines, blobs at the turns, hatching, skidding, grooves."""
+    """Ballpoint pens: lines, blobs at the turns, hatching, skidding, grooves;
+    a pen that never blots, and one in the hand, which lands with what it
+    gathered."""
     for row, pressure in enumerate((0.05, 0.3, 0.6, 1.0)):
         trace.got(sheet.stroke(_wave(10.0 + 7.0 * row), pens.BLUE, pressure))
     for row in range(6):  # (now and then a line starts with a blob)
@@ -339,6 +343,12 @@ def ballpoint(trace: Trace, sheet: Sheet) -> None:
     trace.got(
         sheet.stroke(_wave(30.0), pens.BLUE, lambda u: np.where(u % 0.25 < 0.1, 0, 0.8))
     )
+    trace.got(sheet.stroke(_wave(62.0, 66.0), pens.RED.with_(blots=0.0), 0.9))
+    held = HeldPen(pens.BLACK.with_(blots=1.5))
+    for row in range(3):  # (a long line, then lines and turns that it lands on)
+        trace.got(sheet.stroke(_zigzag(70, 4 + 9 * row, 160, 10 + 9 * row, row), held))
+    trace.got(sheet.shade((100, 66, 168, 90), held, 0.7, angle=80))
+    trace.state("pen", held)
     trace.got(sheet.shade((8, 66, 90, 122), pens.BLUE, 0.6))
     trace.got(sheet.shade((8, 66, 90, 122), pens.BLUE, 0.9, angle=-40))
     for _ in range(4):  # (heavy ink bronzes)

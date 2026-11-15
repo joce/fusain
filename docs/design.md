@@ -52,7 +52,7 @@ Per pixel, all `float32`:
 | `dent` | How far the paper has been indented here: the depth of a groove below the peaks of the tooth, in depths of the tooth of a paper of depth 1. By a stylus, and by the ball of a pen. |
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
 | `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. |
-| `ink`, `inked` | The ink of pens, a stain in the paper under everything else: K, S and volume, and the share of the pixel it is on. Allocated when a pen first draws. |
+| `ink`, `inked` | The ink of pens, a stain in the paper under everything else: K, S and volume, and the colour it bronzes (linear RGB, times the volume); and the share of the pixel it is on. Allocated when a pen first draws. |
 | `under`, `loose` | Pigment lying on what the paper holds: K, S, volume and sheen, in two layers. `loose` is on top; what a new pass covers goes `under`. Most of it is dust. |
 | `bonded` | Of what lies in each of the two layers, the volume that is not loose dust, of three kinds: `fixed`, dust that is set, by fixative or under a film; `film`, what a waxy medium laid on the dust and not on the paper; `paste`, what the paper does not hold of a greasy medium. |
 
@@ -421,7 +421,11 @@ raking one; it is added to what the pigment sends back.
   bronze half-way and a single line not at all; what is drawn over the ink
   hides it. Ink mirrors most the light it absorbs most (as the square of its
   absorption), so the bronze of blue ink is copper and that of red ink
-  green. A film of dry ink is smooth and its lobe narrow: the bronze shows
+  green; but a black ink is a blend of dyes, and bronzes as the one that
+  bronzes most, its violet: a pen can say the colour (`Pen.bronze`), and
+  `pens.BLACK` bronzes a red between copper and violet, where it bronzed
+  grey. Each pixel keeps the colour of its ink's bronze, mixed as the inks
+  are. A film of dry ink is smooth and its lobe narrow: the bronze shows
   with the lamp near overhead, a tenth as much under the default lamp and
   not under a raking one.
 
@@ -472,7 +476,10 @@ kernel and its own layer:
 
 - **The ball** is hard and small, so even a light touch reaches the valleys of
   the tooth: a light line is still a line, not specks on the peaks. It is
-  round, so a light line is narrower than the ball.
+  round, so a light line is narrower than the ball. Where it lands and
+  lifts, the paper it meets gets what it would have had if the ball had
+  rolled onto it and off it, as under a stick: a line is as strong at its
+  ends as in its middle, and a dot as dark as a line.
 - **The ink** is laid at a rate that does not depend on the tooth or on how
   much is there already, only on the pressure (the lightest touch lays about a
   seventh of the firmest) and on a slow unevenness along the line. It is a
@@ -491,15 +498,33 @@ kernel and its own layer:
 - **The ball gathers ink.** The share `BALL_GATHER` of what it lays stays on
   its rim as it rolls, up to a drop (`BALL_BLOB`), and a turn brings it
   round onto the paper: nearly all of it when the line turns back on itself,
-  about two thirds at a square corner, a little at a time on a gentle curve, where
-  it does not show. So a sharp turn leaves a blob, the bigger the longer the
-  line before it (after 140 pixels, half as much ink again at a square
-  corner as on the line beyond it). A pen put to the paper has some on it
-  already and leaves it where it lands: mostly next to none, so that one
-  line in four or so starts with a dot that shows and a few with a blob. A
-  blob is a round dot a little wider than the line, thickest at its middle,
-  and it is ink the pen lost like the rest: `stroke` returns it with the
-  line.
+  about two thirds at a square corner, a little at a time on a gentle curve,
+  where it does not show. A drop too small to show stays on the rim until
+  the line has turned far enough to bring round one that would
+  (`BALL_SHOWS`): a gently curving line had a drop at every point, which
+  took a third of the pen's time. The paper takes of what comes round as
+  much as the ball bears on it (the share of a firm pass the line lays
+  there, from `BALL_LIGHT` to all of it), and the rest stays on the rim
+  for the next turn: a light line blots as lightly as it is drawn, where it
+  had blobs as big and as dark as a firm line's. So a sharp turn leaves a
+  blob, the bigger the longer the line before it (after 140 pixels at a
+  pressure of 0.5, a third as much ink again at a square corner as on the
+  line beyond it). A blob is a round dot a little wider than the line,
+  thickest at its middle, and it is ink the pen lost like the rest:
+  `stroke` returns it with the line. How much a pen gathers is its own
+  (`Pen.blots`: 0 for one that never blots, more than 1 for a leaky one),
+  apart from how freely its ink flows (`Pen.flow`, which darkens the line
+  too).
+- **A pen put to the paper has ink on its ball already.** A pen in the
+  hand (`HeldPen`) lands with what its last line gathered and did not
+  leave: of that, where it lands, a share drawn at random comes round,
+  mostly next to none, so that one line in four or so starts with a dot
+  that would show on a firm line, and a few with a blob; the rest comes
+  round at the first sharp turn. It keeps the ink on its ball until it is
+  wiped; what it gathered is on the paper or on its ball. A bare `Pen` is
+  picked up afresh for every line: it lands with as much as such a share
+  of the most its ball holds, which it leaves where it lands, and takes
+  away what it gathers.
 - **Heavy ink bronzes** under a lamp: see Rendering.
 
 ## Sketch of the API
