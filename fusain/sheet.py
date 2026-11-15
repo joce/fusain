@@ -8,7 +8,7 @@ from collections.abc import Iterator, Sequence
 import numpy as np
 from murex import spectral as sp
 from murex import spline, write_png
-from murex.spline import Path, Profile
+from murex.spline import Profile
 
 from . import _engine as eng
 from . import hatching
@@ -913,25 +913,6 @@ class Sheet:
         write_png(path, np.round(img * 255).astype(np.uint8))
 
 
-class _Dense(Path):
-    """A path that works out its dense points once: sampling it and asking
-    its length each work them out otherwise. It relies on what murex says a
-    path is: a subclass of :class:`murex.Path` that gives its dense points
-    in ``_dense``, from which ``sample`` and ``length`` are worked out.
-    (murex is to do this itself; this class goes when fusain asks for that
-    release.)"""
-
-    def __init__(self, path: Path):
-        self.n_knots = path.n_knots
-        self.__path = path
-        self.__points: tuple[np.ndarray, np.ndarray] | None = None
-
-    def _dense(self) -> tuple[np.ndarray, np.ndarray]:
-        if self.__points is None:
-            self.__points = self.__path._dense()
-        return self.__points
-
-
 Ends = str | tuple[str, str]
 #: How a stroke ends: in the outline of its tip, or cut square across.
 ENDS = ("round", "flat")
@@ -956,7 +937,7 @@ def _sample(path, width: Profile):
     how far apart they would be on a path long enough (the pace of the tip
     where it lands and lifts). ValueError unless the width is a finite
     number of pixels above 0."""
-    line = _Dense(spline.as_path(path))
+    line = spline.as_path(path)
     if isinstance(width, int | float | np.number):
         narrowest = float(width)
     else:  # (look at it every pixel or so, to find the narrowest)

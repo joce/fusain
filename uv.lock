@@ -242,7 +242,7 @@ tox = [
 
 [package.metadata]
 requires-dist = [
-    { name = "murex", specifier = ">=0.1.1" },
+    { name = "murex", specifier = ">=0.2.0" },
     { name = "numba", specifier = ">=0.57" },
     { name = "numpy", specifier = ">=1.24" },
 ]
@@ -313,16 +313,16 @@ wheels = [
 
 [[package]]
 name = "murex"
-version = "0.1.1"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numba" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c8/d5/be92a3f673115edfea5ccf0ec81b9f5ccf1be298f73d1a1a962b90110699/murex-0.1.1.tar.gz", hash = "sha256:8f5c080916209dd59b10b19fbc26adff04c449cfa0b8d79f00cf74cddd44bf9f", size = 90578, upload-time = "2026-11-12T20:18:00.016Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/31/38/c273e8e8e454586a9fdd169b29f6b62d1c4882d9d584db1fcd95e6a1e071/murex-0.2.0.tar.gz", hash = "sha256:6184ed0707d661dea4407422104c2e7f5855f991bfae9aaacc5b2106a98fba10", size = 105306, upload-time = "2026-11-15T03:58:59.86Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1c/6d/617c5c1bb8b23a99358c7e9fe87c0004472e252dd08d1e88c76cbb213345/murex-0.1.1-py3-none-any.whl", hash = "sha256:8001ed93d4bc64ac3ccca7d49b00357717cc485fe4bae1d6fc892989f3e864c3", size = 25983, upload-time = "2026-11-12T20:17:58.707Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/4b/db41277e64c7bb6426069a509b235e439ac60cd2812508a8721dfe966692/murex-0.2.0-py3-none-any.whl", hash = "sha256:c290f1ee73cfd99f7754b8f87a6d4f89476cac1f2eae8394eca43f644d30678e", size = 31630, upload-time = "2026-11-15T03:58:58.458Z" },
 ]
 
 [[package]]

@@ -10,7 +10,7 @@ import pytest
 
 from fusain import Sheet, charcoal, pastels, pencils
 from fusain import _engine as eng
-from fusain.sheet import _Dense, _sample
+from fusain.sheet import _sample
 
 
 def test_the_streaks_of_a_pass_are_those_worked_out_one_by_one():
@@ -105,11 +105,6 @@ def test_a_path_sampled_once_gives_what_it_gave():
     points = [(3.0, 4.0), (40.0, 9.0), (55.0, 40.0), (20.0, 60.0)]
     for path in (points, points[:2], points[:1], spline.as_path(points)):
         plain = spline.as_path(path)
-        once = _Dense(spline.as_path(path))
-        assert once.n_knots == plain.n_knots and once.length == plain.length
-        for got, want in zip(once.sample(0.75), plain.sample(0.75), strict=True):
-            assert np.array_equal(got, want)
-        assert once._dense()[0] is once._dense()[0]  # (worked out once)
         _, sampled, u, _, spacing, pace = _sample(path, 6.0)
         want = plain.sample(0.75)
         assert np.array_equal(sampled, want[0]) and np.array_equal(u, want[2])
