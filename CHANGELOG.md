@@ -8,6 +8,218 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A smudge or an erase is as strong where it lands and lifts as in its
+  middle. A tool rubbed only as it slid on, so the paper under it where it
+  landed or lifted got from nothing (at its back) to a full pass (at its
+  front), as a stroke did before its ends were made full. One pass of a
+  kneaded eraser 14 wide at 0.7 over a 4B shading took 0.20 of the pigment
+  at the ends of its path and 0.05 five pixels outside them, where it took
+  0.31 further on (a vinyl eraser 0.73 and 0.23, against 0.91); a dab took
+  0.07 (0.32), and a pass three pixels long 0.11 (0.46). A stump stirred up
+  0.71 and 0.64 of the dust underneath at the two ends of its path, 0.24
+  and 0.13 five pixels outside them and 0.37 under a dab, against 0.91
+  further on. Where a tool lands and where it lifts, the paper it covers is
+  now rubbed as though the tool had slid onto it from behind and off it
+  ahead (`put_tool`, as `put_down` for a tip): an eraser takes 0.30 to 0.31
+  (0.91) everywhere under its pass, out to the outline of the tool, and
+  under a dab; a stump stirs 0.89 to 0.92, and 0.94 under a dab. A dab is
+  one pass of the tool on the paper under it. Every picture that rubs or
+  erases changes where the passes end; a short dab of an eraser takes four
+  times what it took. `Sheet.rub` stops its passes half a width of the tool
+  short of the edge of the area, as `Sheet.shade` does its round strokes,
+  so that an area is rubbed up to its edge and no further (with a steady
+  hand, a vinyl eraser takes 0.99 of what it takes in the middle just
+  inside the edge and nothing outside it; run to the edge, full passes took
+  as much from the half width outside the area as from inside, and the
+  passes as they were before, two fifths, with a tenth less just inside).
+
+- A rubbed join of two colours is a passage from one to the other, a tool
+  no longer carries dust far, and a stump that has been rubbed for long in
+  a tone draws on bare paper for longer than it did. Where it bore, a stump
+  or a finger lifted about two thirds of the loose dust into its load in a
+  pass and laid the load back over several of its widths, so a finger
+  rubbed to and fro across the join of an orange and a blue pastel left one
+  even mix over all that was rubbed, and a finger rubbed over house fronts
+  and a sky brought the fronts all over the sky. A real finger smears most
+  of the dust within a fraction of its width. Four things changed:
+  - What a stump or a finger lifts into its load in a pass is little
+    (`tools.STUMP`: `lift_loose` 0.04, from 1.5; `tools.FINGER`: 0.03, from
+    1.2). Most of what they move is the dust on their face, taken up as
+    strongly as they smear and laid back within a few pixels (`SPREAD`, 16
+    times over each width of the tool, from 4), so that it goes a fraction
+    of the tool's width.
+  - A tool holds only so much: `Tool.holds`, a volume for each pixel of its
+    face (1.5 for a stump, 1 for a finger; by default any amount, as an
+    eraser or a chamois does). It lifts the less the fuller it is and
+    nothing once full, so it fills slowly: a stump takes a fifth of what it
+    holds in one pass through 32 of its widths of vine charcoal, half in a
+    rub of an area and over nine tenths in three; a heavy pastel fills it
+    in one rub.
+  - A tool gives the dust of its load to bare tooth only. `Tool.lay` (0.3
+    for a stump, 0.25 for a finger) is the share of its load it lays over
+    each of its widths on bare paper; paper that carries pigment takes
+    less, and none once the pigment covers its tooth. So a full stump
+    leaves a tone as it is however often it goes over it, a finger loaded
+    with orange and rubbed over blue leaves it blue (a two-thousandth of
+    orange on top), and still a loaded stump tones bare paper, and dirties
+    what bare paper it strays onto at the edge of a tone. Paste sticks to
+    any paper.
+  - What is on the face of a tool is shared out, in each step, among the
+    pixels under it by how the tool bears on each, whatever order they come
+    in. (It was laid pixel by pixel from what was left, so the rows first
+    visited got more: the trail of a stump was lopsided.)
+
+  Measured, a finger 22 wide rubbed at 0.6 to and fro across the join, in
+  18 passes five widths long: the share of the blue in what lies on top was
+  0.42 one width of the finger left of the join and 0.57 one width right of
+  it (0.38 and 0.61 at two widths), and is now 0.19 and 0.81 (0.08 and
+  0.92); the passage from a quarter of the blue to three quarters was 5.5
+  widths, all that was rubbed, and is 1.4. After 72 passes it was 5.7 widths
+  and is 1.8; with oil pastels at 0.8 and 36 passes, 5.7 and 2.6. A stump
+  20 wide dragged at 0.7 out of vine charcoal onto bare paper dragged out
+  what 20 columns of the tone hold, two fifths of it within one width of the
+  edge, and its trail three and a half widths out was a seventh of the tone
+  (luminance 0.75 against the paper's); it drags out what 8 columns hold,
+  two thirds of it within one width, and the trail there is a fiftieth of
+  the tone (0.965). A stump rubbed all over a patch of 6B and then drawn
+  over bare paper laid 0.59 of the paper's tone where it landed, 0.92 eight
+  of its widths on, 0.98 after 16 and 0.99 after 24; it lays 0.72, 0.83,
+  0.91 and 0.96 (loaded on vine charcoal: 0.38, 0.78, 0.94 and 0.98; now
+  0.63, 0.80, 0.90 and 0.955). What fusain-6lr fixed still holds: eight rubs
+  of a stump in the hand over 8B leave 0.993 of the graphite (0.996) and the
+  tone as it was; where the passes of a rub land the pigment is within 2.2%
+  of what it is further on; a finger evens vine charcoal laid with the side
+  of the stick to 0.31 of its grain (0.43). A bare stump, which is clean
+  at the start of every rub and takes away what it holds at the end, takes
+  4.7% in those eight rubs (2.7%): one load each, and a stump now holds
+  half as much again as it used to carry off such a tone.
+
+- A stump or a finger lays its dust on paper and hardly on wax. A tool laid
+  what it carried on any pixel, waxed or not, so charcoal smeared across a
+  crayon line greyed it, where a stick of charcoal drawn over the same line
+  skips it. Wax is now as slick to the dust a tool brings as to a dry
+  stick: where it covers the tooth (a film `COVERS` thick, on the covered
+  share of the pixel) it takes `RESIST_DRY` less of the dust in the tool's
+  load and on its face, and of the graphite the tool pushes along; what it
+  refuses stays on the tool, which carries it on. Paste sticks: what a
+  finger carries of an oil pastel is laid on wax as on paper. A stump
+  loaded with vine charcoal and dragged across one firm line of white
+  crayon left on the line 0.97 of what it left on the paper either side,
+  and the line came out as grey as that paper (0.71 of the paper's tone
+  where it was crossed, 0.97 beside the stump's way); it now leaves 0.13,
+  and the line is at 0.94 where the paper either side is at 0.76 to 0.79.
+  A loaded finger rubbed across three firm layers of crayon left on them
+  what it leaves at the same place on a bare sheet, whatever it carried;
+  loaded with charcoal, soft pastel or 8B it leaves a tenth of that (0.08
+  to 0.10: what the bare flecks between the crayon take), and loaded with
+  oil pastel a half (0.47: its paste). Nothing is lost: the sheet and the
+  tool hold between them what they held. A tool also slides on a film of wax that lies over dust, and
+  on dust that is set: it stirs up and lifts the loose dust underneath only
+  as far as those do not cover it. (It took the dust up through the film,
+  and the wax no longer taking it back, a finger would have carried more
+  off a patch of charcoal with crayon over it than off the charcoal alone:
+  it shifts 0.37 as much within the patch, from 0.50, and of pastel 0.73,
+  from 0.91.) Where the film is thin the wax is not yet slick, to a tool as
+  to a stick: a white crayon line over rubbed charcoal still greys where a
+  stump crosses it (0.60 of the paper's tone to 0.40, from 0.33).
+
+- The wax of an oil pastel goes with the paste a finger smears. The sheet
+  counts the wax of a pixel wherever it lies there, and a tool moved the
+  paste without it: the smear had no wax and was not slick, the place it
+  left kept all of it, and what an eraser took off with the held pigment
+  was counted nowhere. The wax now goes with what it is in (what the paper
+  holds, the films and the paste): a tool that takes a share of those takes
+  that share of the wax, carries it (`Smudger.wax`) and lays it back with
+  its paste. Three firm layers of oil pastel smeared out over bare paper
+  with a finger: the smear, 0.9 thick, held no wax and holds 0.300 of its
+  volume (the pastel's is 0.3); what was left where the pastel was laid
+  held 0.46 of its volume and holds 0.298; the wax on the sheet and on the
+  finger together was 15 short of the 5,695 laid and is all there. Charcoal
+  shaded over the smear took a fifth of what bare paper takes (the tooth
+  was full) and takes a fortieth (it is slick).
+
+### Examples
+
+- Every image is regenerated with the changes above. Seven are unchanged to
+  the byte (`farm`, `papers`, `pencils`, `shine`, `stilllife`, `strokes`,
+  `tips`: nothing in them is rubbed or erased), and `macaw.png` and
+  `ballpoint.png` but for the ends of their eraser's and knife's passes.
+- `colour.png`, `fixative.png` and `crayons.png`: the join of orange and
+  blue rubbed with a finger is a passage from the one to the other, where
+  it was one olive. As colour differences (CIE 1976, of which 2 can just
+  be seen), two widths of the finger left of the join the patch of
+  `fixative.png` was 65 from the orange and 78 from the blue and is 38 and
+  89; two widths right of it, 72 and 72, now 87 and 46 (the two colours
+  are 108 apart, and the middle of the passage, their mix, is about 70
+  from both). `examples/colour.py` rubs each row of its join both ways, as
+  the other two do: rubbed one way by turns, the rows showed as stripes,
+  now that a pass carries a colour less than a width. In the lower half of
+  `fixative.png`, the join that was fixed before it was rubbed stays a
+  join, where the finger blurred it half-way.
+- `charcoal.png`: the stump's trail out of each tone is shorter (vine
+  charcoal: 0.50 of the paper's tone 16 pixels past the edge of the tone,
+  now 0.84, and 0.69 at 50 pixels, now 0.95). `examples/charcoal.py` loads
+  its stump on a scrap of the medium before it draws down the bare paper:
+  a stump fills slowly, and one more pass through the tone no longer loads
+  it. The lines it draws are about as dark as they were, and last longer
+  (along them, against the paper's tone, compressed charcoal: 0.43, 0.81,
+  0.79, 0.91, now 0.46, 0.77, 0.66, 0.81; vine: 0.78, 0.95, 0.95, 0.98, now
+  0.85, 0.95, 0.92, 0.96; 4B: 0.91, 0.98, 0.99, 0.99, now 0.89, 0.96, 0.94,
+  0.97).
+- `crayons.png`, third row: where the stump crosses the crayon lines over
+  rubbed charcoal it lays less dust on them, and they still grey (see
+  Fixed).
+- `deco.png`: `examples/deco.py` rubbed with a clean stump or finger at
+  every stroke, which used to carry off much of the charcoal and now
+  carries off little, and its finger went through the bank of cloud and on
+  over the clear sky: under the new rubbing the picture came out darker
+  (the clear sky 200 to 189 of 255, the faces turned from the sun 69 to 61)
+  and the clear sky in bands (the means of 16 pixel blocks against the 80
+  pixels around them spread 5.2, for 3.8). It now holds each tool through
+  its passage, rubs the clear sky and the cloud with a finger each, lightly
+  and in passes further apart, and lays a little less charcoal under what
+  it rubs. Measured against the image as it was: clear sky, level 200.0 and
+  now 200.1, the spread of 16 pixel blocks against their surroundings 3.8
+  and 4.3, the grain from pixel to pixel 12.7 and 12.0; faces turned from
+  the sun, level 68.7 and 68.8, grain 31.2 and 31.3; heavy cloud 38.3 and
+  38.6; cast shadows 103 and 104; lit faces 174.5 and 174.1; the blocks
+  round about 63 and 66; the whole sheet 120.8 and 119.5.
+- `lake.png`: four fifths of its pixels change, a seventh of the sheet by
+  over 8 levels (3.8 levels on average), and it is a little nearer the
+  values it is drawn to: its mean distance from them goes from 9.5 levels
+  to 9.1 (seen through a blur, from 6.6 to 6.3), and the share of the sheet
+  over 20 levels too dark from 2.2% to 1.1% (too light: 5.9%, as before).
+  The lights its erasers lift are full to their ends, and the crests of
+  its ridges show a little more against bodies rubbed as evenly.
+- `broadway.png`: a fifth of its pixels change, few by much (1.8% by over 8
+  levels): the sky and the far end of the street, which are rubbed. Its
+  finger is still pulled down from the sky over the far fronts and wiped
+  before each pull: rubbed to and fro over both, it now takes the open sky
+  a tenth of the way to the colour of the fronts where it took it four
+  tenths, and the pulls three hundredths (seven).
+
+### Added
+
+- `Smudger.wax`: the volume of wax in what a tool in the hand carries.
+- `Tool.holds`: how much pigment a tool holds when it is full, for each
+  pixel of its face (see Fixed).
+
+### Changed
+
+- `rub_stroke` (in `fusain._engine`) takes the tool as one array ([radius,
+  `lift_loose`, `lift_held`, `lay`, `press`, `smear`, `scrape`]) and the
+  pace at which it lands and lifts; what the tool does as it slides one
+  step is `rub_under`. What a tool carries has a sixth part, the wax that
+  came with it. A rub takes a tenth to a sixth longer than it did (the
+  landing and the lifting, mostly).
+- `tools.STUMP`, `tools.TORTILLON` and `tools.FINGER` lift less into their
+  load, hold only so much and lay it on bare paper (see Fixed). Any `Tool`
+  with a `lay` now gives the dust it carries to bare tooth only: one of
+  one's own that lifts strongly takes from a tone what it lifts and gives
+  none of it back there, as `tools.CHAMOIS` does.
+
+### Fixed
+
 - The side of a stick laid flat bears evenly across its length
   (fusain-bqe). Every tip held on its side marked an ellipse across the
   stroke, so the band of a stick of charcoal or pastel fell off from its

@@ -80,14 +80,21 @@ def test_a_stump_drags_dust_along_and_out_onto_bare_paper():
     sheet = _drawn(charcoal.VINE)
     before = _total(sheet)
     assert sheet.pigment()[:, 200:].max() == 0
+    # (what lies in a column of the tone, over the width of the stump)
+    tone = float(sheet.pigment()[60:80, 60:160].sum(dtype=np.float64)) / 100
     carried = sheet.smudge(ALONG, tools.STUMP, 0.7, 20.0)
-    beyond = float(sheet.pigment()[60:80, 200:].sum())
-    assert beyond > 0.01 * before
-    # fading as the stump runs out of dust
-    assert (
-        sheet.pigment()[60:80, 200:225].sum()
-        > 1.7 * sheet.pigment()[60:80, 235:260].sum()
-    )
+    # what lies past the edge of the patch (at 180), column by column
+    out = sheet.pigment()[60:80, 180:].astype(np.float64).sum(axis=0)
+    # it drags out what eight columns of the tone hold (it was twenty, a
+    # width of the stump), and most of that within one width of the edge
+    # (it was two fifths): the dust is on its face, and soon laid back
+    assert 5 * tone < out.sum() < 12 * tone
+    assert out[:20].sum() > 0.6 * out.sum()
+    # a small share goes further, fading as the stump runs out of dust
+    assert out[20:45].sum() > 2.5 * out[55:80].sum()
+    # to a faint trail (it was a seventh of the tone 70 pixels out), which
+    # goes on to the end of the pass
+    assert 0.01 * tone < out[62:78].mean() < 0.05 * tone
     # only where the stump went, and only forwards
     assert (
         sheet.pigment()[:55, 200:].max() == 0 and sheet.pigment()[85:, 200:].max() == 0
@@ -119,6 +126,7 @@ def test_a_stump_leaves_streaks_along_its_way():
     sheet = _drawn(charcoal.COMPRESSED)
     sheet.smudge(ALONG, tools.STUMP, 0.7, 20.0)
     trail = sheet.pigment()[62:78, 200:225].astype(np.float64)
+    trail /= trail.mean(axis=0)  # (without its fading, which is steep there)
     across = np.abs(np.diff(trail, axis=0)).mean()
     along = np.abs(np.diff(trail, axis=1)).mean()
     assert across > 2 * along
@@ -131,7 +139,9 @@ def test_what_the_paper_holds_is_hardly_dragged_out():
         sheet.smudge(ALONG, tools.STUMP, 0.7, 20.0)
         return float(sheet.pigment()[:, 200:].sum()) / before
 
-    assert dragged_out(charcoal.VINE, 14.0) > 3 * dragged_out(pencils.B4, 7.0)
+    # (past one width of the stump from the edge, where little of either
+    # goes: three times as much of the charcoal)
+    assert dragged_out(charcoal.VINE, 14.0) > 2.5 * dragged_out(pencils.B4, 7.0)
 
 
 def _grain_kept(medium, tool=tools.STUMP, fixed=False) -> float:
@@ -151,8 +161,9 @@ def test_a_stump_evens_a_soft_pencil_and_hardly_a_hard_one():
     assert kept == sorted(kept, reverse=True)
     assert kept[0] > 0.75 and kept[2] < 0.65 and kept[3] < 0.45
     # no other pigment that the paper holds does: a coloured pencil keeps
-    # its grain as a hard lead does
-    assert _grain_kept(pencils.coloured("#c0392b")) > 0.75
+    # its grain nearly as a hard lead does (a little of it was its crumbs,
+    # which the stump wipes off the wax and does not lay back on it)
+    assert _grain_kept(pencils.coloured("#c0392b")) > 0.7
 
 
 def test_rubbing_a_pencil_tone_again_smooths_it_without_wiping_it_away():
@@ -251,6 +262,72 @@ def test_what_is_left_is_still_that_pigment():
 
 
 # --------------------------------------------------------------------------
+# the ends of a pass
+
+
+def _share_taken(tool, path, of="pigment") -> np.ndarray:
+    """The share that one pass of ``tool`` along ``path`` takes of what lay
+    under the middle of its way (along y = 70), per column: of the pigment,
+    or of the layer of dust underneath, which a stump stirs up."""
+    medium, width = (charcoal.VINE, 14.0) if of == "under" else (pencils.B4, 7.0)
+    sheet = _drawn(medium, width)
+
+    def there() -> np.ndarray:
+        volume = sheet.under[..., IV] if of == "under" else sheet.pigment()
+        return volume[68:72].astype(np.float64).sum(axis=0)
+
+    before = there()
+    rub = sheet.smudge if of == "under" else sheet.erase
+    rub(path, tool, 0.7, 14.0)
+    return np.where(before > 0, 1.0 - there() / np.maximum(before, 1e-9), 0.0)
+
+
+@pytest.mark.parametrize(
+    "tool, of",
+    [(tools.ERASER, "pigment"), (tools.KNEADED, "pigment"), (tools.STUMP, "under")],
+    ids=["vinyl eraser", "kneaded eraser", "stump"],
+)
+def test_a_pass_is_as_strong_where_it_lands_and_lifts_as_in_its_middle(tool, of):
+    # a tool used to rub only as it slid on, so the paper under it where it
+    # landed or lifted got from nothing (at its back) to a full pass (at its
+    # front): at the ends of its path a kneaded eraser took two thirds of
+    # what it took further on, and five pixels outside them a sixth
+    taken = _share_taken(tool, [(60, 70), (140, 70)], of)
+    middle = float(taken[90:110].mean())
+    assert middle > 0.25
+    for x in (55, 60, 67, 133, 140, 145):
+        assert float(taken[x - 1 : x + 2].mean()) == pytest.approx(middle, rel=0.06)
+    # round: out to the outline of the tool, which is 14 wide, and no further
+    assert taken[50] == 0 and taken[149] == 0
+
+
+@pytest.mark.parametrize(
+    "tool, of",
+    [(tools.ERASER, "pigment"), (tools.KNEADED, "pigment"), (tools.STUMP, "under")],
+    ids=["vinyl eraser", "kneaded eraser", "stump"],
+)
+def test_a_dab_is_one_pass_of_the_tool_on_the_paper_under_it(tool, of):
+    # (a dab of a kneaded eraser used to take a quarter of what a pass
+    # takes, and a pass three pixels long a third)
+    middle = float(_share_taken(tool, [(60, 70), (140, 70)], of)[90:110].mean())
+    for path in ([(100, 70)], [(100, 70), (103, 70)]):
+        taken = _share_taken(tool, path, of)
+        assert float(taken[99:102].mean()) == pytest.approx(middle, rel=0.06)
+        assert not taken[:91].any() and not taken[112:].any()
+
+
+def test_what_a_tool_takes_where_it_lands_and_lifts_is_on_it():
+    sheet = _drawn(charcoal.VINE)
+    total = _total(sheet)
+    taken = sheet.erase([(100, 70)], tools.KNEADED, 0.8, 20.0)
+    taken += sheet.smudge([(60, 100), (64, 100)], tools.FINGER, 0.8)
+    taken += sheet.smudge([(170, 40), (200, 44)], tools.STUMP, 0.8, 20.0)  # and off
+    assert taken > 0
+    np.testing.assert_allclose(_total(sheet) + taken, total, rtol=1e-5)
+    assert min(float(layer.min()) for layer in _layers(sheet)) >= 0
+
+
+# --------------------------------------------------------------------------
 # tools
 
 
@@ -318,6 +395,8 @@ def test_no_pressure_moves_nothing():
         ({"press": -0.1}, "press must be"),
         ({"smear": float("inf")}, "smear must be"),
         ({"width": 0}, "width must be"),
+        ({"holds": 0.0}, "holds must be"),
+        ({"holds": float("nan")}, "holds must be"),
     ],
 )
 def test_a_tool_checks_its_numbers(changes, message):
@@ -330,6 +409,9 @@ def test_a_tool_checks_its_numbers(changes, message):
         12.0,
         "rag",
     )
+    # a tool holds any amount unless it says how much
+    assert mine.holds == float("inf") == tools.KNEADED.holds == tools.CHAMOIS.holds
+    assert tools.STUMP.holds > tools.FINGER.holds > 0
 
 
 @pytest.mark.parametrize(

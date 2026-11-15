@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 import pytest
-from murex import Polyline
+from murex import Polyline, spline
 
 from fusain import Paper, Sheet, Stick, charcoal, papers, pastels, pencils, pens
 
@@ -128,6 +128,65 @@ def test_a_flat_end_cuts_only_near_its_end():
     # and the start is still cut square
     assert not flat.pigment()[34:47, :40].any()
     _laid_is_on_the_sheet(flat, laid)
+
+
+def _hooked(leg: float, width: float = 24.0) -> tuple[np.ndarray, float]:
+    """What a flat stroke along y = 80 leaves that turns square up at x = 200
+    for ``leg`` pixels, and what a pass of it lays under its middle."""
+    sheet = _sheet()
+    path = Polyline(np.array([(60.0, 80.0), (200.0, 80.0), (200.0, 80.0 - leg)]))
+    laid = sheet.stroke(path, PASTEL, 0.6, width, ends="flat")
+    _laid_is_on_the_sheet(sheet, laid)
+    drawn = sheet.pigment().astype(np.float64)
+    return drawn, float(drawn[78:82, 100:140].mean())
+
+
+@pytest.mark.parametrize("leg", [12.0, 16.0, 40.0])
+def test_a_flat_end_after_a_hard_bend_is_cut_square_across_the_last_leg(leg):
+    # the path turns a square corner and ends, half a tip or more further on
+    drawn, full = _hooked(leg)
+    end = int(80 - leg)
+    assert not drawn[:end].any()  # nothing past the line across its end
+    # and full strength up to it, over the middle half of the stroke
+    assert drawn[end : end + 2, 194:206].mean() == pytest.approx(full, rel=0.1)
+
+
+def test_a_flat_end_is_cut_square_where_the_path_curves_sharply_into_it():
+    # a smooth path that bends through a right angle over its last tip's
+    # length: the cut is across the way the stroke is going where it ends
+    for width in (24.0, 12.0):
+        sheet = _sheet()
+        path = spline.as_path([(60, 80), (170, 80), (196, 72), (204, 48)])
+        points = path.sample(0.5)[0]
+        going = points[-1] - points[-2]
+        going /= np.hypot(*going)
+        assert going[1] < -0.9  # (upwards by then)
+        laid = sheet.stroke(path, PASTEL, 0.6, width, ends="flat")
+        _laid_is_on_the_sheet(sheet, laid)
+        drawn = sheet.pigment().astype(np.float64)
+        ys, xs = np.nonzero(drawn)
+        off = np.stack([xs + 0.5 - points[-1][0], ys + 0.5 - points[-1][1]])
+        ahead, aside = going @ off, np.array([-going[1], going[0]]) @ off
+        assert ahead.max() < 0.75
+        last = (ahead > -2.5) & (ahead < -0.5) & (np.abs(aside) < width / 4.0)
+        full = float(drawn[78:82, 100:140].mean())
+        assert drawn[ys[last], xs[last]].mean() == pytest.approx(full, rel=0.12)
+
+
+@pytest.mark.xfail(
+    reason="a flat end on a hook shorter than half the tip cuts into the stroke"
+)
+@pytest.mark.parametrize("leg", [2.0, 4.0, 6.0])
+def test_a_flat_end_on_a_short_hook_leaves_the_stroke_before_it_whole(leg):
+    # the path ends a few pixels after a square corner: the cut is taken
+    # across those few pixels, and the tip is cut by it for a whole tip's
+    # length before the end, so the stroke before the corner loses part of
+    # the half of it that lies past that line (it should be as strong as
+    # the other half, or stronger, being on the inside of the bend)
+    drawn, _ = _hooked(leg)
+    before = slice(188, 196)  # 4 to 12 pixels before the corner
+    inside, outside = drawn[70:78, before].mean(), drawn[82:90, before].mean()
+    assert inside > 0.95 * outside
 
 
 @pytest.mark.parametrize("length", [1e-3, 1e-6])

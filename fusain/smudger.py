@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ._engine import HELD, IV, LOOSE
+from ._engine import CARRIED, IC, IV, LOOSE
 from .stick import _width
 from .tools import Tool
 
@@ -12,9 +12,10 @@ from .tools import Tool
 class Smudger:
     """A stump, a finger or a chamois as it is held: the tool, and the
     pigment it has picked up, which it keeps from one pass to the next until
-    it is cleaned. A stump that is loaded gives back about as much as it
-    takes, so it blends a tone without wearing it away, and it draws a pale
-    tone of its own on bare paper::
+    it is cleaned. A stump fills slowly as it is rubbed in a tone and takes
+    nothing more once it is full, so it blends a tone without wearing it
+    away; and bare paper takes the dust off it, so it draws a tone of its
+    own there::
 
         from fusain import Sheet, Smudger, pencils, tools
         stump = Smudger(tools.STUMP)
@@ -32,9 +33,10 @@ class Smudger:
     width:
         Its width in pixels (by default the tool's own).
 
-    ``load`` is the volume of pigment it carries now. An eraser can be held
-    this way too: it lays nothing back, so its load is what it has taken off
-    since it was cleaned.
+    ``load`` is the volume of pigment it carries now, and ``wax`` the volume
+    of wax that came with it (a finger that smears an oil pastel takes its
+    wax along with its paste). An eraser can be held this way too: it lays
+    nothing back, so its load is what it has taken off since it was cleaned.
     """
 
     def __init__(self, tool: Tool, width: float | None = None):
@@ -44,8 +46,9 @@ class Smudger:
         self.width = _width("width", tool.width if width is None else width)
         # what it has lifted, the dust on its face and the held graphite it
         # is pushing along, each packed as the dust of a sheet is, with the
-        # volume of it that is paste after
-        self._carried = np.zeros((3, HELD))
+        # volume of it that is paste and the volume of wax that came with it
+        # after
+        self._carried = np.zeros((3, CARRIED))
 
     @property
     def load(self) -> float:
@@ -57,6 +60,12 @@ class Smudger:
         """What it carries, packed as the dust of a sheet is: [K (N bands),
         S, volume, sheen]."""
         return self._carried[:, :LOOSE].sum(axis=0)
+
+    @property
+    def wax(self) -> float:
+        """Volume of wax in what it carries: what came off the sheet with
+        the film, the paste and the held pigment it took."""
+        return float(self._carried[:, IC].sum())
 
     def clean(self) -> float:
         """Clean it (a stump on sandpaper, a finger on a rag): it carries

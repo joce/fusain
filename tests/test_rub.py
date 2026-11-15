@@ -48,6 +48,26 @@ def test_only_the_area_is_rubbed():
     assert not np.array_equal(before[:, 40:140], after[:, 40:140])
 
 
+def test_an_area_is_rubbed_up_to_its_edge_and_no_further():
+    # the passes of a rub are full to their ends, out to the outline of the
+    # tool, and stop half a width short of the edge of the area. (Run to the
+    # edge, they took as much from the half width of the eraser outside the
+    # area as from inside it; and before they were full to their ends, two
+    # fifths of that, and a tenth less just inside the edge than further in)
+    sheet, _ = _drawn(pencils.B4, 6.0)
+    before = sheet.pigment().astype(np.float64)
+    sheet.rub((100, 60, 200, 140), tools.ERASER, 0.8, hand=0.0)
+    after = sheet.pigment().astype(np.float64)
+    there = np.maximum(before[80:120].sum(axis=0), 1e-9)
+    taken = 1.0 - after[80:120].sum(axis=0) / there
+    middle = float(taken[130:170].mean())
+    assert middle > 0.9
+    for inside in (slice(100, 104), slice(196, 200)):
+        assert float(taken[inside].mean()) == pytest.approx(middle, rel=0.05)
+    assert np.array_equal(before[80:120, :100], after[80:120, :100])
+    assert np.array_equal(before[80:120, 200:], after[80:120, 200:])
+
+
 def test_the_pressure_may_be_a_map_and_the_tool_is_lifted_where_it_is_nothing():
     # (and it keeps what it carries while it is lifted)
     sheet = Sheet(300, 200, paper=papers.CARTRIDGE, seed=1)
@@ -64,8 +84,10 @@ def test_the_pressure_may_be_a_map_and_the_tool_is_lifted_where_it_is_nothing():
     assert not np.array_equal(before[:, 40:90], after[:, 40:90])
     assert np.array_equal(before[:, 115:230], after[:, 115:230])
     # lifted over the gap, the stump lands on the bare paper beyond with the
-    # dust it carries, and tones it
-    assert after[:, 245:].sum() > 0.03 * laid
+    # dust it carries, and tones it (lightly: it has gone over little of the
+    # tone, and a stump fills slowly; it used to bring a twentieth of what
+    # was laid)
+    assert after[:, 245:].sum() > 0.008 * laid
     assert _total(sheet) + taken == pytest.approx(laid, rel=1e-5)
 
 

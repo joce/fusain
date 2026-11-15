@@ -168,7 +168,7 @@ sheet.erase([(100, 170), (500, 170)], tools.KNEADED)   # lifts it
 sheet.rub((100, 60, 600, 200), tools.FINGER)           # blends a whole area
 
 stump = Smudger(tools.STUMP)             # a stump in the hand keeps what it picks up
-sheet.rub((100, 60, 300, 200), stump)    # loaded, it gives back as much as it takes
+sheet.rub((100, 60, 300, 200), stump)    # it fills, and then takes no more
 sheet.smudge([(620, 80), (760, 120)], stump)           # and draws a pale tone on bare paper
 stump.clean()
 ```
@@ -178,17 +178,28 @@ leaves the tone lighter where it lands and takes away what it lifted. A
 `Smudger` is a tool in the hand, as a `Stick` is a medium in the hand: it
 keeps its load from one pass to the next, so a tone can be worked over and
 over without being worn away, and a stump loaded on a dark patch (of the
-drawing, or of a scrap sheet) draws soft greys of its own. One load fades
-out over twenty or so widths of the tool. `Sheet.rub` carries the load from
-pass to pass either way.
+drawing, or of a scrap sheet) draws soft greys of its own. A stump fills
+slowly, over a hundred widths and more of rubbing, and holds only so much
+(`Tool.holds`); it gives its dust to bare paper, which takes it readily (one
+load tones thirty or so widths of the tool), and not to paper that carries a
+tone already, so a full stump leaves a tone as it is and dirties the bare
+paper it strays onto. `Sheet.rub` carries the load from pass to pass either
+way.
+
+Most of what a stump or a finger moves goes a short way, a fraction of the
+tool's width: it is the dust on its face, taken up and laid back as it
+goes. So a tone is evened where it lies, a finger rubbed to and fro across
+the join of two pastels leaves a passage from one colour to the other a
+width or two of the finger wide, and a stump dragged out of a tone leaves
+most of what it drags within its own width of the edge, then a faint trail.
 
 ![Charcoal, a stump and erasers](examples/output/charcoal.png)
 
 Vine charcoal, compressed charcoal and a 4B pencil on Ingres paper. Across all
 three, from the top: untouched; a stump dragged through and out onto the bare
-paper, then loaded in the tone once more and drawn down the bare paper beside
-it; a finger rubbed to and fro; a kneaded eraser pulled through three times;
-a vinyl eraser pulled through once.
+paper, then loaded on a scrap of the same medium and drawn down the bare paper
+beside it; a finger rubbed to and fro; a kneaded eraser pulled through three
+times; a vinyl eraser pulled through once.
 
 ```python
 from fusain import pastels
@@ -234,7 +245,8 @@ before the red was laid, a vinyl eraser rubbed to and fro (it slides on the
 burnished half) and two lines scratched with a knife. Bottom, soft pastels
 on grey laid paper.
 Left: light colours over a dark blue ground, which they cover. Middle: orange
-and blue side by side, and the same with the join rubbed with a finger. Right:
+and blue side by side, and the same with the join rubbed with a finger, into
+a passage from the one to the other. Right:
 white pastel over black, and lines drawn with a hard pastel.
 
 ```python

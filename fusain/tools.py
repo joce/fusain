@@ -5,6 +5,10 @@ Used with :meth:`fusain.Sheet.smudge`, :meth:`fusain.Sheet.erase` and
 paper; a :class:`fusain.Smudger` is one in the hand, which keeps what it
 picks up.
 
+A stump or a finger lays what it carries on paper, and hardly on wax, which
+is as slick to the dust on a tool as to a dry stick: charcoal smeared across
+a crayon line leaves it clean. (The paste of an oil pastel sticks.)
+
 An eraser takes a dry medium off as far as it lifts. Wax holds: a light
 layer of coloured pencil comes off a vinyl eraser fairly well, a dense one
 badly, a burnished one hardly, and a kneaded eraser barely touches any of
@@ -24,21 +28,31 @@ class Tool:
     Parameters
     ----------
     lift_loose, lift_held:
-        How strongly it lifts the dust, and the pigment the paper holds
-        (0 = not at all; 1 takes about two thirds in a pass; more, nearly
-        all). Dust that is set, by fixative or under a film of wax, and the
-        film itself come off as what the paper holds does.
+        How strongly it lifts the dust, and the pigment the paper holds,
+        into its load (0 = not at all; 1 takes about two thirds in a pass;
+        more, nearly all). Dust that is set, by fixative or under a film of
+        wax, and the film itself come off as what the paper holds does. An
+        eraser lifts strongly. A stump or a finger lifts little: most of
+        what they move is the dust on their face (``smear``), which goes a
+        fraction of their width; what is lifted is carried far, and fills
+        the tool slowly (``holds``).
     lay:
-        The share of what it carries that it lays back down over each of its
-        own widths (0 for an eraser, which keeps it).
+        The share of its load that it lays back down over each of its own
+        widths on bare paper (0 for an eraser, which keeps it). Bare tooth
+        takes the dust off a loaded tool readily; paper that carries pigment
+        takes less, and none once the pigment covers its tooth. So a loaded
+        stump tones bare paper, and leaves a tone as it is. (The paste of an
+        oil pastel sticks to any paper.)
     press:
         How strongly it presses the dust into the paper, where it is held.
     smear:
         How strongly it pushes the dust on the high ground into the low,
-        which greys the white specks of the paper. A tool that smears (1 or
-        more) also moves the paste of an oil pastel as it moves dust; one
-        that does not, an eraser, lifts paste only as it lifts what the
-        paper holds.
+        which greys the white specks of the paper, and spreads it from grain
+        to grain: it takes the dust onto its face and lays it back within a
+        fraction of its width, which evens a tone and blends two colours
+        where they meet. A tool that smears (1 or more) also moves the
+        paste of an oil pastel as it moves dust; one that does not, an
+        eraser, lifts paste only as it lifts what the paper holds.
     width:
         Its usual width in pixels.
     name:
@@ -49,6 +63,13 @@ class Tool:
         pastel it lifts the less the thicker the wax is, and hardly
         anything once the wax is polished. A tool that scrapes (grit, a
         blade) takes that share of what the wax would have kept from it.
+    holds:
+        How much pigment it holds when it is full, as a volume for each
+        pixel of its face (a firm layer of charcoal is about half a unit
+        thick). It lifts the less the fuller it is, and nothing once full,
+        so a stump or a finger fills slowly as it is rubbed in a tone and
+        then leaves the tone alone. By default a tool holds whatever it
+        takes, as an eraser does.
     """
 
     lift_loose: float
@@ -59,6 +80,7 @@ class Tool:
     width: float = 12.0
     name: str = ""
     scrape: float = 0.0
+    holds: float = math.inf
 
     def __post_init__(self):
         for field in ("lift_loose", "lift_held", "lay", "press", "smear"):
@@ -69,6 +91,8 @@ class Tool:
             raise ValueError(f"lay is a share, at most 1, got {self.lay!r}")
         if not (math.isfinite(self.scrape) and 0 <= self.scrape <= 1):
             raise ValueError(f"scrape must be between 0 and 1, got {self.scrape!r}")
+        if not self.holds > 0:
+            raise ValueError(f"holds must be above 0, got {self.holds!r}")
         if not (math.isfinite(self.width) and self.width > 0):
             raise ValueError(
                 f"width must be a number of pixels above 0: {self.width!r}"
@@ -79,12 +103,19 @@ class Tool:
         return replace(self, **changes)
 
 
-#: A paper stump: firm and pointed. It drags the dust along and rubs it in.
-STUMP = Tool(1.5, 0.02, lay=0.7, press=0.5, smear=2.0, width=10.0, name="stump")
+#: A paper stump: firm and pointed. It smears the dust along and rubs it in.
+#: A little of the dust stays in it at each pass: rubbed for long in a tone
+#: it is full, and tones bare paper for thirty or so of its widths.
+STUMP = Tool(
+    0.04, 0.02, lay=0.3, press=0.5, smear=2.0, width=10.0, name="stump", holds=1.5
+)
 #: A tortillon: a small, hard stump for details.
 TORTILLON = STUMP.with_(width=5.0, name="tortillon")
-#: A finger: broad and soft. It spreads the dust and presses it in.
-FINGER = Tool(1.2, 0.01, lay=0.5, press=0.8, smear=2.5, width=22.0, name="finger")
+#: A finger: broad and soft. It spreads the dust and presses it in; it
+#: fills more slowly than a stump, and holds less for its size.
+FINGER = Tool(
+    0.03, 0.01, lay=0.25, press=0.8, smear=2.5, width=22.0, name="finger", holds=1.0
+)
 #: A chamois: it wipes most of the dust away and spreads the rest thin.
 CHAMOIS = Tool(1.6, 0.04, lay=0.12, press=0.1, smear=1.0, width=30.0, name="chamois")
 #: A kneaded eraser: it lifts the dust, and a little of what is held; so

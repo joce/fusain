@@ -180,8 +180,8 @@ class Sheet:
     def paste(self) -> np.ndarray:
         """Volume of paste in each of the two layers, (H, W, 2): what the
         paper does not hold of a greasy medium (an oil pastel), and the dust
-        it was laid over and took up. A finger smears it; a kneaded eraser
-        does not lift it. A view, as :attr:`fixed` is."""
+        it was laid over and took up. A finger smears it, with its wax; a
+        kneaded eraser does not lift it. A view, as :attr:`fixed` is."""
         return self.bonded[..., PASTE]
 
     def pigment(self) -> np.ndarray:
@@ -703,17 +703,25 @@ class Sheet:
         along ``path``: it drags the dust along, presses some of it into the
         paper and pushes it into the valleys of the tooth, which softens and
         greys what was drawn. What the paper holds hardly moves, but for
-        graphite, which slides.
+        graphite, which slides. Most of the dust goes a fraction of the
+        tool's width, so two colours rubbed across where they meet blend
+        into a passage a width or two wide; the small share that the tool
+        lifts into its load goes far.
 
         ``path`` and ``pressure`` are as for :meth:`stroke`; ``width`` is the
-        width of the tool in pixels (by default the tool's own).
+        width of the tool in pixels (by default the tool's own). The pass is
+        as strong where the tool lands and where it lifts as in its middle,
+        out to the outline of the tool, and a single point is a dab: one
+        pass of the tool on the paper under it.
 
         A bare tool is clean when it lands, so it leaves the paper lighter
         where it does, and it takes away what it still carries when it lifts.
         A :class:`fusain.Smudger` is a tool in the hand: it lands with what
-        it picked up before and keeps what it carries, so that once loaded it
-        gives back about as much as it takes, and tones bare paper. It has
-        its own width, so it takes none.
+        it picked up before and keeps what it carries. It fills slowly and
+        takes nothing more once it is full, so it leaves a tone as dark as
+        it was; and bare paper takes the dust off it readily, so a loaded
+        stump draws a tone of its own there (and leaves some wherever it
+        strays off a tone). It has its own width, so it takes none.
 
         Returns the volume of pigment the tool took off the sheet, less what
         it laid back: for a bare tool, what was left on it at the end; for a
@@ -744,7 +752,10 @@ class Sheet:
 
         ``path`` and ``pressure`` are as for :meth:`stroke`; ``width`` is the
         width of the eraser in pixels (by default the tool's own; a
-        :class:`fusain.Smudger` has its own and takes none).
+        :class:`fusain.Smudger` has its own and takes none). The eraser
+        takes as much where it lands and where it lifts as in the middle of
+        the pass, and a single point is a dab, which takes one pass's worth
+        off the paper under it.
 
         Returns the volume of pigment taken off the sheet.
         """
@@ -770,12 +781,14 @@ class Sheet:
         :meth:`shade`; ``width`` the width of the tool (by default its own);
         ``angle`` the direction of the passes in degrees; ``spacing`` how far
         apart they are (by default half a width); ``hand`` how unsteady the
-        hand is.
+        hand is. The area is rubbed up to its edge, as strongly there as in
+        its middle, and no further but for the unsteadiness of the hand:
+        the passes stop half a width of the tool short of it.
 
         The tool keeps what it carries from one pass to the next, and over
         the stretches where the pressure is nothing and it is lifted: it
-        lands with it, so past the first few widths it gives back about as
-        much as it takes, and the tone is blended, not worn away. A bare
+        lands with it, takes less the fuller it is and nothing once it is
+        full, and the tone is blended, not worn away. A bare
         tool starts clean and takes away what it carries at the end; a
         :class:`fusain.Smudger` (which has its own width and takes none)
         starts with what it picked up before, and keeps it.
@@ -793,7 +806,12 @@ class Sheet:
         gap = 0.5 * width if spacing is None else spacing
         _check_hatching(width, gap, angle, hand)
         passes = []  # (what each pass presses, worked out before any rubs)
-        strokes = hatching.strokes(outline, angle, width, gap, hand, self._rng)
+        # (a pass is as strong where the tool lands and lifts as in its
+        # middle, out to the outline of the tool: each stops half a width
+        # short of the edge of the area, which keeps the tool inside it)
+        strokes = hatching.strokes(
+            outline, angle, width, gap, hand, self._rng, inset=(0.5, 0.5)
+        )
         for k, (path, firm, _) in enumerate(strokes):
             path = path[::-1] if k % 2 else path  # to and fro
             along = hatching.bearing(pressure, path, firm, hand)
@@ -848,7 +866,11 @@ class Sheet:
         """One pass of a tool in the hand along ``path``. Returns the volume
         it took off the sheet, less what it laid back."""
         tool, width = smudger.tool, smudger.width
-        xs, ys, bearing, steps = self._sampled(path, pressure, width)
+        line, points, u, knot, spacing, pace = _sample(path, width)
+        bearing = _profile("pressure", pressure, line, u, knot)
+        xs, ys, bearing, steps = eng.as_kernel_arrays(
+            points, np.clip(bearing, 0.0, 1.0), spacing
+        )
         before = smudger.load
         eng.rub_stroke(
             self.cover,
@@ -861,14 +883,23 @@ class Sheet:
             ys,
             bearing,
             steps,
-            0.5 * float(width),
-            float(tool.lift_loose),
-            float(tool.lift_held),
-            float(tool.lay),
-            float(tool.press),
-            float(tool.smear),
-            float(tool.scrape),
+            np.array(
+                [
+                    0.5 * float(width),
+                    tool.lift_loose,
+                    tool.lift_held,
+                    tool.lay,
+                    tool.press,
+                    tool.smear,
+                    tool.scrape,
+                    tool.holds,
+                ],
+                dtype=np.float64,
+            ),
             smudger._carried,
+            # (where it lands and lifts, the tool goes at its own pace,
+            # however short the pass)
+            spacing if spacing >= 0.5 * pace else pace,
             int(self._rng.integers(1 << 31)),
         )
         return smudger.load - before

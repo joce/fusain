@@ -39,7 +39,7 @@ from pathlib import Path
 import numpy as np
 from murex import filters, noise, write_png
 
-from fusain import Medium, Sheet, charcoal, papers, tools
+from fusain import Medium, Sheet, Smudger, charcoal, papers, tools
 
 WIDTH, HEIGHT = 900, 1300
 #: Charcoal paper: a felted tooth with no pattern to it, on a thick, soft
@@ -402,10 +402,11 @@ def sky_tone(x: np.ndarray, y: np.ndarray) -> np.ndarray:
 
 @dataclass(frozen=True)
 class Touch:
-    """What a stroke is made with and how: a stick of charcoal or a tool
-    that rubs, how firmly it is pressed and how wide its tip is."""
+    """What a stroke is made with and how: a stick of charcoal, a tool that
+    rubs or such a tool as it is held through a passage, how firmly it is
+    pressed and how wide its tip is."""
 
-    what: Medium | tools.Tool
+    what: Medium | tools.Tool | Smudger
     firm: float
     width: float
 
@@ -535,12 +536,15 @@ class Scene:
         Where ``image`` cuts it short (the edge of a face), it stops square,
         so that its round end does not lie over the face next to it."""
         start, end = np.asarray(start, dtype=float), np.asarray(end, dtype=float)
-        rubs = isinstance(touch.what, tools.Tool)
+        rubs = isinstance(touch.what, tools.Tool | Smudger)
         for a, b in runs(image, start, end):
             if np.hypot(*(b - a)) < 1.0:
                 continue
             bearing = along(image, a, b, touch.firm, 0.0 if rubs else 0.3)
             path = wavering(a, b, self.rng, wobble)
+            if isinstance(touch.what, Smudger):
+                self.sheet.smudge(path, touch.what, bearing)
+                continue
             if isinstance(touch.what, tools.Tool):
                 self.sheet.smudge(path, touch.what, bearing, touch.width)
                 continue
@@ -552,11 +556,16 @@ class Scene:
 
     def strokes(self, lines, touch: Touch, image, reach: float, wobble: float):
         """A stroke along each of ``lines``, in pieces no longer than about
-        ``reach``, no two pressed quite alike."""
+        ``reach``, no two pressed quite alike. A tool that rubs is held
+        through all of them: it keeps what it picks up from one stroke to
+        the next, and once it is full it leaves the tone as dark as it was."""
+        what = touch.what
+        if isinstance(what, tools.Tool):
+            what = Smudger(what, touch.width)
         for start, end in lines:
             for a, b in pieces(start, end, self.rng, reach):
                 firm = touch.firm * self.rng.uniform(0.85, 1.1)
-                self.stroke(a, b, Touch(touch.what, firm, touch.width), image, wobble)
+                self.stroke(a, b, Touch(what, firm, touch.width), image, wobble)
 
     def hatch(self, face: Face, way, image, touch: Touch, gap: float) -> None:
         """Strokes over a face, along ``way`` on it and ``gap`` pixels apart,
@@ -587,16 +596,23 @@ class Scene:
 def draw_sky(scene: Scene) -> None:
     """The sky: vine charcoal in long strokes on the slant of the clouds and
     across it, rubbed smooth with a finger; then compressed charcoal where
-    the cloud is heavy, left as it falls."""
+    the cloud is heavy, left as it falls. The clear sky and the bank of
+    cloud are rubbed apart, each with a finger of its own, lightly: a finger
+    that has been through the cloud is full of its charcoal, and the bare
+    tooth of a pale tone takes it readily."""
     dark, open_ = scene.air, scene.sky
     heavy = np.clip((dark - 0.5) * 2.2, 0.0, 1.0)
-    scene.sweep(SLANT, 3.4, vine(1.0, 8.0), (0.06 + 0.8 * dark) * inset(open_, 1))
-    scene.sweep(SLANT - 28.0, 3.4, vine(1.0, 8.0), 0.8 * dark * inset(open_, 1))
-    scene.sweep(-12.0, 9.0, finger(0.8), inset(open_, 3))
-    scene.sweep(100.0, 9.0, finger(0.8), inset(open_, 3))
-    scene.sweep(SLANT + 5.0, 3.3, black(0.75, 5.0), heavy * inset(open_, 1))
-    scene.sweep(SLANT - 6.0, 9.0, stump(0.4, 12.0), heavy * inset(open_, 3))
-    scene.sweep(SLANT + 8.0, 5.0, black(0.7, 4.0), heavy**2 * inset(open_, 1))
+    first = np.maximum(0.85 * dark - 0.04, 0.0)
+    scene.sweep(SLANT, 3.4, vine(1.0, 8.0), first * inset(open_, 1))
+    scene.sweep(SLANT - 28.0, 3.4, vine(1.0, 8.0), 0.74 * dark * inset(open_, 1))
+    clear = 1.0 - filters.smoothstep(0.5, 0.7, dark)
+    cloud = filters.smoothstep(0.45, 0.6, dark)
+    for part in (clear, cloud):
+        scene.sweep(-12.0, 14.0, finger(0.25), part * inset(open_, 3))
+        scene.sweep(100.0, 14.0, finger(0.25), part * inset(open_, 3))
+    scene.sweep(SLANT + 5.0, 3.3, black(0.75, 5.0), 0.82 * heavy * inset(open_, 1))
+    scene.sweep(SLANT - 6.0, 9.0, stump(0.08, 12.0), heavy * inset(open_, 3))
+    scene.sweep(SLANT + 8.0, 5.0, black(0.7, 4.0), 0.95 * heavy**2 * inset(open_, 1))
     lift_out(scene)
 
 
@@ -625,12 +641,12 @@ def draw_shade(scene: Scene) -> None:
         if face.lit:
             continue
         for _ in range(2):
-            scene.hatch(face, UP, inset(mine, 2), vine(0.9, 6.0), 3.4)
+            scene.hatch(face, UP, inset(mine, 2), vine(0.75, 6.0), 3.4)
         if face.wide > 24.0:
-            scene.hatch(face, UP, inset(mine, 4), stump(0.7), 5.0)
-        scene.hatch(face, UP, high * inset(mine, 1), black(0.8, 4.0), 3.2)
+            scene.hatch(face, UP, inset(mine, 4), stump(0.42), 5.0)
+        scene.hatch(face, UP, high * inset(mine, 1), black(0.72, 4.0), 3.2)
         if face.wide > 24.0:
-            scene.hatch(face, UP, high * inset(mine, 4), stump(0.5), 6.0)
+            scene.hatch(face, UP, high * inset(mine, 4), stump(0.3), 6.0)
 
 
 def draw_cast(scene: Scene) -> None:
@@ -642,10 +658,10 @@ def draw_cast(scene: Scene) -> None:
         near = face.box.part == "block"
         mine = mine * scene.hidden * (scene.margin if near else 1.0)
         fall = (SUN[1], SUN[2])
-        scene.hatch(face, fall, mine, black(0.48 if near else 0.45, 3.4), 3.0)
-        scene.hatch(face, UP, inset(mine, 1), vine(0.5, 4.0), 4.0)
+        scene.hatch(face, fall, mine, black(0.41 if near else 0.39, 3.4), 3.0)
+        scene.hatch(face, UP, inset(mine, 1), vine(0.43, 4.0), 4.0)
         if face.wide > 12.0:
-            scene.hatch(face, fall, inset(mine, 3), stump(0.35, 7.0), 5.0)
+            scene.hatch(face, fall, inset(mine, 3), stump(0.21, 7.0), 5.0)
 
 
 def draw_haze(scene: Scene) -> None:
@@ -655,7 +671,7 @@ def draw_haze(scene: Scene) -> None:
     for face, mine in scene.faces("tier", "bay"):
         if face.lit:
             mine = mine * (1.0 - scene.hidden)
-            scene.hatch(face, UP, haze * inset(mine, 2), vine(0.8, 5.0), 4.0)
+            scene.hatch(face, UP, haze * inset(mine, 2), vine(0.72, 5.0), 4.0)
             scene.hatch(
                 face, UP, (haze > 0.05) * inset(mine, 5), finger(0.6, 14.0), 9.0
             )
@@ -668,12 +684,12 @@ def draw_blocks(scene: Scene) -> None:
     for face, mine in scene.faces("block"):
         if face.lit:
             mine = mine * (1.0 - scene.hidden)
-            scene.hatch(face, UP, inset(mine, 2) * scene.margin, vine(0.8, 5.0), 4.0)
-            scene.hatch(face, UP, inset(mine, 4), stump(0.6), 7.0)
+            scene.hatch(face, UP, inset(mine, 2) * scene.margin, vine(0.78, 5.0), 4.0)
+            scene.hatch(face, UP, inset(mine, 4), stump(0.45), 7.0)
             continue
-        scene.hatch(face, UP, scene.gloom * inset(mine, 2), black(0.7, 5.0), 3.6)
-        scene.hatch(face, UP, inset(mine, 4), stump(0.6), 6.0)
-        scene.hatch(face, UP, scene.gloom * inset(mine, 1), black(0.7, 4.0), 3.2)
+        scene.hatch(face, UP, scene.gloom * inset(mine, 2), black(0.68, 5.0), 3.6)
+        scene.hatch(face, UP, inset(mine, 4), stump(0.45), 6.0)
+        scene.hatch(face, UP, scene.gloom * inset(mine, 1), black(0.68, 4.0), 3.2)
     rim = filters.max_filter(scene.sky, 3) * filters.max_filter(scene.block * 1.0, 3)
     for box in scene.boxes[scene.blocks :]:
         (x0, y0, _), (x1, y1, top) = box.lo, box.hi

@@ -16,8 +16,9 @@ point of a knife, back to the paper in both.
 
 Bottom, soft pastels on grey paper. Left: strokes of light colours over a
 dark blue ground, which they cover. Middle: orange and blue side by side,
-then the same with the join rubbed with a finger. Right: a white pastel over a
-black one, and lines drawn with a hard pastel.
+then the same with the join rubbed with a finger, to and fro, into a passage
+from the one to the other. Right: a white pastel over a black one, and lines
+drawn with a hard pastel.
 """
 
 from __future__ import annotations
@@ -92,7 +93,8 @@ def soft_pastels() -> Sheet:
     for k in range(18):  # to and fro across the join
         y = 166 + 6 * k
         ends = [(415, y), (525, y + 2)]
-        sheet.smudge(ends if k % 2 else ends[::-1], finger, 0.6)
+        sheet.smudge(ends, finger, 0.6)
+        sheet.smudge(ends[::-1], finger, 0.6)
     for angle in (30, -35):
         sheet.shade((660, 30, 860, 150), pastels.soft("#161616"), 0.7, 14, angle)
     sheet.shade((700, 55, 820, 125), pastels.soft("#f4f1ea"), 0.8, 14, 60)
