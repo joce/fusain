@@ -25,7 +25,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   under a dab; a stump stirs 0.89 to 0.92, and 0.94 under a dab. A dab is
   one pass of the tool on the paper under it. Every picture that rubs or
   erases changes where the passes end; a short dab of an eraser takes four
-  times what it took.
+  times what it took. `Sheet.rub` stops its passes half a width of the tool
+  short of the edge of the area, as `Sheet.shade` does its round strokes,
+  so that an area is rubbed up to its edge and no further (with a steady
+  hand, a vinyl eraser takes 0.99 of what it takes in the middle just
+  inside the edge and nothing outside it; run to the edge, full passes took
+  as much from the half width outside the area as from inside, and the
+  passes as they were before, two fifths, with a tenth less just inside).
 
 - A rubbed join of two colours is a passage from one to the other, and a
   tool no longer carries dust far. Where it bore, a stump or a finger lifted
@@ -140,20 +146,19 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   0.98).
 - `crayons.png`, third row: where the stump crosses the crayon lines over
   rubbed charcoal it lays less dust on them, and they still grey (see
-  Fixed); the finger's rub of the charcoal ends in the outline of the
-  finger at the edges of the patch.
+  Fixed); the finger's rub of the charcoal keeps to the patch.
 - `deco.png` is darker where it is rubbed: it rubs with a clean stump or
   finger at every stroke, which used to carry off much of the charcoal and
   now carries off little. The clear sky goes from 201 to 192 (of 255), the
   heavy cloud from 38 to 35 and smoother, the faces turned from the sun
   from 69 to 62, the cast shadows from 103 to 93, the lit faces from 175 to
   171: light still stands against dark all the way up.
-- `lake.png`: four fifths of its pixels change, a fifth of them by over 8
-  levels, and it is a little nearer the values it is drawn to: its mean
-  distance from them goes from 9.7 levels to 9.1 (seen through a blur, from
-  6.7 to 6.2), and the share of the sheet over 20 levels too dark from 2.7%
-  to 1.6% (too light: 5.4%, as before). The lights its erasers lift are
-  full to their ends.
+- `lake.png`: four fifths of its pixels change, nearly a quarter of the
+  sheet by over 8 levels, and it is a little nearer the values it is drawn
+  to: its mean distance from them goes from 9.7 levels to 9.2 (seen through
+  a blur, from 6.7 to 6.2), and the share of the sheet over 20 levels too
+  dark from 2.7% to 1.6% (too light: 5.3%, from 5.4%). The lights its
+  erasers lift are full to their ends.
 - `broadway.png`: a fifth of its pixels change, few by much (1.6% by over 8
   levels): the sky and the far end of the street, which are rubbed. Its
   finger is still pulled down from the sky over the far fronts and wiped

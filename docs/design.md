@@ -259,7 +259,7 @@ A tool is a tip plus, usually, a medium.
   be rubbed again and again without wearing away, no pass leaves a pale dot
   where it lands, and a stump loaded on a dark patch draws a pale tone on
   bare paper, a little at a time (half of one load goes in twenty or so of
-  its widths, and it still tones a hundred widths on). A bare
+  its widths, and it is all but spent after a hundred). A bare
   `Tool` is clean each time it is put to the paper and takes away what it
   still carries; `Sheet.rub` keeps the load across its own passes either
   way.
@@ -479,7 +479,10 @@ Like a tip, a tool is put down with all of its face bearing and lifted the
 same way: where it lands and where it lifts, the paper it covers is rubbed
 as though the tool had slid onto it from behind and off it ahead, so a pass
 is as strong at its ends as in its middle, out to the outline of the tool,
-and a dab is one pass of the tool on the paper under it. (It used to rub
+and a dab is one pass of the tool on the paper under it. The passes of a
+rub of an area therefore stop half a width of the tool short of its edge,
+as the strokes of a shading do, and the area is rubbed up to its edge and
+no further. (It used to rub
 only as it slid on: at the ends of its path an eraser took two thirds of
 what it took further on, and a dab a quarter.)
 What a tool carries is in three parts: what it has lifted, which it lays
