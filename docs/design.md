@@ -440,6 +440,38 @@ path, as the end or the side of a stick drawn and lifted cleanly leaves it,
 so that a flat stroke is exactly as long as its path. A shading's strokes
 end round half a tip short of the edge of the area, or flat at it.
 
+The cut is the line through the end of the path, across the way the stroke
+goes there (that of its last two samples). It takes what the tip lays past
+it for as long as the tip is within its reach of that end along the path,
+half its width and a sample's spacing: a stroke that comes back across the
+line later is not cut there. And it takes what lies beyond the stroke, not
+the stroke itself. Where the path bends within that reach of its end (a
+hook shorter than half the tip, a curl tighter than the tip), the band the
+tip drew before the bend lies across the line, and stays: what is within
+half the tip's flat of the path at one of its samples within reach of the
+end, and behind the line across the path there (ahead of it, for the start
+of a stroke). A flat end is then what the tip's width sweeps along the
+path up to its end, and no more. A straight end has none of its band past
+the cut, nor has a bend half a tip or more before the end, nor a curve no
+tighter than the tip: those are cut as they were, to the bit. Between
+them a hook grows without a jump: with no hook the cut is across the long
+leg; over the first sample's spacing of hook (an eighth of the tip) it
+turns with the last two samples to lie across the hook, as it did, and
+the rounded outside of the corner comes in behind it; from there to half
+a tip the cut crosses less and less of the band before the bend, and at
+half a tip it is clear of it. A tip 24 wide drawn 140 pixels and turned
+square for 2, 4 and 6 pixels has, 4 to 12 pixels before the corner, 1.19,
+1.29 and 1.34 times as much on the inside half of the stroke as on the
+outside (it is the inside of a bend), and in the band before the bend
+exactly what the same stroke has with round ends, pixel for pixel, up to
+the last sample before the corner; so has every hook of an eighth of the
+tip to just under half of it, for tips 6 to 48 wide, at the end of a
+stroke or at its start and turning either way. (The cut took whatever lay
+past the line of all that the tip laid within reach: of the band before
+such a hook it left as little as 0.81, and at the worst pixel nothing; the
+inside half was 0.66, 0.53 and 0.87 of the outside half for those three,
+and as little as 0.34.)
+
 At each step, for each pixel under the tip:
 
 1. **Reach.** Pressure, the softness of the medium and the give of the paper

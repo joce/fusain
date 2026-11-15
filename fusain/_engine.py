@@ -18,7 +18,8 @@ for every pixel:
   (:func:`loose_ground`; a layer at a pixel is four of them:
   :func:`layer_at`);
 - one that is given an array to read reads what it needs of it first, before
-  its first ``if`` (:func:`wax_grip`, :func:`within_ends`);
+  its first ``if`` (:func:`wax_grip`), or in loops, with no ``if`` before
+  the last of them (:func:`within_ends`);
 - one that changes an array, or reads it late, has no early ``return`` and
   no ``if`` that holds its last use of it: what it does only sometimes is in
   a loop that runs once or not at all, ``for _ in once(...)``
@@ -986,18 +987,35 @@ def sunk_into(dent, now, x0, x1, y0, y1, lean, half, top):
 def within_ends(px, py, ends):
     """How much of the pixel centred at (``px``, ``py``) a stroke cut square
     at its ends leaves: 1 but behind the line across its start or beyond the
-    line across its end, where it is cut. ``ends`` is [x, y, and heading
-    (x, y) where it starts, 1 if it is cut square there, the same where it
-    ends]."""
-    x0, y0, tx0, ty0, cut0 = ends[0], ends[1], ends[2], ends[3], ends[4]
-    x1, y1, tx1, ty1, cut1 = ends[5], ends[6], ends[7], ends[8], ends[9]
-    share = 1.0
-    if cut0 > 0.0:
-        ahead = (px - x0) * tx0 + (py - y0) * ty0
-        share = min(max(ahead + 0.5, 0.0), 1.0)
-    if cut1 > 0.0:
-        short = (x1 - px) * tx1 + (y1 - py) * ty1
-        share = min(share, min(max(short + 0.5, 0.0), 1.0))
+    line across its end, where it is cut; and there too it is left where it
+    lies in the band of the stroke itself, which a path that bends within
+    the tip's reach of an end takes across that line.
+
+    ``ends`` is [how many lines it holds for the start of the stroke, how
+    many for its end, then for each line: x, y, the way the path goes there
+    (x, y), how far either side of the path its band reaches] (see
+    :func:`ends_near`). The first line of an end is the cut itself, right
+    across the sheet; the others are across the path at the samples near
+    that end, as far as the band of the stroke reaches. A pixel is left as
+    far as it is on the stroke's side of any of them and in its band: ahead
+    of it for the start, behind it for the end. (No ``if`` here but the
+    last: what it reads of ``ends`` it reads in loops.)"""
+    starts, stops = int(ends[0]), int(ends[1])
+    kept = 1.0 - min(starts, 1)  # (all of it where no line is held)
+    for line in range(starts):
+        at = 2 + 5 * line
+        dx, dy, tx, ty = px - ends[at], py - ends[at + 1], ends[at + 2], ends[at + 3]
+        ahead = dx * tx + dy * ty
+        beside = ends[at + 4] - abs(dy * tx - dx * ty)
+        kept = max(kept, min(min(max(ahead + 0.5, 0.0), 1.0), max(beside, 0.0)))
+    left = 1.0 - min(stops, 1)
+    for line in range(starts, starts + stops):
+        at = 2 + 5 * line
+        dx, dy, tx, ty = ends[at] - px, ends[at + 1] - py, ends[at + 2], ends[at + 3]
+        short = dx * tx + dy * ty
+        beside = ends[at + 4] - abs(dy * tx - dx * ty)
+        left = max(left, min(min(max(short + 0.5, 0.0), 1.0), max(beside, 0.0)))
+    share = min(kept, left)
     return share if share > 1e-6 else 0.0  # (what rounding leaves past it)
 
 
@@ -1018,6 +1036,7 @@ def bear_on_row(row, now, iy, xa, count, ends, streaks, salt):
     (each has its divisions, its square roots and a power to wait for)."""
     x, y, tx, ty = now[0], now[1], now[2], now[3]
     reach, pressure, at_x, at_y, turn = now[7], now[8], now[11], now[12], now[14]
+    cuts = ends[0] + ends[1]  # (how many lines cut the stroke square here)
     dy = iy + 0.5 - y
     for at in range(count):
         ix = xa + at
@@ -1027,13 +1046,16 @@ def bear_on_row(row, now, iy, xa, count, ends, streaks, salt):
         put = edge > 0.0 and at_x == at_x
         if put and bearing_at(ix + 0.5 - at_x, iy + 0.5 - at_y, now)[1] <= 0.0:
             edge = 0.0
-        if edge > 0.0:
-            edge *= within_ends(ix + 0.5, iy + 0.5, ends)
         row[0, at] = edge
         row[1, at] = pressure * share * streak_at(dx, dy, tx, ty, streaks, salt)
         # (where the stroke turns, the side of the tip on the outside of the
         # turn slides further than its middle, and the inside less)
         row[3, at] = abs(1.0 - turn * (dy * tx - dx * ty))
+    # (cut square, in a loop of its own: only a tip near an end that is cut
+    # square goes through it)
+    for at in range(count if cuts > 0.0 else 0):
+        if row[0, at] > 0.0:
+            row[0, at] *= within_ends(xa + at + 0.5, iy + 0.5, ends)
     for at in range(count):
         ix = xa + at
         if row[0, at] > 0.0:
@@ -1383,33 +1405,98 @@ def law_of(medium, paper):
 
 
 @njit(cache=True, error_model="numpy")
-def ends_of(xs, ys, square_start, square_end):
-    """What :func:`within_ends` takes for a stroke through the points
-    (``xs``, ``ys``), cut square at its start and at its end or not."""
-    last = xs.shape[0] - 1
-    ends = np.empty(10)
-    ends[0], ends[1] = xs[0], ys[0]
-    ends[2], ends[3] = heading(xs, ys, 0)
-    ends[4] = square_start
-    ends[5], ends[6] = xs[last], ys[last]
-    ends[7], ends[8] = heading(xs, ys, last)
-    ends[9] = square_end
-    return ends
+def line_across(near, line, xs, ys, at, tx, ty, wide):
+    """Put in ``near`` (see :func:`within_ends`), as its line ``line``, the
+    line through the sample ``at`` of the path (``xs``, ``ys``) across the
+    way (``tx``, ``ty``), for what lies within ``wide`` of the path."""
+    slot = 2 + 5 * line
+    near[slot], near[slot + 1] = xs[at], ys[at]
+    near[slot + 2], near[slot + 3] = tx, ty
+    near[slot + 4] = wide
 
 
 @njit(cache=True, error_model="numpy")
-def ends_near(ends, near, after, before, reach):
-    """Fill ``near`` with the square cuts of ``ends`` (see
-    :func:`ends_of`) that apply to a tip ``after`` pixels along the stroke
-    from its start and ``before`` pixels from its end: a cut only where the
-    tip is within ``reach`` of it, so that a stroke that comes back across
-    the line through one of its ends is not cut there."""
-    for part in range(10):
-        near[part] = ends[part]
-    if after > reach:
-        near[4] = 0.0
-    if before > reach:
-        near[9] = 0.0
+def band_way(xs, ys, at, leg, end, ax, ay, far):
+    """For the line through the sample ``at`` of the path (``xs``, ``ys``)
+    across the way it goes from the sample ``leg`` to the next, which says
+    where the band of the stroke is on the side of the cut at its end
+    ``end`` (the first sample or the last, where the stroke goes the way
+    (``ax``, ``ay``)): that way, as a unit vector, and whether the line can
+    matter.
+
+    It cannot where the two samples are one point, nor where, for all the
+    paper within ``far`` of that end, it leaves nothing that the cut itself
+    does not: where its sample is further behind the cut than the path
+    turns between the two, across ``far``. In a straight stroke that is
+    every one, and in one that does not bend near its end: such a stroke
+    is cut by the one line, at the cost of one."""
+    tx, ty = xs[leg + 1] - xs[leg], ys[leg + 1] - ys[leg]
+    bx, by = xs[at] - xs[end], ys[at] - ys[end]
+    going = math.sqrt(tx * tx + ty * ty)
+    if going <= 1e-9:
+        return 1.0, 0.0, False
+    tx, ty = tx / going, ty / going
+    # (how far past the cut the paper on the stroke's side of this line can
+    # lie, at most: behind the cut, for the end; ahead of it, for the start)
+    past = bx * tx + by * ty
+    past = (past if end > 0 else -past) + far * math.hypot(tx - ax, ty - ay)
+    return tx, ty, past > -1e-6
+
+
+@njit(cache=True, error_model="numpy")
+def ends_near(near, xs, ys, i, spacing, reach, wide, square_start, square_end):
+    """Fill ``near`` with what :func:`within_ends` takes for a tip at
+    sample ``i`` of a stroke through the points (``xs``, ``ys``),
+    ``spacing`` apart, cut square at its start and at its end or not.
+
+    A cut applies only where the tip is within ``reach`` of that end along
+    the path, so that a stroke that comes back across the line through one
+    of its ends is not cut there. It is the line through the end across the
+    way the stroke goes there, and it takes what lies past it, but not the
+    band of the stroke itself: what is within ``wide`` of the path at a
+    sample within ``reach`` of that end, and on the stroke's side of the
+    line across the path there (for the start, after the line across the
+    way the path leaves that sample; for the end, before the line across
+    the way it comes to it). So a flat end takes off what the tip lays
+    beyond its path, and the stroke is what the width of the tip sweeps
+    along the path, from one end to the other.
+
+    A straight stroke has none of its band past the cut: of those lines,
+    the one across its end is the furthest, and it is cut as by that line
+    alone, to the bit; so is one that bends half a tip or more before its
+    end, or curves no tighter than its tip. One that bends nearer its end
+    (a hook, a curl) has the band it drew before the bend across the line
+    of the cut, which took it away with the rest. Lines that cannot matter
+    are left out (:func:`band_way`); ``near`` has room for a line at every
+    sample for each end."""
+    last = xs.shape[0] - 1
+    # (no paper under a tip within reach of an end is further from that end:
+    # the tip reaches less than ``reach`` from its middle)
+    far = 2.0 * reach
+    starts, lines = 0, 0
+    if square_start > 0.0 and i * spacing <= reach:
+        ax, ay = heading(xs, ys, 0)
+        line_across(near, 0, xs, ys, 0, ax, ay, math.inf)
+        lines = 1
+        at = 1
+        while at < last and at * spacing <= reach:
+            tx, ty, matters = band_way(xs, ys, at, at, 0, ax, ay, far)
+            # (written where the next will be, if it does not matter)
+            line_across(near, lines, xs, ys, at, tx, ty, wide)
+            lines += 1 if matters else 0
+            at += 1
+        starts = lines
+    if square_end > 0.0 and (last - i) * spacing <= reach:
+        ax, ay = heading(xs, ys, last)
+        line_across(near, lines, xs, ys, last, ax, ay, math.inf)
+        lines += 1
+        at = last - 1
+        while at > 0 and (last - at) * spacing <= reach:
+            tx, ty, matters = band_way(xs, ys, at, at - 1, last, ax, ay, far)
+            line_across(near, lines, xs, ys, at, tx, ty, wide)
+            lines += 1 if matters else 0
+            at -= 1
+    near[0], near[1] = starts, lines - starts
 
 
 @njit(cache=True, error_model="numpy")
@@ -1446,7 +1533,9 @@ def lay_stroke(
     at its start (1) or ends there in the round of the tip (0), the same at
     its end, the spacing a tip this wide is sampled at (where it lands and
     lifts it goes at that pace, however short the stroke)]. A square cut
-    applies only within the tip's reach of its end. Its mark is an ellipse,
+    applies only within the tip's reach of its end, and takes what lies
+    past the stroke, not the band of the stroke itself where a hook brings
+    it across the line of the cut (:func:`ends_near`). Its mark is an ellipse,
     as long along the stroke as its flat is wide, and across it as wide as
     the flat, and the share ``tilt`` of what its side adds to that; for a
     stick whose side lies flat, a band as wide, even across and rounded at
@@ -1487,11 +1576,12 @@ def lay_stroke(
     # the stroke: a stroke of no length is a dot)
     landing = spacing if spacing >= 0.5 * tip[6] else tip[6]
     law, reach = law_of(medium, paper)
-    ends = ends_of(xs, ys, tip[4], tip[5])
-    near = np.empty(10)  # (the cuts that apply where the tip is now)
+    count = xs.shape[0]
+    # (the cuts that apply where the tip is now: room for a line across the
+    # path at every sample, for each end that is cut square)
+    near = np.zeros(2 + 10 * (count if tip[4] > 0.0 or tip[5] > 0.0 else 0))
     streaks = streaks_of(salt)
     row = np.empty((4, tooth.shape[1]))
-    count = xs.shape[0]
     reached = 0.0  # the furthest the tip has been from its path
     # what a tip that polishes drags along
     drag = np.zeros(HELD)
@@ -1513,7 +1603,11 @@ def lay_stroke(
         tilt, side = shapes[i, 1], shapes[i, 2]
         bound = tip_at(now, tilt, side, flat, reach, i, xs, ys, pressures, even)
         reached = max(reached, bound)
-        ends_near(ends, near, i * spacing, (count - 1 - i) * spacing, bound + spacing)
+        # (a square cut applies within the tip's reach of an end, and leaves
+        # the band of the stroke, which is as wide as the tip's flat: its
+        # mark less the half pixel its rim is softened by)
+        near_by, band = bound + spacing, now[4] - 0.5
+        ends_near(near, xs, ys, i, spacing, near_by, band, tip[4], tip[5])
         lands = i == 0 or pressures[i - 1] <= 0.0
         lifts = i == count - 1 or pressures[i + 1] <= 0.0
         # (the first and the last point take half a spacing, which is the
