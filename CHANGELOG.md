@@ -8,29 +8,25 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- Strokes and rubs are about twice as fast, and no picture changes: every
-  array of a sheet after any sequence of calls, every number returned and
-  every rendered image is what it was, to the last bit. On a sheet of 1120
-  by 820 pixels (best of five runs, one core of a 2.1 GHz Xeon): shading it
-  with an HB of width 6 takes 1.8 s, from 3.1 s; with a soft pastel of width
-  24, 1.2 s, from 2.5 s; with the side of a stick of vine charcoal, 1.3 s,
-  from 2.9 s; rubbing it with a finger, 2.3 s, from 5.9 s; with a kneaded
-  eraser, 2.7 s, from 6.5 s; with a stump over graphite, 4.2 s, from 7.7 s;
-  and hatching it with a ballpoint, 0.54 s, from 0.83 s. Rendering it takes
+- Strokes and rubs are faster, by a quarter to a half, and no picture
+  changes: every array of a sheet after any sequence of calls, every number
+  returned and every rendered image is what it was, to the last bit. On a
+  sheet of 1120 by 820 pixels (one core of a 2.1 GHz Xeon): shading it with
+  an HB of width 6 takes 2.4 s, from 3.1 s; with a soft pastel of width 24,
+  1.7 s, from 2.5 s; with the side of a stick of vine charcoal, 2.1 s, from
+  2.9 s; rubbing it with a finger, 3.5 s, from 5.9 s; with a kneaded eraser,
+  3.9 s, from 6.5 s; with a stump over graphite, 4.4 s, from 7.7 s; and
+  hatching it with a ballpoint, 0.43 s, from 0.83 s. Rendering it takes
   1.3 s, from 3.2 s: most of it is Kubelka-Munk, which murex 0.2.0 works
-  out in compiled code. `examples/lake.py` takes three minutes, from nearly four (about
-  half of what is left is its looking at the sheet as it goes), and
-  `deco.py` and `broadway.py` a quarter to a third less; the examples that
-  mostly plan their strokes in numpy (`stilllife.py`, `farm.py`,
-  `macaw.py`) a seventh less at most. What it took:
-  - What a kernel calls for every pixel is compiled without numba's
-    reference counting (`_nrt=False`: it allocates nothing and keeps no
-    array) and into its caller (`forceinline=True`). Counting a reference to
-    each array a helper was given, and back, at every call was a third of
-    the time of a stroke and half of that of a rub. Both are options of
-    numba's `njit` that its documentation does not list (the first is
-    marked private); neither changes a result, and without the first all
-    that follows is worth a quarter at most.
+  out in compiled code. What it took:
+  - What a kernel calls for every pixel is compiled into its caller
+    (`inline="always"`). Numba otherwise counts a reference to each array a
+    helper is given, and back, at every call: a third of the time of a
+    stroke and half of that of a rub. Two options of numba's that its
+    documentation does not list (one switches that counting off, one
+    compiles a helper into its caller later on) took all of that away and
+    made strokes and rubs twice as fast; fusain does not rely on them. The rest is to be had by folding those helpers into their
+    kernels by hand.
   - How a tip bears on the pixels of a row (its shape, the streaks of the
     pass, the level it reaches in the tooth) is worked out for the whole row
     before anything is laid on it; only the pixels of a row that the tip can

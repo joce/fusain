@@ -3,13 +3,11 @@
 Kernels are ``@njit(cache=True, error_model="numpy")``, without ``fastmath``
 and without ``parallel``, so that a drawing repeats exactly.
 
-What a kernel calls is compiled with ``_nrt=False`` as well: it allocates
-nothing and keeps none of the arrays it is given, so it need not count a
-reference to each of them and back at every call, which numba otherwise
-does, for every pixel under the tip. That took a third of the time of a
-stroke and half of that of a rub. And what is called for every pixel is
-compiled into its caller (``forceinline=True``). Neither changes a result;
-``tools/benchmark.py`` measures what they are worth.
+What a kernel calls for every pixel is compiled into its caller
+(``inline="always"``): numba otherwise counts a reference to each array such
+a helper is given, and back, at every call, which took a third of the time
+of a stroke and half of that of a rub. It changes no result;
+``tools/benchmark.py`` measures what it is worth.
 
 Speed must not change the picture: ``tools/fingerprint.py`` tells. What is
 exact here and must stay so: a table holds values worked out by the very
@@ -21,17 +19,13 @@ and no sum is taken in another order.
 from __future__ import annotations
 
 import math
-from typing import Any
 
 import numpy as np
 from murex.spectral import N_BANDS
 from numba import njit
 
-#: What a kernel calls, and what it calls for every pixel (see above). The
-#: two options are numba's, and not in its type stubs.
-_CALLED: dict[str, Any] = {"cache": True, "error_model": "numpy", "_nrt": False}
-_called = njit(**_CALLED)
-_inlined = njit(**_CALLED, forceinline=True)
+#: What a kernel calls for every pixel (see above).
+_inlined = njit(cache=True, error_model="numpy", inline="always")
 
 #: Pigment is packed per pixel as [K (N bands), S, volume, sheen], all
 #: extensive (summed over the pigment present; the sheen is the volume times
@@ -297,7 +291,7 @@ def unit_noise(ix: int, iy: int, salt: int) -> float:
     return (h & 0xFFFFFF) / 16777216.0
 
 
-@_called
+@njit(cache=True, error_model="numpy")
 def heading(xs, ys, i):
     """Which way the tip is going at sample ``i``, as a unit vector."""
     count = xs.shape[0]
@@ -446,7 +440,7 @@ def burnish(held, press, drag, iy, ix, polish, lift, lay):
         held[iy, ix, part] += given - taken
 
 
-@_called
+@njit(cache=True, error_model="numpy")
 def set_down(held, cover, drag, x, y, tx, ty, wide, long, rounded):
     """Where the tip lifts off, at (``x``, ``y``), lay what it still drags
     (``drag``, packed as the held layer is) on the marked paper under it.
@@ -544,7 +538,7 @@ def settle_row(fresh, cover, bonded, under, loose, k, s, sheen, pasty, iy, x0, x
         loose[iy, ix, IX] += new * sheen
 
 
-@_called
+@njit(cache=True, error_model="numpy")
 def settle_dust(fresh, cover, bonded, under, loose, k, s, sheen, pasty, xs, ys, bound):
     """At the end of a pass, put what it left to lie on the sheet (``fresh``,
     two volumes per pixel: what the paper does not hold of the medium, of
@@ -710,7 +704,7 @@ def bear_on_row(row, now, iy, xa, xb, ends, streaks, salt):
             row[2, ix - xa] = level
 
 
-@_called
+@njit(cache=True, error_model="numpy")
 def bear(
     tooth,
     press,
@@ -826,7 +820,7 @@ def bear(
     return laid, lying
 
 
-@_called
+@njit(cache=True, error_model="numpy")
 def tip_at(now, shape, flat, reach, i, xs, ys, pressures):
     """Fill ``now`` (see :func:`bear`) for a tip ``flat`` wide at sample
     ``i``, of ``shape`` [its width, tilt, length of its side]. Returns how
@@ -849,7 +843,7 @@ def tip_at(now, shape, flat, reach, i, xs, ys, pressures):
     return max(wide, long)
 
 
-@_called
+@njit(cache=True, error_model="numpy")
 def put_down(
     tooth,
     press,
@@ -960,7 +954,7 @@ def ends_of(xs, ys, square_start, square_end):
     return ends
 
 
-@_called
+@njit(cache=True, error_model="numpy")
 def ends_near(ends, near, after, before, reach):
     """Fill ``near`` with the square cuts of ``ends`` (see
     :func:`ends_of`) that apply to a tip ``after`` pixels along the stroke
