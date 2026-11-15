@@ -36,7 +36,7 @@ uv run python tools/refcounts.py     # whether a kernel counts references as it 
 - `stick.py`: a medium in the hand, with a tip that wears. `pens.py`: ballpoint pens, whose ink is a stain in the paper, and a pen in the hand (`HeldPen`), which keeps the ink its ball gathers.
 - `tools.py`: stumps, fingers and erasers, which lay nothing of their own, and what scrapes wax off: a sand eraser and a knife. `smudger.py`: a tool in the hand, which keeps what it picks up.
 - `hatching.py`: the strokes of a shading, as a hand lays them.
-- `_engine.py`: the numba kernels that lay a medium on the paper, and their constants.
+- `_engine.py`: the numba kernels that lay a medium on the paper, those a render gathers its layers with, and their constants.
 - `docs/design.md`: the model and the build order. `examples/`: scripts and the images they write to `examples/output/`.
 
 ## Conventions

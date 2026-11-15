@@ -430,7 +430,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   documentation does not list, or faster (on the code as it was, they gave
   1.46, 1.66, 1.08, 1.55, 0.76, 1.82 and 0.45 s; 2.34, 3.25 and 2.36 s),
   with documented options only (fusain-95m). Compiling the kernels the
-  first time takes what it took, 18 s. What it took:
+  first time takes 19 s, from 18 s. What it took:
   - Numba counts a reference to an array each time a helper is given it,
     and one back when the helper is done with it, two atomic operations,
     and drops the pair only where it can see the two as one. With an early
@@ -461,6 +461,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
     nothing: half the time of its rub. A dry tip pressed firmly on paper
     without wax polishes nothing and drags nothing, and went through all
     that the paper holds there: 5 to 10% of a stroke of charcoal or pastel.
+  - Rendering the sheet takes 0.6 s, from 1.0 s, and its reflectance
+    0.45 s, from 0.8 s. Half of a render was numpy gathering the pixels
+    that carry pigment out of each layer, dividing them by the share of the
+    pixel that is covered, and putting what is seen back among the bare
+    paper: two kernels do that (`thicken`, `show_through`), for the ink of
+    pens too, and Kubelka-Munk (murex) works each layer out in place.
   For those who call `fusain._engine` themselves: `slide_on`,
   `slide_graphite`, `drag_wax` and `lift_bonded` are gone (`in_parts` and
   `turned`, `push_along` and `slip_of`, `take_bonded`); `tip_at` takes the

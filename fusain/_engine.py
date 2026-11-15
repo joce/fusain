@@ -1,4 +1,6 @@
-"""The compiled kernels that lay a medium on the paper, and their constants.
+"""The compiled kernels that lay a medium on the paper, and their constants;
+and the two a render gathers its layers with (:func:`thicken`,
+:func:`show_through`).
 
 Kernels are ``@njit(cache=True, error_model="numpy")``, without ``fastmath``
 and without ``parallel``, so that a drawing repeats exactly.
@@ -2843,6 +2845,42 @@ def indent_stroke(dent, xs, ys, pressures, steps, radius, paper):
                 across = (dx * dx + dy * dy) / (bound * bound)
                 if across < 1.0:
                     dent[iy, ix] = max(dent[iy, ix], sink * (1.0 - across))
+
+
+@njit(cache=True, error_model="numpy")
+def thicken(layer, marked, share, kappa, sigma):
+    """What a layer is to the light where it lies: for each marked pixel of
+    its rows (``marked``, taken row after row), its absorption per band
+    (a row of ``kappa``) and its scattering (``sigma``), over the share of
+    the pixel that is covered (``share``, for each marked pixel): the
+    pigment lies on that share, that much thicker."""
+    at = 0
+    for iy in range(marked.shape[0]):
+        for ix in range(marked.shape[1]):
+            if marked[iy, ix]:
+                covered = share[at]
+                for band in range(kappa.shape[1]):
+                    kappa[at, band] = layer[iy, ix, band] / covered
+                sigma[at] = layer[iy, ix, IS] / covered
+                at += 1
+
+
+@njit(cache=True, error_model="numpy")
+def show_through(out, marked, share, seen):
+    """Put what is seen where pigment lies (``seen``, a spectrum for each
+    marked pixel, taken row after row) into the picture of these rows
+    (``out``, which holds the paper, inked or not): on the covered share of
+    each marked pixel (``share``), and what was there on the rest of it."""
+    at = 0
+    for iy in range(marked.shape[0]):
+        for ix in range(marked.shape[1]):
+            if marked[iy, ix]:
+                covered = share[at]
+                bare = 1.0 - covered
+                for band in range(seen.shape[1]):
+                    lit = covered * seen[at, band]
+                    out[iy, ix, band] = lit + bare * out[iy, ix, band]
+                at += 1
 
 
 def as_kernel_arrays(points: np.ndarray, pressure: np.ndarray, spacing: float):

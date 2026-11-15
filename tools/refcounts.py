@@ -155,8 +155,8 @@ def _counted_in(body: str) -> list[tuple[int, str, str, str]]:
 
 def kernels() -> dict[str, object]:
     """Every kernel of the engine, compiled by drawing with a stick, a tool,
-    a pen and a stylus. (What they call for every pixel is compiled into
-    them: it is no kernel of its own.)"""
+    a pen and a stylus, and rendering. (What they call for every pixel is
+    compiled into them: it is no kernel of its own.)"""
     from fusain import Sheet, Smudger, pencils, pens, tools
     from fusain import _engine as eng
 
@@ -165,6 +165,7 @@ def kernels() -> dict[str, object]:
     sheet.rub((4, 4, 60, 60), Smudger(tools.STUMP))
     sheet.shade((4, 4, 60, 60), pens.BLUE)
     sheet.indent([(4, 4), (60, 60)])
+    sheet.render()
     return {
         name: kernel
         for name, kernel in vars(eng).items()
