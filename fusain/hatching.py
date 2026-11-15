@@ -1,4 +1,5 @@
-"""Shading: filling an area with strokes side by side, as a hand does."""
+"""Shading and rubbing: filling an area with strokes side by side, or
+working a tool over it in passes, as a hand does."""
 
 from __future__ import annotations
 
@@ -6,6 +7,7 @@ import math
 from collections.abc import Callable, Iterator
 
 import numpy as np
+from murex import spline
 
 #: How far apart the strokes of a shading are, in widths of the tip.
 SPACING = 0.55
@@ -103,6 +105,151 @@ def strokes(
             # (however unsteady the hand, a tip keeps some width)
             tip = width * max(rng.uniform(1.0 - WIDTH * hand, 1.0 + WIDTH * hand), 0.25)
             yield path, firm, tip
+
+
+def passes(
+    outline: np.ndarray,
+    angle: float,
+    width: float,
+    spacing: float,
+    hand: float,
+    rng: np.random.Generator,
+) -> Iterator[tuple[np.ndarray, float]]:
+    """The passes of a tool (a stump, a finger, an eraser) ``width`` wide
+    rubbed over the polygon ``outline``: for each, its path (points, (K, 2))
+    and how firm it is against the others (about 1).
+
+    Someone rubbing a tone with a tool works it up to the edge of the tone
+    and turns there, where they can see it; they do not sweep past the edge,
+    as a hand hatching with a pencil overshoots its strokes. So the middle
+    of the tool keeps half its width inside the outline, and its edge comes
+    to the area's edge and no further: every pass runs from that line to
+    that line, the outermost passes run along it, and the others lie evenly
+    between, no more than ``spacing`` apart. In the middle of the area the
+    hand is as unsteady as in a shading (each pass strays across and wanders
+    as a stroke does); where the tool meets the edge it is guided by it, as
+    steady as anywhere along a pass: the ends of a pass and the passes along
+    the edge stray only as a point of a pass wanders (``WANDER``, a fifth of
+    how far the ends of a pencil's strokes stray), and only inwards. Where
+    the area is narrower than the tool, the tool goes down its middle."""
+    margin = 0.5 * width
+    sides = _Sides(outline)
+    turn = math.radians(angle)
+    across = np.array([math.sin(turn), math.cos(turn)])
+    along = np.array([math.cos(turn), -math.sin(turn)])
+    reach = outline @ across
+    lo, hi = reach.min() + margin, reach.max() - margin
+    if hi < lo:
+        lo = hi = 0.5 * (lo + hi)
+    count = int(math.ceil((hi - lo) / spacing)) + 1
+    for k, offset in enumerate(np.linspace(lo, hi, count)):
+        if 0 < k < count - 1:  # (the outermost passes go along the edge)
+            offset += rng.normal(0.0, STRAY_ACROSS * width * hand)
+            offset = min(max(offset, lo), hi)
+        cuts = _crossings(outline, across, offset)
+        for start, end in zip(cuts[0::2], cuts[1::2], strict=True):
+            length = float((end - start) @ along)
+            if length < 0.5 * width:
+                continue
+            start = start + min(margin, 0.25 * length) * along
+            end = end - min(margin, 0.25 * length) * along
+            knots = max(int(length / BEND), 2)
+            path = start + (end - start) * np.linspace(0.0, 1.0, knots + 1)[:, None]
+            path += rng.normal(0.0, WANDER * width * hand, path.shape)
+            firm = rng.uniform(1.0 - FIRMNESS * hand, 1.0 + FIRMNESS * hand)
+            # (the points the hand goes through are kept inside, and so is
+            # the curve it draws through them, which can bulge past them)
+            path = _kept_inside(path, sides, margin)
+            path = spline.as_path(path).sample(max(1.0, width / 8.0))[0]
+            yield _kept_inside(path, sides, margin), firm
+
+
+def _kept_inside(points: np.ndarray, sides: _Sides, margin: float):
+    """``points`` moved, each as little as it takes, to ``margin`` or more
+    inside the polygon of ``sides``: off the nearest point of its outline,
+    and into the corner where it is too near two of its sides. A point that
+    cannot be (the polygon is narrower than twice ``margin`` there) stays
+    where it was."""
+    # (a point is no nearer the outline than the nearest line of a side,
+    # which is quick to tell)
+    near = sides.lines(points) < margin - 1e-9
+    if not near.any():
+        return points
+    moved = points[near]  # (only those near the outline need to move)
+    last = np.full(len(moved), -1)
+    for _ in range(3):
+        which, depth, normal = sides.nearest(moved)
+        short = depth < margin - 1e-9
+        if not short.any():
+            break
+        corner = short & (last >= 0) & (last != which)
+        moved[short & ~corner] += ((margin - depth)[:, None] * normal)[short & ~corner]
+        moved[corner] = sides.meet(last[corner], which[corner], margin, moved[corner])
+        last = np.where(short, which, last)
+    else:
+        depth = sides.nearest(moved)[1]
+    fits = depth >= margin - 1e-6
+    kept = points.copy()
+    kept[near] = np.where(fits[:, None], moved, points[near])
+    return kept
+
+
+class _Sides:
+    """The sides of a polygon, and how far inside it points are."""
+
+    def __init__(self, outline: np.ndarray):
+        self.corner = outline
+        self.side = np.roll(outline, -1, axis=0) - outline
+        side = self.side
+        turning = float(np.sum(outline[:, 0] * side[:, 1] - outline[:, 1] * side[:, 0]))
+        inward = math.copysign(1.0, turning) * np.stack([-side[:, 1], side[:, 0]], 1)
+        self.inward = inward / np.maximum(np.hypot(*inward.T), 1e-12)[:, None]
+        self.long = np.maximum((side * side).sum(1), 1e-12)
+        self.level = (self.inward * outline).sum(1)
+
+    def lines(self, at: np.ndarray) -> np.ndarray:
+        """For each point, how far inside the nearest of the lines the sides
+        lie on it is (less than nothing outside one): never more than how
+        far inside the outline it is."""
+        return (at @ self.inward.T - self.level[None]).min(axis=1)
+
+    def nearest(self, at: np.ndarray):
+        """For each point: its nearest side, how far inside the outline it
+        is (less than nothing outside), and the way in from the nearest
+        point of the outline (a unit vector)."""
+        rel = at[:, None, :] - self.corner[None]
+        t = np.clip((rel * self.side).sum(2) / self.long, 0.0, 1.0)
+        off = rel - t[..., None] * self.side
+        gap = np.hypot(off[..., 0], off[..., 1])
+        which = np.argmin(gap, axis=1)
+        rows = np.arange(len(at))
+        away, gap = off[rows, which], gap[rows, which]
+        # (even-odd: inside if a ray to the right crosses the outline an odd
+        # number of times)
+        y0, y1 = self.corner[:, 1], self.corner[:, 1] + self.side[:, 1]
+        cut = (y0[None] > at[:, 1:2]) != (y1[None] > at[:, 1:2])
+        share = (at[:, 1:2] - y0[None]) / np.where(cut, self.side[:, 1][None], 1.0)
+        right = self.corner[:, 0][None] + share * self.side[:, 0][None] > at[:, 0:1]
+        sign = np.where((cut & right).sum(1) % 2 == 1, 1.0, -1.0)
+        normal = np.where(
+            (gap > 1e-9)[:, None],
+            sign[:, None] * away / np.maximum(gap, 1e-12)[:, None],
+            self.inward[which],
+        )
+        return which, sign * gap, normal
+
+    def meet(self, one, other, margin: float, at: np.ndarray) -> np.ndarray:
+        """Where the lines ``margin`` inside the sides ``one`` and ``other``
+        cross (``at``, where they are parallel)."""
+        a, b = self.inward[one], self.inward[other]
+        ca = (a * self.corner[one]).sum(1) + margin
+        cb = (b * self.corner[other]).sum(1) + margin
+        det = a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0]
+        ok = np.abs(det) > 1e-9
+        safe = np.where(ok, det, 1.0)
+        x = (ca * b[:, 1] - cb * a[:, 1]) / safe
+        y = (a[:, 0] * cb - b[:, 0] * ca) / safe
+        return np.where(ok[:, None], np.stack([x, y], 1), at)
 
 
 def bearing(pressure: Pressure, path: np.ndarray, firm: float, hand: float):

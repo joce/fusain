@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from murex import spectral as sp
 
-from fusain import Sheet, charcoal, papers, pencils, tools
+from fusain import Sheet, Smudger, charcoal, hatching, papers, pencils, tools
 from fusain import sheet as sheet_module
 
 PATCH = (30, 30, 270, 170)
@@ -68,6 +68,89 @@ def test_an_area_is_rubbed_up_to_its_edge_and_no_further():
         assert float(taken[inside].mean()) == pytest.approx(middle, rel=0.05)
     assert np.array_equal(before[80:120, :100], after[80:120, :100])
     assert np.array_equal(before[80:120, 200:], after[80:120, 200:])
+
+
+def _luminance(sheet) -> np.ndarray:
+    spectrum = sheet.reflectance().astype(np.float64)
+    return sp.reflectance_to_linear_rgb(spectrum) @ sp.LUMINANCE
+
+
+@pytest.mark.parametrize("tool", [tools.STUMP, tools.FINGER, tools.ERASER])
+@pytest.mark.parametrize("angle", [0.0, 30.0])
+def test_a_tool_rubbed_over_a_tone_leaves_nothing_past_its_edge(tool, angle):
+    # a clean tool, loaded as it rubs, over the tone it rubs and nothing
+    # else, with a natural hand. (It used to sweep past the edge as a
+    # pencil's strokes overshoot, and to lay what it had picked up on the
+    # bare paper there: the luminance of the paper fell by up to 0.5 within
+    # a width of the tool of the edge, at the ends of the passes and along
+    # their sides alike, and an eraser took the tone the shading had laid
+    # past the edge)
+    sheet, _ = _drawn()
+    before, light = sheet.pigment().copy(), _luminance(sheet)
+    sheet.rub(PATCH, Smudger(tool), 0.6, angle=angle)
+    outside = np.ones(before.shape, bool)
+    outside[30:170, 30:270] = False
+    assert np.abs(sheet.pigment() - before)[outside].max() < 1e-3
+    assert np.abs(_luminance(sheet) - light)[outside].max() < 1e-3
+
+
+@pytest.mark.parametrize(
+    ("tool", "pressure", "rim"),
+    [(tools.STUMP, 0.6, 4), (tools.FINGER, 0.6, 7), (tools.ERASER, 0.15, 5)],
+)
+def test_a_rub_works_its_area_up_to_the_edge(tool, pressure, rim):
+    # a tone wider than the area, so that it is even across the edge. The
+    # outermost pixels of the area are rubbed, and from the rounded rim of
+    # the tool in (about a third of its width, ``rim`` pixels) the area is
+    # rubbed at the ends of the passes (left and right) and along their
+    # sides (top and bottom) as at its middle. (A stump or a finger smooths
+    # the grain; an eraser pressed lightly takes a share of the tone. Where
+    # the ends of the passes strayed either way and lightened, a light
+    # eraser took 0.4 to 0.75 as much as in the middle over a width in)
+    sheet = Sheet(300, 200, paper=papers.CARTRIDGE, seed=1)
+    for a in (30, -40):
+        sheet.shade((10, 10, 290, 190), charcoal.VINE, 0.6, 9.0, angle=a)
+    before, light = sheet.pigment().astype(np.float64), _luminance(sheet)
+    sheet.rub((40, 40, 260, 160), Smudger(tool), pressure)
+    after, dark = sheet.pigment().astype(np.float64), _luminance(sheet)
+
+    def rubbed(rows, cols) -> float:
+        if tool is tools.ERASER:
+            return 1.0 - after[rows, cols].sum() / before[rows, cols].sum()
+        return 1.0 - dark[rows, cols].std() / light[rows, cols].std()
+
+    middle = rubbed(slice(70, 130), slice(90, 210))
+    assert middle > 0.4
+    for k in range(14):
+        ends = (rubbed(slice(65, 135), 40 + k), rubbed(slice(65, 135), 259 - k))
+        sides = (rubbed(40 + k, slice(80, 220)), rubbed(159 - k, slice(80, 220)))
+        least = 0.04 if k < rim else 0.75
+        assert min(ends) > least * middle, (k, ends)
+        assert min(sides) > least * middle, (k, sides)
+
+
+def test_the_passes_of_a_rub_keep_the_tool_inside_the_area():
+    # the middle of the tool keeps half its width inside the outline, at
+    # any angle, in a polygon too, and however unsteady the hand; the
+    # outermost passes run along that line
+    rectangle = hatching.as_outline((20, 30, 220, 130))
+    triangle = hatching.as_outline([(10, 150), (120, 10), (240, 170)])
+    for outline in (rectangle, triangle):
+        for angle in (0.0, 30.0, 90.0, -45.0):
+            for hand in (0.0, 1.0, 3.0):
+                rng = np.random.default_rng(5)
+                paths = list(hatching.passes(outline, angle, 12.0, 6.0, hand, rng))
+                assert len(paths) > 10
+                points = np.concatenate([path for path, _ in paths])
+                depth = hatching._Sides(outline).nearest(points)[1]
+                assert depth.min() >= 6.0 - 1e-6
+    passes = list(hatching.passes(rectangle, 0.0, 12.0, 6.0, 1.0, rng))
+    first, last = passes[0][0], passes[-1][0]
+    assert first[:, 1].min() == pytest.approx(36.0) and first[:, 1].max() < 39.0
+    assert last[:, 1].max() == pytest.approx(124.0) and last[:, 1].min() > 121.0
+    for path, _ in passes:
+        ends = np.sort(path[[0, -1], 0])
+        assert 26.0 <= ends[0] < 29.0 and 211.0 < ends[1] <= 214.0
 
 
 def test_the_pressure_may_be_a_map_and_the_tool_is_lifted_where_it_is_nothing():

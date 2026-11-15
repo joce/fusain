@@ -901,9 +901,18 @@ class Sheet:
         :meth:`shade`; ``width`` the width of the tool (by default its own);
         ``angle`` the direction of the passes in degrees; ``spacing`` how far
         apart they are (by default half a width); ``hand`` how unsteady the
-        hand is. The area is rubbed up to its edge, as strongly there as in
-        its middle, and no further but for the unsteadiness of the hand:
-        the passes stop half a width of the tool short of it.
+        hand is. The area is rubbed up to its edge and no further, however
+        unsteady the hand: it works the tool up to the edge and turns there,
+        and does not sweep past it as a pencil's strokes overshoot (see
+        :func:`fusain.hatching.passes`). The middle of the tool keeps half
+        its width inside the edge, the ends of the passes stray only short
+        of it, and the outermost passes run along it; the tool does not
+        lighten where it turns, so the ends of the passes are rubbed as
+        strongly as their middles. Along the sides of the outermost passes
+        only the rounded rim of the tool reaches the edge, and the pixels
+        there within about a third of the tool's width of it are rubbed
+        less, the less the nearer: a second rub across the first works them
+        up to the edge too. To rub past the edge, give a larger area.
 
         The tool keeps what it carries from one pass to the next, and over
         the stretches where the pressure is nothing and it is lifted: it
@@ -939,14 +948,15 @@ class Sheet:
         _check_hatching(width, gap, angle, hand)
         passes = []  # (what each pass presses, worked out before any rubs)
         # (a pass is as strong where the tool lands and lifts as in its
-        # middle, out to the outline of the tool: each stops half a width
-        # short of the edge of the area, which keeps the tool inside it)
-        strokes = hatching.strokes(
-            outline, angle, width, gap, hand, rng, inset=(0.5, 0.5)
-        )
-        for k, (path, firm, _) in enumerate(strokes):
+        # middle, out to the outline of the tool: the hand keeps the middle
+        # of the tool half a width inside the edge of the area, and turns
+        # there, so the tool comes to the edge and does not stray past it)
+        strokes = hatching.passes(outline, angle, width, gap, hand, rng)
+        for k, (path, firm) in enumerate(strokes):
             path = path[::-1] if k % 2 else path  # to and fro
-            along = hatching.bearing(pressure, path, firm, hand)
+            # (it turns at the ends, bearing as it does: it is not put down
+            # and lifted there as a pencil's stroke is, lighter at either end)
+            along = hatching.bearing(pressure, path, firm, 0.0)
             points, _, u, _ = spline.as_path(path).sample(max(1.0, width / 8.0))
             touch = np.broadcast_to(np.asarray(along(u), dtype=np.float64), u.shape)
             if not np.isfinite(touch).all():

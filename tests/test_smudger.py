@@ -69,7 +69,10 @@ def test_rubbing_a_dark_tone_again_and_again_does_not_wear_it_away():
     taken = sum(bare.rub(area, tools.STUMP, 0.9) for _ in range(8))
     assert 0.0 < taken < 0.06 * laid
     full = tools.STUMP.holds * np.pi * (0.5 * tools.STUMP.width + 0.5) ** 2
-    assert taken < 8 * 1.1 * full
+    # (a full load and what is on its face: 1.14 fulls a rub, where it was
+    # 1.01 when its passes strayed past the tone and spent some on the bare
+    # paper there)
+    assert taken < 8 * 1.2 * full
     assert _total(bare) + taken == pytest.approx(laid, rel=1e-5)
 
 
@@ -456,8 +459,10 @@ def test_a_loaded_stump_draws_a_pale_tone_on_bare_paper():
     assert load > 0 and _total(sheet) + load == pytest.approx(laid, rel=1e-5)
     assert sheet.pigment()[:, 150:].max() == 0
     taken = sheet.smudge([(200, 60), (480, 60)], stump, 0.6)
-    # it left most of what it carried: less than nothing taken
-    assert taken == pytest.approx(stump.load - load) and taken < -0.9 * load
+    # it left most of what it carried: less than nothing taken (0.87 of it;
+    # 0.92 when the rub that loaded it strayed past the patch and spent some
+    # of its load on the bare paper there, so that it carried 7% less)
+    assert taken == pytest.approx(stump.load - load) and taken < -0.85 * load
     trail = sheet.pigment()[:, 150:]
     assert float(trail.sum(dtype=np.float64)) == pytest.approx(-taken, rel=1e-4)
     assert trail[:50].max() == 0 and trail[70:].max() == 0  # only where it went
