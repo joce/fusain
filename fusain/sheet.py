@@ -703,7 +703,10 @@ class Sheet:
         along ``path``: it drags the dust along, presses some of it into the
         paper and pushes it into the valleys of the tooth, which softens and
         greys what was drawn. What the paper holds hardly moves, but for
-        graphite, which slides.
+        graphite, which slides. Most of the dust goes a fraction of the
+        tool's width, so two colours rubbed across where they meet blend
+        into a passage a width or two wide; the small share that the tool
+        lifts into its load goes far.
 
         ``path`` and ``pressure`` are as for :meth:`stroke`; ``width`` is the
         width of the tool in pixels (by default the tool's own). The pass is
@@ -715,8 +718,9 @@ class Sheet:
         where it does, and it takes away what it still carries when it lifts.
         A :class:`fusain.Smudger` is a tool in the hand: it lands with what
         it picked up before and keeps what it carries, so that once loaded it
-        gives back about as much as it takes, and tones bare paper. It has
-        its own width, so it takes none.
+        takes no more from a tone than it gives it (at each place it does
+        one or the other, by the difference), and tones bare paper, lightly
+        and for long. It has its own width, so it takes none.
 
         Returns the volume of pigment the tool took off the sheet, less what
         it laid back: for a bare tool, what was left on it at the end; for a
@@ -780,8 +784,9 @@ class Sheet:
 
         The tool keeps what it carries from one pass to the next, and over
         the stretches where the pressure is nothing and it is lifted: it
-        lands with it, so past the first few widths it gives back about as
-        much as it takes, and the tone is blended, not worn away. A bare
+        lands with it, so once it is loaded (over twenty or so of its
+        widths) it takes no more than it gives, and the tone is blended,
+        not worn away. A bare
         tool starts clean and takes away what it carries at the end; a
         :class:`fusain.Smudger` (which has its own width and takes none)
         starts with what it picked up before, and keeps it.

@@ -283,8 +283,13 @@ SKID_FULL = 1.0
 #: A tool that rubs also spreads the dust under it from grain to grain: what
 #: it takes onto its face that way (as strongly as it smears) it lays back
 #: this many times over each of its own widths, so within a few pixels. That
-#: is what evens a rubbed tone before the dust is worked into the paper.
-SPREAD = 4.0
+#: is what evens a rubbed tone before the dust is worked into the paper, and
+#: it is most of what a tool moves: the dust on its face goes a fraction of
+#: its width (taken up and laid back several times, half a width or so), so
+#: a join of two colours rubbed across is a passage a width or two wide.
+#: Only what a tool lifts into its load (:attr:`fusain.Tool.lift_loose`,
+#: little for a stump or a finger) is carried far.
+SPREAD = 16.0
 #: It spreads the dust this many times as readily as it stirs it.
 SPREADS = 3.0
 #: A tool that rubs reaches the dust underneath less than the dust on top:
@@ -1431,29 +1436,65 @@ def lay_stroke(
 
 
 @_inlined
-def spread_dust(loose, near, iy, ix, take, back):
+def spread_dust(loose, near, giving, iy, ix, take, back):
     """Take the share ``take`` of the dust on top at a pixel onto the face of
     the tool (``near``, packed as dust is), and lay the share ``back`` of
-    what is on its face down on the pixel. Returns the volumes laid and
+    what its face is giving in this step (``giving``: see
+    :func:`face_gives`) down on the pixel. Returns the volumes laid and
     taken."""
     taken = loose[iy, ix, IV] * take
-    given = (near[IV] + taken) * back
+    given = giving[IV] * back
     for part in range(LOOSE):
         up = loose[iy, ix, part] * take
-        down = (near[part] + up) * back
+        down = giving[part] * back
         near[part] += up - down
         loose[iy, ix, part] += down - up
     return given, taken
 
 
 @_inlined
-def slide_graphite(held, loose, slid, bonded, cover, iy, ix, rubbed, back):
+def face_gives(giving, near, rate):
+    """What the face of a tool gives in one step of what is on it as the
+    step begins (``near``): were it to give the share ``rate`` of it per
+    step for as long as it had any, the pixels under it get between them
+    what that leaves it without after one step, 1 - exp(-rate) of it, each
+    by how the tool bears on it and whatever order they come in. ``giving``
+    is filled with what a pixel gets for each unit of that share; what the
+    face takes up in a step it gives from the next on. Returns how many
+    such units there are to give."""
+    each = 1.0
+    if rate > 1e-9:
+        each = (1.0 - math.exp(-rate)) / rate
+    for part in range(giving.shape[0]):
+        giving[part] = max(near[part], 0.0) * each  # (but for rounding)
+    return 1.0 / each
+
+
+@njit(cache=True, error_model="numpy")
+def face_of(radius):
+    """How a round tool of ``radius`` pixels bears on the paper under it,
+    summed over its face: 1 for each pixel it bears fully on, less at its
+    rim (as :func:`rub_under` works it out for a pixel, at a pressure of 1
+    and without its streaks)."""
+    bound = radius + 0.5
+    rim = RIM * bound + 0.5
+    rings = 256
+    total = 0.0
+    for ring in range(rings):
+        inside = (ring + 0.5) * bound / rings  # how far inside its edge
+        bears = min(inside / rim, 1.0) * min(inside, 1.0)
+        total += 2.0 * math.pi * (bound - inside) * bears * bound / rings
+    return total
+
+
+@_inlined
+def slide_graphite(held, loose, slid, giving, bonded, cover, iy, ix, rubbed, back):
     """Slide the graphite that the paper holds at a pixel under a tool that
     has ``rubbed`` it (how strongly it smears, times its share of a pass):
     part comes loose as dust on top, the rest goes onto the face of the tool
-    (``slid``, packed as dust is), which lays the share ``back`` of what is
-    on its face down again, held. Other pigments do not slide. Returns the
-    volume laid down."""
+    (``slid``, packed as dust is), which lays the share ``back`` of what it
+    is giving of it in this step (``giving``) down again, held. Other
+    pigments do not slide. Returns the volume laid down."""
     there = held[iy, ix, IV]
     slip = 0.0
     if rubbed > 0.0 and there > 0.0 and held[iy, ix, IX] > 0.0:
@@ -1470,7 +1511,7 @@ def slide_graphite(held, loose, slid, bonded, cover, iy, ix, rubbed, back):
         held[iy, ix, part] -= moved
         loose[iy, ix, part] += moved
     rest = slip * (1.0 - SLIDE_LOOSE) / max(1.0 - slip * SLIDE_LOOSE, 1e-9)
-    given, _ = spread_dust(held, slid, iy, ix, min(rest, 1.0), back)
+    given, _ = spread_dust(held, slid, giving, iy, ix, min(rest, 1.0), back)
     return given
 
 
@@ -1548,18 +1589,19 @@ def lift(held, under, loose, bonded, load, iy, ix, lifts, share):
 
 
 @_inlined
-def spread_top(loose, bonded, near, iy, ix, rate, back):
+def spread_top(loose, bonded, near, giving, iy, ix, rate, back):
     """Spread what lies on top at a pixel from grain to grain: take the share
     ``rate`` of what can be moved of it onto the face of the tool (``near``),
-    and lay the share ``back`` of what is on its face down again; the paste
-    in it stays paste. Returns the volumes laid and taken."""
+    and lay the share ``back`` of what its face is giving in this step
+    (``giving``) down again; the paste in it stays paste. Returns the
+    volumes laid and taken."""
     take = rate
     if bonded[iy, ix, 1, SET] + bonded[iy, ix, 1, FILM] > 0.0:
         take = rate * free_share(bonded, loose, iy, ix, 1)
-    given, taken = spread_dust(loose, near, iy, ix, take, back)
-    if bonded[iy, ix, 1, PASTE] > 0.0 or near[IP] > 0.0:
+    given, taken = spread_dust(loose, near, giving, iy, ix, take, back)
+    if bonded[iy, ix, 1, PASTE] > 0.0 or giving[IP] > 0.0:
         up = bonded[iy, ix, 1, PASTE] * rate
-        down = (near[IP] + up) * back
+        down = giving[IP] * back
         near[IP] += up - down
         bonded[iy, ix, 1, PASTE] += down - up
     return given, taken
@@ -1587,39 +1629,64 @@ def stir_up(under, loose, bonded, iy, ix, stirred):
 
 
 @_inlined
-def lay_load(loose, bonded, load, iy, ix, down):
-    """Lay the share ``down`` of what a tool carries (``load``) on a pixel,
-    as dust on top; the paste in it is paste again. Returns the volume
-    laid."""
-    laid = load[IV] * down
-    for part in range(LOOSE):
-        given = load[part] * down
-        load[part] -= given
-        loose[iy, ix, part] += given
-    if load[IP] > 0.0:
-        given = load[IP] * down
-        load[IP] -= given
-        bonded[iy, ix, 1, PASTE] += given
-    return laid
+def give_or_take(under, loose, bonded, load, iy, ix, lift_loose, share, down):
+    """A tool that lays back what it carries gives or takes at a pixel, not
+    both: of the dust and the paste there it would lift so much (as strongly
+    as ``lift_loose``, in the ``share`` of a pass), and it would lay the
+    share ``down`` of its load; it does only the difference. So a tool that
+    carries as much as a tone gives it leaves that tone alone, whatever the
+    colour of its load, where an exchange both ways would bring that colour
+    all over it; on bare paper it lays, and clean it lifts, as it would
+    otherwise. Returns the share of its lift on the dust that it keeps, and
+    the share of its load that it lays."""
+    give = load[IV] * down
+    if give <= 0.0:
+        return 1.0, 0.0
+    top = loose[iy, ix, IV] - bonded[iy, ix, 1, SET] - bonded[iy, ix, 1, FILM]
+    below = under[iy, ix, IV] - bonded[iy, ix, 0, SET] - bonded[iy, ix, 0, FILM]
+    take = min(lift_loose * share, 1.0) * max(top, 0.0)
+    take += min(UNDER_LIFT * lift_loose * share, 1.0) * max(below, 0.0)
+    if take >= give:
+        return 1.0 - give / take, 0.0
+    return 0.0, down * (1.0 - take / give)
 
 
 @njit(cache=True, error_model="numpy")
 def rub_under(
-    cover, flat, held, under, loose, bonded, carried, tool, now, step, streaks, salt
+    cover,
+    flat,
+    held,
+    under,
+    loose,
+    bonded,
+    carried,
+    giving,
+    tool,
+    now,
+    step,
+    streaks,
+    salt,
 ):
     """What a round tool does to the paper under it as it slides ``step``
     pixels. ``tool`` is [its radius in pixels, how strongly it lifts the
     dust, and what the paper holds, the share of what it carries that it
     lays back over each of its own widths, how strongly it presses the dust
-    in, how strongly it smears, how far it scrapes through wax]; ``now`` is
-    [x, y, heading (x, y), its pressure, and, for a tool landing or lifting,
-    the x and y of where it does so (else NaN): it rubs then only the paper
-    it covers there]. ``carried``, ``flat`` and ``streaks`` are as for
-    :func:`rub_stroke`."""
+    in, how strongly it smears, how far it scrapes through wax, and how its
+    face bears, summed over it (:func:`face_of`)]; ``now`` is [x, y,
+    heading (x, y), its pressure, and, for a tool landing or lifting, the x
+    and y of where it does so (else NaN): it rubs then only the paper it
+    covers there]. ``carried``, ``flat`` and ``streaks`` are as for
+    :func:`rub_stroke`, and ``giving`` is room to work in: two rows as long
+    as those of ``carried``.
+
+    What the tool has lifted (its load) it gives back or adds to, pixel by
+    pixel, never both (:func:`give_or_take`). What is on its face it shares
+    out among the pixels under it in each step (:func:`face_gives`)."""
     height, width = cover.shape
     x, y, tx, ty, pressure = now[0], now[1], now[2], now[3], now[4]
     at_x, at_y = now[5], now[6]
-    press, smear, scrape = tool[4], tool[5], tool[6]
+    put = at_x == at_x  # (not NaN)
+    lift_loose, press, smear, scrape = tool[1], tool[4], tool[5], tool[6]
     bound = tool[0] + 0.5
     rim = RIM * bound + 0.5
     per_pass = 1.0 / (2.0 * bound - rim)
@@ -1627,10 +1694,13 @@ def rub_under(
     # on, per pixel moved
     per_pixel = tool[3] / (2.0 * bound * math.pi * bound * bound)
     per_near = SPREAD / (2.0 * bound * math.pi * bound * bound)
-    lifts = np.array([tool[1], tool[2], smear, 1.0])
+    lifts = np.array([lift_loose, tool[2], smear, 1.0])
     load = carried[0]
     near = carried[1]  # the dust on the face of the tool, soon laid back
     slid = carried[2]  # held graphite it is pushing along, likewise
+    # (what its face gives in this step, and how much of it there is to give)
+    room = face_gives(giving[0], near, per_near * step * pressure * tool[7])
+    face_gives(giving[1], slid, per_near * step * pressure * tool[7])
     x0 = max(int(math.floor(x - bound)), 0)
     x1 = min(int(math.ceil(x + bound)), width)
     y0 = max(int(math.floor(y - bound)), 0)
@@ -1644,26 +1714,42 @@ def rub_under(
             edge = min(bound - d, 1.0)
             if edge <= 0.0:
                 continue
-            if at_x == at_x:  # (landing or lifting: only where it is put)
+            if put:  # (landing or lifting: only the paper under it there)
                 ax, ay = ix + 0.5 - at_x, iy + 0.5 - at_y
-                if math.sqrt(ax * ax + ay * ay) >= bound:
+                if ax * ax + ay * ay >= bound * bound:
                     continue
             local = pressure * min((bound - d) / rim, 1.0) * edge
             local *= streak_at(dx, dy, tx, ty, streaks, salt)
             share = local * per_pass * step  # of one pass at full pressure
+            down = min(per_pixel * local * step, 1.0)
+            keep, down = give_or_take(
+                under, loose, bonded, load, iy, ix, lift_loose, share, down
+            )
+            lifts[0] = lift_loose * keep
             lifts[3] = wax_grip(held, cover, flat, iy, ix, scrape)
             lift(held, under, loose, bonded, load, iy, ix, lifts, share)
-            back = min(per_near * local * step, 1.0)
+            back = min(per_near * local * step, room)
+            room -= back
             pushed = slide_graphite(
-                held, loose, slid, bonded, cover, iy, ix, smear * share, back
+                held, loose, slid, giving[1], bonded, cover, iy, ix, smear * share, back
             )
-            # lay, as dust all over the pixel
+            # lay, as dust all over the pixel (here, and not in a helper:
+            # one that was given the load took a seventh of the time of a rub)
             before = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
-            down = min(per_pixel * local * step, 1.0)
-            laid = lay_load(loose, bonded, load, iy, ix, down)
+            laid = load[IV] * down
+            for part in range(LOOSE):
+                given = load[part] * down
+                load[part] -= given
+                loose[iy, ix, part] += given
+            if load[IP] > 0.0:  # (the paste in it is paste again)
+                given = load[IP] * down
+                load[IP] -= given
+                bonded[iy, ix, 1, PASTE] += given
             # spread, from grain to grain
             rate = min(SPREADS * smear * share, 1.0)
-            given, taken = spread_top(loose, bonded, near, iy, ix, rate, back)
+            given, taken = spread_top(
+                loose, bonded, near, giving[0], iy, ix, rate, back
+            )
             laid += given
             after = before + laid - taken
             if after <= 1e-9:
@@ -1689,6 +1775,7 @@ def put_tool(
     loose,
     bonded,
     carried,
+    giving,
     tool,
     now,
     streaks,
@@ -1715,6 +1802,7 @@ def put_tool(
             loose,
             bonded,
             carried,
+            giving,
             tool,
             now,
             spacing,
@@ -1750,9 +1838,14 @@ def rub_stroke(
     the share ``press`` of the dust into the paper, and stirs the share
     ``smear`` of the dust underneath up into the dust on top and spreads it
     over the pixel; and over each of its own widths the tool lays the share
-    ``lay`` of what it carries back down, as dust on top. As strongly as it
-    smears, it also spreads the dust on top over the pixels around, and
-    slides the graphite that the paper holds (:func:`slide_graphite`).
+    ``lay`` of what it carries back down, as dust on top: where it would
+    lay as much as it lifts, it does neither, and where not, only the
+    difference (:func:`give_or_take`), so a loaded tool leaves a tone as
+    thick as its own load alone and brings none of its colour onto it. As
+    strongly as it smears, it also spreads the dust on top over the pixels
+    around (:data:`SPREAD`: this, the dust on its face, is most of what it
+    moves, and it goes a fraction of the tool's width), and slides the
+    graphite that the paper holds (:func:`slide_graphite`).
 
     Not all that lies in the two layers is loose dust (``bonded``, the
     volume of each kind in each layer). What is set, by fixative or under a
@@ -1779,8 +1872,14 @@ def rub_stroke(
     """
     streaks = streaks_of(salt)
     count = xs.shape[0]
+    gear = np.empty(8)  # (the tool, and how its face bears: see rub_under)
+    gear[:7] = tool
+    gear[7] = face_of(tool[0])
     now = np.empty(7)
     now[5], now[6] = math.nan, math.nan
+    # what the face of the tool gives in a step, of its dust and of the
+    # graphite it pushes
+    giving = np.empty((2, carried.shape[1]))
     for i in range(count):
         step = steps[i]
         if pressures[i] <= 0.0 or step <= 0.0:
@@ -1805,7 +1904,8 @@ def rub_stroke(
                     loose,
                     bonded,
                     carried,
-                    tool,
+                    giving,
+                    gear,
                     now,
                     step,
                     streaks,
@@ -1820,7 +1920,8 @@ def rub_stroke(
                     loose,
                     bonded,
                     carried,
-                    tool,
+                    giving,
+                    gear,
                     now,
                     streaks,
                     salt,

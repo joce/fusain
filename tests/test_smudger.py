@@ -83,9 +83,10 @@ def test_many_drags_of_a_finger_in_the_hand_leave_the_tone_as_dark():
     # (smoothed, the tone is a little darker: its white specks have closed)
     before, kept = dragged(Smudger(tools.FINGER, 12))
     assert before - 0.035 < kept < before
-    # a finger wiped clean before every drag lightens it steadily
+    # a finger wiped clean before every drag leaves it lighter than that (it
+    # used to lighten it steadily: it now takes far less into its load)
     before, wiped = dragged(tools.FINGER.with_(width=12.0))
-    assert wiped > before + 0.015 and wiped > kept + 0.03
+    assert kept + 0.005 < wiped < before
 
 
 @pytest.mark.parametrize(
@@ -109,15 +110,96 @@ def test_a_pass_leaves_no_pale_dot_where_it_lands(medium, width, tool):
     kept = after[ROWS, middle].sum() / before[ROWS, middle].sum()
     for band in (slice(122, 122 + reach), slice(298 - reach, 298)):
         landed = after[ROWS, band].sum() / before[ROWS, band].sum()
-        # (a stump now leaves a little more there than further on, not less:
-        # where it lifts, all the paper under it gets what it lays)
-        assert landed > 0.95 and abs(landed - kept) < 0.05
+        assert landed > 0.95 and abs(landed - kept) < 0.04
     assert 0.0 < taken < 0.03 * laid
     # and the rows of the passes do not show there as they did: the tone is
     # no more uneven from row to row where they land than in the middle
     tone = _luminance(sheet)
     rows = [float(tone[ROWS, x : x + reach].mean(axis=1).std()) for x in (122, 200)]
     assert rows[0] < 1.6 * rows[1]
+
+
+# --------------------------------------------------------------------------
+# how far it carries what it moves
+
+ORANGE, BLUE = "#e67e22", "#2e6fb7"
+JOIN, FINGER = 200, 22  # where the two colours meet, and the width of a finger
+
+
+def _rubbed_join(make, pressure: float, passes: int) -> np.ndarray:
+    """The share of the blue in what lies on top, column by column, once a
+    finger has been rubbed to and fro across the join of an orange and a
+    blue pastel, in passes five of its widths long."""
+    sheet = Sheet(400, 200, seed=1)
+    orange, blue = make(ORANGE), make(BLUE)
+    for angle in (25, -40):
+        sheet.shade((30, 30, JOIN + 5, 170), orange, 0.7, 14, angle)
+        sheet.shade((JOIN - 5, 30, 370, 170), blue, 0.7, 14, angle)
+    finger = Smudger(tools.FINGER)
+    for k in range(passes):
+        y = 46 + 108 * k / (passes - 1)
+        ends = [(JOIN - 55, y), (JOIN + 55, y + 2)]
+        sheet.smudge(ends if k % 2 else ends[::-1], finger, pressure)
+    top = sheet.loose[70:130, :, :N].astype(np.float64).sum(axis=0)
+    both = np.stack([orange.pigment.K, blue.pigment.K], axis=1)
+    orange_there, blue_there = np.linalg.lstsq(both, top.T, rcond=None)[0]
+    share = blue_there / np.maximum(orange_there + blue_there, 1e-9)
+    return np.convolve(share, np.ones(5) / 5, mode="same")
+
+
+def _passage(blue: np.ndarray) -> float:
+    """How wide the passage from one colour to the other is, in widths of
+    the finger: from a quarter of the blue to three quarters."""
+    return float(np.argmax(blue >= 0.75) - np.argmax(blue >= 0.25)) / FINGER
+
+
+def test_a_finger_rubbed_across_a_join_leaves_a_passage_between_the_colours():
+    # (the reproduction of fusain-9zh: the whole width rubbed came out one
+    # even mix, 0.42 to 0.57 of blue from one width of the finger left of
+    # the join to one width right of it, and 0.38 to 0.61 at two widths)
+    blue = _rubbed_join(pastels.soft, 0.6, 18)
+    assert blue[JOIN - FINGER] < 0.25 and blue[JOIN + FINGER] > 0.75
+    assert blue[JOIN - 2 * FINGER] < 0.13 and blue[JOIN + 2 * FINGER] > 0.87
+    assert 0.4 < blue[JOIN] < 0.6
+    # a gradient a width or two wide (it was five and a half: all that was
+    # rubbed), that rises all the way across
+    assert 0.8 < _passage(blue) < 2.0
+    across = blue[JOIN - 3 * FINGER : JOIN + 3 * FINGER : FINGER // 2]
+    assert (np.diff(across) > 0).all()
+
+
+def test_a_join_rubbed_for_long_is_still_a_passage():
+    # four times the rubbing: wider, and still each colour on its own side
+    blue = _rubbed_join(pastels.soft, 0.6, 72)
+    assert blue[JOIN - 2 * FINGER] < 0.22 and blue[JOIN + 2 * FINGER] > 0.8
+    assert 1.2 < _passage(blue) < 3.0
+
+
+def test_a_finger_blends_a_join_of_oil_pastels_the_same_way():
+    # paste smears as dust does (it was 0.47 to 0.55 at one width)
+    blue = _rubbed_join(pastels.oil, 0.8, 36)
+    assert blue[JOIN - FINGER] < 0.36 and blue[JOIN + FINGER] > 0.68
+    assert blue[JOIN - 2 * FINGER] < 0.25 and blue[JOIN + 2 * FINGER] > 0.78
+    assert _passage(blue) < 3.0
+
+
+def test_a_loaded_finger_brings_little_onto_a_tone_of_another_colour():
+    # a finger loaded on orange and rubbed over blue of the same weight: it
+    # gives or takes where it carries more or less than lies there, not
+    # both, so the blue stays blue
+    sheet = Sheet(400, 200, seed=1)
+    orange, blue = pastels.soft(ORANGE), pastels.soft(BLUE)
+    for angle in (25, -40):
+        sheet.shade((20, 20, 180, 180), orange, 0.7, 14, angle)
+        sheet.shade((220, 20, 380, 180), blue, 0.7, 14, angle)
+    finger = Smudger(tools.FINGER)
+    sheet.rub((30, 30, 170, 170), finger, 0.6)
+    assert finger.load > 0
+    sheet.rub((230, 30, 370, 170), finger, 0.6)
+    top = sheet.loose[60:140, 260:340, :N].astype(np.float64).sum(axis=(0, 1))
+    both = np.stack([orange.pigment.K, blue.pigment.K], axis=1)
+    orange_there, blue_there = np.linalg.lstsq(both, top, rcond=None)[0]
+    assert orange_there < 0.03 * blue_there
 
 
 # --------------------------------------------------------------------------
@@ -131,16 +213,24 @@ def test_a_loaded_stump_draws_a_pale_tone_on_bare_paper():
     assert sheet.pigment()[:, 150:].max() == 0
     taken = sheet.smudge([(200, 60), (480, 60)], stump, 0.6)
     # it left most of what it carried: less than nothing taken
-    assert taken == pytest.approx(stump.load - load) and taken < -0.9 * load
+    assert taken == pytest.approx(stump.load - load) and taken < -0.6 * load
     trail = sheet.pigment()[:, 150:]
     assert float(trail.sum(dtype=np.float64)) == pytest.approx(-taken, rel=1e-4)
     assert trail[:50].max() == 0 and trail[70:].max() == 0  # only where it went
-    # a tone paler than the patch it was loaded on, that fades as it goes
+    # a tone far paler than the patch it was loaded on, deepest where the
+    # stump lands (with the dust on its face) and fading slowly as it goes:
+    # a stump gives its load back a little at a time, and still tones the
+    # paper 24 of its widths on (it used to lay a mid-grey that was all but
+    # spent by then: 0.59, 0.92, 0.98 and 0.99 of the paper's tone)
     tone = _luminance(sheet)
     along = [float(tone[56:64, x : x + 20].mean()) for x in (200, 280, 360, 440)]
     assert along == sorted(along)
-    assert float(tone[40:160, 40:100].mean()) < 0.15 < 0.4 < along[0] < 0.75
-    assert 0.85 < along[1] < along[3] < 0.999
+    assert float(tone[40:160, 40:100].mean()) < 0.15 < 0.8 < along[0] < 0.93
+    assert 0.93 < along[1] < along[3] < 0.985
+    # and the next pass too, with what it has left
+    left = stump.load
+    assert sheet.smudge([(200, 120), (480, 120)], stump, 0.6) < -0.5 * left
+    assert float(_luminance(sheet)[116:124, 280:300].mean()) < 0.995
     assert _total(sheet) + stump.load == pytest.approx(laid, rel=1e-5)
 
 
@@ -164,7 +254,8 @@ def test_a_tool_loaded_on_a_scrap_draws_on_another_sheet():
     taken = sheet.rub((20, 20, 280, 80), stump, 0.6)
     assert taken < -0.5 * load
     assert _total(sheet) + stump.load == pytest.approx(load, rel=1e-5)
-    assert float(_luminance(sheet)[12:28, 30:60].mean()) < 0.9
+    # (a pale tone, laid a little at a time: it was 0.83 of the paper's)
+    assert float(_luminance(sheet)[12:28, 30:60].mean()) < 0.96
 
 
 def test_what_it_carries_is_still_that_pigment():

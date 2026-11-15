@@ -255,10 +255,11 @@ A tool is a tip plus, usually, a medium.
 - **A tool in the hand** (built). A `Smudger` is to a `Tool` what a `Stick`
   is to a medium: the tool as it is held, with what it carries, which it
   keeps from one pass to the next until `clean()`. It lands with its load,
-  so once loaded it gives back about as much as it takes: a tone can be
-  rubbed again and again without wearing away, no pass leaves a pale dot
+  so once loaded it takes no more from a tone than it gives it: a tone can
+  be rubbed again and again without wearing away, no pass leaves a pale dot
   where it lands, and a stump loaded on a dark patch draws a pale tone on
-  bare paper (one load fades out over twenty or so of its widths). A bare
+  bare paper, a little at a time (half of one load goes in twenty or so of
+  its widths, and it still tones a hundred widths on). A bare
   `Tool` is clean each time it is put to the paper and takes away what it
   still carries; `Sheet.rub` keeps the load across its own passes either
   way.
@@ -428,12 +429,34 @@ At each step, for each pixel under the tip:
 A stump, a finger or an eraser runs the same way but lays nothing of its own.
 Where it bears, it lifts a share of the `loose` pigment (and, for an eraser,
 of the `held`, less where wax holds it; paste as dust if it smears, as held pigment if it does not;
-what is set and a film as held pigment), carries it, and lays a share of what it carries back down a
-little further on, as dust spread over the whole pixel. As strongly as it
-smears, it also spreads the dust under it from grain to grain, within a few
-pixels: that is what evens a rubbed tone, and it goes faster than the
-pressing in. It presses some dust into the paper and pushes the dust on the
+what is set and a film as held pigment), carries it, and lays a share of what it carries back down
+further on, as dust spread over the whole pixel. It presses some dust into the paper and pushes the dust on the
 high ground into the low, so `cover` rises and the white specks grey over. An eraser lays nothing back.
+
+How far a tool carries what it moves is in two parts, and most of it goes
+a short way. As strongly as it smears, a tool takes the dust under it onto
+its face and lays it back within a few pixels (`SPREAD` times over each of
+its widths): a grain is taken up and put down several times as the tool
+goes over it, and ends a fraction of the tool's width from where it lay.
+That is what evens a rubbed tone, faster than the pressing in, and it is
+what blends two colours: a finger rubbed to and fro across the join of an
+orange and a blue pastel leaves a passage from the one to the other about
+a width and a half of the finger wide (from a quarter of the blue to three
+quarters, after 18 passes; two widths after 72), with a tenth of the other
+colour two widths out; and of what a stump drags out of a tone onto bare
+paper, two thirds lies within one width of the edge. What a tool lifts into
+its load is the small share that goes far, and a stump or a finger lifts
+little (`Tool.lift_loose`) and lays it back slowly (`Tool.lay`): the trail
+of that stump is a fortieth of the tone three widths out and goes on,
+fainter. At each pixel a loaded tool gives or takes, not both: where it
+would lay as much as it lifts it does neither, and where not, only the
+difference. So a finger loaded with one colour and rubbed over a tone of
+another as heavy leaves it clean, where an exchange both ways would bring
+its colour all over it, and still it lays a tone on bare paper and takes
+from a tone when it is clean. (In the first build a tool lifted two thirds
+of the dust into its load in a pass and laid it back over several widths:
+a rubbed join was one even mix over all that was rubbed, and the trail of
+a stump on bare paper halved every four widths.)
 Like a tip, a tool is put down with all of its face bearing and lifted the
 same way: where it lands and where it lifts, the paper it covers is rubbed
 as though the tool had slid onto it from behind and off it ahead, so a pass
@@ -443,7 +466,9 @@ only as it slid on: at the ends of its path an eraser took two thirds of
 what it took further on, and a dab a quarter.)
 What a tool carries is in three parts: what it has lifted, which it lays
 back at its own rate; the dust on its face, which it lays back within a few
-pixels; and the held graphite it is pushing along. All three stay on a tool
+pixels (in each step it shares out among the pixels under it what was on
+its face as the step began, each by how it bears there); and the held
+graphite it is pushing along, likewise. All three stay on a tool
 in the hand (a `Smudger`) when it is lifted, and it lands with them; what a
 bare tool still carries at the end is counted and returned. Either way
 nothing is lost.

@@ -80,15 +80,21 @@ def test_a_stump_drags_dust_along_and_out_onto_bare_paper():
     sheet = _drawn(charcoal.VINE)
     before = _total(sheet)
     assert sheet.pigment()[:, 200:].max() == 0
+    # (what lies in a column of the tone, over the width of the stump)
+    tone = float(sheet.pigment()[60:80, 60:160].sum(dtype=np.float64)) / 100
     carried = sheet.smudge(ALONG, tools.STUMP, 0.7, 20.0)
-    beyond = float(sheet.pigment()[60:80, 200:].sum())
-    assert beyond > 0.01 * before
-    # fading as the stump runs out of dust (to the end of the pass, which is
-    # as strong where the stump lifts as before it)
-    assert (
-        sheet.pigment()[60:80, 200:225].sum()
-        > 1.4 * sheet.pigment()[60:80, 235:260].sum()
-    )
+    # what lies past the edge of the patch (at 180), column by column
+    out = sheet.pigment()[60:80, 180:].astype(np.float64).sum(axis=0)
+    # it drags out what eight columns of the tone hold (it was twenty, a
+    # width of the stump), and most of that within one width of the edge
+    # (it was two fifths): the dust is on its face, and soon laid back
+    assert 5 * tone < out.sum() < 12 * tone
+    assert out[:20].sum() > 0.6 * out.sum()
+    # a small share goes further, fading as the stump runs out of dust
+    assert out[20:45].sum() > 2.5 * out[55:80].sum()
+    # to a faint trail (it was a seventh of the tone 70 pixels out), which
+    # goes on to the end of the pass
+    assert 0.01 * tone < out[62:78].mean() < 0.05 * tone
     # only where the stump went, and only forwards
     assert (
         sheet.pigment()[:55, 200:].max() == 0 and sheet.pigment()[85:, 200:].max() == 0
@@ -120,6 +126,7 @@ def test_a_stump_leaves_streaks_along_its_way():
     sheet = _drawn(charcoal.COMPRESSED)
     sheet.smudge(ALONG, tools.STUMP, 0.7, 20.0)
     trail = sheet.pigment()[62:78, 200:225].astype(np.float64)
+    trail /= trail.mean(axis=0)  # (without its fading, which is steep there)
     across = np.abs(np.diff(trail, axis=0)).mean()
     along = np.abs(np.diff(trail, axis=1)).mean()
     assert across > 2 * along

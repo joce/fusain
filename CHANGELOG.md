@@ -27,12 +27,64 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   erases changes where the passes end; a short dab of an eraser takes four
   times what it took.
 
+- A rubbed join of two colours is a passage from one to the other, and a
+  tool no longer carries dust far. Where it bore, a stump or a finger lifted
+  about two thirds of the loose dust into its load in a pass and laid the
+  load back over several of its widths, so a finger rubbed to and fro across
+  the join of an orange and a blue pastel left one even mix over all that
+  was rubbed, and a finger rubbed over house fronts and a sky brought the
+  fronts all over the sky. A real finger smears most of the dust within a
+  fraction of its width. Three things changed:
+  - What a stump or a finger lifts into its load is now little, and laid
+    back slowly (`tools.STUMP`: `lift_loose` 0.2 and `lay` 0.1, from 1.5 and
+    0.7; `tools.FINGER`: 0.16 and 0.08, from 1.2 and 0.5). Most of what they
+    move is the dust on their face, taken up as strongly as they smear and
+    laid back within a few pixels (`SPREAD`, 16 times over each width of the
+    tool, from 4), so that it goes a fraction of the tool's width.
+  - A tool gives or takes at a pixel, not both: where it would lay as much
+    of its load as it lifts it does neither, and where not, only the
+    difference. A finger loaded with orange and rubbed over a blue as heavy
+    leaves it blue (under 3% of orange on top), where an exchange both ways
+    mixed the two for as long as the rubbing went on.
+  - What is on the face of a tool is shared out, in each step, among the
+    pixels under it by how the tool bears on each, whatever order they come
+    in. (It was laid pixel by pixel from what was left, so the rows first
+    visited got more: the trail of a stump was lopsided.)
+
+  Measured, a finger 22 wide rubbed at 0.6 to and fro across the join, in
+  18 passes five widths long: the share of the blue in what lies on top was
+  0.42 one width of the finger left of the join and 0.57 one width right of
+  it (0.38 and 0.61 at two widths), and is now 0.19 and 0.81 (0.09 and
+  0.91); the passage from a quarter of the blue to three quarters was 5.5
+  widths, all that was rubbed, and is 1.4. After 72 passes it was 5.7 widths
+  and is 2.1; with oil pastels at 0.8 and 36 passes, 5.7 and 2.5. A stump
+  20 wide dragged at 0.7 out of vine charcoal onto bare paper dragged out
+  what 20 columns of the tone hold, two fifths of it within one width of the
+  edge, and its trail three and a half widths out was a seventh of the tone
+  (luminance 0.75 against the paper's); it drags out what 8 columns hold,
+  two thirds of it within one width, and the trail there is a forty-fifth
+  of the tone (0.96), and goes on. What fusain-6lr fixed still holds: eight
+  rubs of a stump in the hand over 8B leave 0.997 of the graphite (0.996)
+  and a bare one takes 2.0% (2.7%); where the passes of a rub land the
+  pigment is within 2.4% of what it is further on; a finger evens vine
+  charcoal laid with the side of the stick to 0.33 of its grain (0.43).
+  A loaded stump still tones bare paper, more lightly and for longer: one
+  loaded on 6B drew a tone of 0.59 of the paper's that had faded to 0.92
+  eight widths on and 0.99 after 24, having left all of its load; it now
+  draws 0.88 (the dust on its face), 0.95 eight widths on and 0.97 after
+  24, having left 0.70 of its load, and the next pass still tones.
+
 ### Changed
 
 - `rub_stroke` (in `fusain._engine`) takes the tool as one array ([radius,
   `lift_loose`, `lift_held`, `lay`, `press`, `smear`, `scrape`]) and the
   pace at which it lands and lifts; what the tool does as it slides one
-  step is `rub_under`.
+  step is `rub_under`. A rub takes up to a tenth longer than it did (the
+  landing and the lifting).
+- `tools.STUMP`, `tools.TORTILLON` and `tools.FINGER` lift less into their
+  load and lay it back more slowly (see Fixed). A `Tool` of one's own with
+  the old numbers still carries far, though it too now gives or takes, not
+  both.
 
 ### Fixed
 

@@ -24,21 +24,29 @@ class Tool:
     Parameters
     ----------
     lift_loose, lift_held:
-        How strongly it lifts the dust, and the pigment the paper holds
-        (0 = not at all; 1 takes about two thirds in a pass; more, nearly
-        all). Dust that is set, by fixative or under a film of wax, and the
-        film itself come off as what the paper holds does.
+        How strongly it lifts the dust, and the pigment the paper holds,
+        into its load (0 = not at all; 1 takes about two thirds in a pass;
+        more, nearly all). Dust that is set, by fixative or under a film of
+        wax, and the film itself come off as what the paper holds does. An
+        eraser lifts strongly. A stump or a finger lifts little: most of
+        what they move is the dust on their face (``smear``), which goes a
+        fraction of their width; what is lifted is carried far.
     lay:
-        The share of what it carries that it lays back down over each of its
-        own widths (0 for an eraser, which keeps it).
+        The share of its load that it lays back down over each of its own
+        widths (0 for an eraser, which keeps it). Where it would lay as much
+        as it lifts it does neither, so once it is loaded it leaves a tone
+        as it is; on bare paper it lays a tone of its own, the paler and the
+        longer the smaller this is.
     press:
         How strongly it presses the dust into the paper, where it is held.
     smear:
         How strongly it pushes the dust on the high ground into the low,
-        which greys the white specks of the paper. A tool that smears (1 or
-        more) also moves the paste of an oil pastel as it moves dust; one
-        that does not, an eraser, lifts paste only as it lifts what the
-        paper holds.
+        which greys the white specks of the paper, and spreads it from grain
+        to grain: it takes the dust onto its face and lays it back within a
+        fraction of its width, which evens a tone and blends two colours
+        where they meet. A tool that smears (1 or more) also moves the
+        paste of an oil pastel as it moves dust; one that does not, an
+        eraser, lifts paste only as it lifts what the paper holds.
     width:
         Its usual width in pixels.
     name:
@@ -79,12 +87,16 @@ class Tool:
         return replace(self, **changes)
 
 
-#: A paper stump: firm and pointed. It drags the dust along and rubs it in.
-STUMP = Tool(1.5, 0.02, lay=0.7, press=0.5, smear=2.0, width=10.0, name="stump")
+#: A paper stump: firm and pointed. It smears the dust along and rubs it in.
+#: A little of the dust stays in it: used for long it is grey, and tones
+#: bare paper lightly and for long (half its load goes in twenty or so of
+#: its widths).
+STUMP = Tool(0.2, 0.02, lay=0.1, press=0.5, smear=2.0, width=10.0, name="stump")
 #: A tortillon: a small, hard stump for details.
 TORTILLON = STUMP.with_(width=5.0, name="tortillon")
-#: A finger: broad and soft. It spreads the dust and presses it in.
-FINGER = Tool(1.2, 0.01, lay=0.5, press=0.8, smear=2.5, width=22.0, name="finger")
+#: A finger: broad and soft. It spreads the dust and presses it in, and
+#: carries little of it away.
+FINGER = Tool(0.16, 0.01, lay=0.08, press=0.8, smear=2.5, width=22.0, name="finger")
 #: A chamois: it wipes most of the dust away and spreads the rest thin.
 CHAMOIS = Tool(1.6, 0.04, lay=0.12, press=0.1, smear=1.0, width=30.0, name="chamois")
 #: A kneaded eraser: it lifts the dust, and a little of what is held; so
