@@ -23,6 +23,8 @@ Work is tracked with Beads (`bd`), not with TODO lists or memory files. `bd prim
 uv sync --group dev --frozen   # install the package and the development tools
 uv run pytest                  # run the tests (the first run compiles the numba kernels)
 make pre-push                  # what CI runs: tox (black, ruff, pyright, pytest), coverage (80% required), spelling
+uv run python tools/fingerprint.py   # whether the picture has changed: hashes of a suite of drawings
+uv run python tools/benchmark.py     # how long strokes, rubs and renders take
 ```
 
 ## Layout
@@ -38,7 +40,8 @@ make pre-push                  # what CI runs: tox (black, ruff, pyright, pytest
 
 ## Conventions
 
-- Kernels are `@njit(cache=True, error_model="numpy")`, without `fastmath` and without `parallel`, so that a drawing repeats exactly. Constants they use live in `_engine.py`.
+- Kernels are `@njit(cache=True, error_model="numpy")`, without `fastmath` and without `parallel`, so that a drawing repeats exactly. What they call is `@_called` (the same, without numba's reference counting: it allocates nothing) or, for every pixel, `@_inlined` (compiled into its caller as well); the top of `_engine.py` says why. Constants they use live in `_engine.py`.
+- A change that is not meant to alter the picture (an optimisation, a refactoring) leaves every hash of `tools/fingerprint.py` as it is (`tests/test_fingerprint.py` checks the recorded ones; for more, `--thorough --save` before and `--thorough --against` after) and regenerates every image byte for byte. One that is meant to alter it records the hashes again, `python tools/fingerprint.py --record`, with the images.
 - The medium is conserved: what leaves the tip is on the paper, and what a stump or an eraser takes off is on the tool. Tests check this.
 - A change meant to alter the picture is judged by measurements, not by looking at two renders side by side, and regenerates every image in `examples/output/` with the final code.
 - Colour (pigments, Kubelka-Munk mixing), stroke paths, noise, reference images and PNG output come from `murex`, which `oilpaint` shares. What both libraries need goes there, not here.
