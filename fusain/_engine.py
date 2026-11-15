@@ -2901,6 +2901,61 @@ def show_through(out, marked, share, seen):
                 at += 1
 
 
+@_inlined
+def film_graphite(volume, sheen, film, share):
+    """The graphite of a dry film in a layer at a pixel, as its sheen: of
+    the graphite in the layer (``sheen``), the share ``share`` that the
+    paper holds of a pencil's mark, and never more than the film
+    (``film``). And what lies with it in the layer (``volume``): the clay
+    of its crumbs, the rest of the mark, and all that is matte and not the
+    film's, its crumbs and any other dust."""
+    graphite = min(share * max(sheen, 0.0), film)
+    crumbs = (film - graphite) * (1.0 - share) / share
+    beside = max(volume - film - (sheen - graphite), 0.0)
+    return graphite, min(crumbs, beside), beside
+
+
+@njit(cache=True, error_model="numpy")
+def film_sheen(held, under, loose, bonded, cover, press, shine, how):
+    """Add the sheen of a film of graphite on a bed of dust to that of what
+    the paper holds (``shine``, (H, W), changed in place), at each pixel
+    with a film and no wax. ``how`` holds, as for what the paper holds,
+    how thick a film is that shines fully, how much thinner it may be on a
+    tooth pressed flat, and how thick the matte that hides all but 1/e of
+    it; and the share of a pencil's mark that is the film
+    (:func:`film_graphite`). The film in the layer on top shines through
+    all the matte in its layer: the dust a pass leaves on top with it
+    cannot be told from dust laid over it later. The one underneath, which
+    a later pass buried, lies on the older dust it was buried in, and
+    shines through the clay of its crumbs and the matte of the layer on
+    top. All of it together shines over no more than the covered share of
+    the pixel. Pixels without a film are left as they are."""
+    full, flat, hide, share = how[0], how[1], how[2], how[3]
+    for iy in range(shine.shape[0]):
+        for ix in range(shine.shape[1]):
+            below, above = bonded[iy, ix, 0, FILM], bonded[iy, ix, 1, FILM]
+            waxed = held[iy, ix, IW]
+            if (below <= 0.0 and above <= 0.0) or waxed > 0.0:
+                continue  # (no film here, or one taken for wax: most pixels)
+            covered = cover[iy, ix]
+            thick = max(covered, 1e-6)
+            whole = full * (1.0 - flat * press[iy, ix]) * thick
+            on_top, _, beside = film_graphite(
+                loose[iy, ix, IV], loose[iy, ix, IX], above, share
+            )
+            sheen = 0.0
+            if on_top > 0.0:
+                sheen += min(on_top / whole, 1.0) * math.exp(-beside / thick / hide)
+            over = max(loose[iy, ix, IV] - loose[iy, ix, IX], 0.0)
+            beneath, crumbs, _ = film_graphite(
+                under[iy, ix, IV], under[iy, ix, IX], below, share
+            )
+            if beneath > 0.0:
+                seen = math.exp(-(over + crumbs) / thick / hide)
+                sheen += min(beneath / whole, 1.0) * seen
+            shine[iy, ix] = min(shine[iy, ix] + covered * sheen, covered)
+
+
 def as_kernel_arrays(points: np.ndarray, pressure: np.ndarray, spacing: float):
     """The arguments :func:`lay_stroke` takes for a sampled path: contiguous
     float64 x, y, pressure, and the distance moved at each sample (half a

@@ -153,7 +153,7 @@ each is not. The rule is that a medium lies on what it meets:
   A medium laid over its own layers, or on a ground no dustier than its
   own mark, meets no bed and draws as it did, to the bit: graphite layer
   on layer, of one grade or of several, pastel over pastel, fixed or not.
-  Three limits. What the paper holds fills the tooth for every medium
+  Two limits. What the paper holds fills the tooth for every medium
   alike, so pastel rubbed into the paper takes a pencil only while dust is
   left on it for the point to ride on: over those two layers blended with
   a finger a 2B line is 0.77 as dark as on bare paper, blended again
@@ -163,9 +163,9 @@ each is not. The rule is that a medium lies on what it meets:
   pass buries is one mixture with the dust of its layer, so a pencil over
   pastel levels off greyer than on paper, and a second layer of a 6B at
   full pressure, thinner than the first, leaves the patch a little lighter
-  than the first did (0.24 of the pastel's tone, then 0.29 and 0.31). And
-  a film of graphite on dust does not shine: only what the paper holds
-  does.
+  than the first did (0.24 of the pastel's tone, then 0.29 and 0.31).
+  A film of graphite shines under the lamp as what the paper holds does
+  (see Rendering).
 - **Dust that is set.** A film binds part of the loose dust it is laid
   over: seven tenths of it under a film thick enough to cover it, less under
   a thinner one. That dust is set where it lies, exactly as fixative sets
@@ -700,6 +700,36 @@ raking one; it is added to what the pigment sends back.
   graphite is satin and not a mirror. Under the default lamp, three firm
   layers of 6B reflect about 0.10 of what the paper does, against 0.06
   without the shine: graphite never looks as black as charcoal.
+  A pencil drawn over a bed of dust lays the graphite the paper would have
+  held as a film on the dust (see "A bed of dust"), and that film shines as
+  what the paper holds does. A layer is one mixture: what its film is made
+  of, and what lies over what within it, are not kept. What can be told is
+  that the graphite in a layer with a film came with a pencil's mark, the
+  film and its crumbs; so the film is taken to hold the share of it that
+  the paper holds of a pencil's mark (`FILM_GRAPHITE`, its binding), never
+  more than its own volume, which is exact for a pencil over pastel, and
+  loose graphite dust from elsewhere that lies with a film is taken for its
+  crumbs, matte but for the film's share. In the layer on top, the film
+  shines through all the matte that lies with it: the clay of its crumbs,
+  as a line on paper does through its own, and whatever dust is there, for
+  dust a light pass did not bury cannot be told from dust laid over the
+  film after it. That errs on the matte side, as loose graphite is matte: a
+  light line shines less than its film would. A film that a later pass
+  buried lies on the older dust it was buried in, and shines through the
+  clay of its crumbs and the matte of the layer on top. Where a pixel has
+  wax, a film there is taken for one of wax, as a tool takes it. On
+  cartridge paper, along lines 4 wide drawn over two layers of a pale soft
+  pastel, of which 0.88 to 0.90 of the graphite is a film where on bare
+  paper the paper holds it: a 2B at full pressure shines 0.38 (0.43 on bare
+  paper; nothing before, 0.001), a 6B 0.68 (0.76), an HB 0.27 (0.31), the
+  same over the pastel fixed; at 0.6 a 2B 0.18 (0.22), at 0.3 a third of
+  what it shines on bare paper. Overhead, the lamp adds 0.022 of the
+  paper's white to the 2B line (0.025 on bare paper) and 0.040 to the 6B
+  (0.044). Six layers of 6B at full pressure shaded over the pastel shine
+  0.78, against 0.82 on bare paper. A stump or a finger drawn across a line
+  on loose pastel takes its film with the pastel and its shine with it; on
+  fixed pastel, 0.83 of the film stays and 0.87 and 0.81 of its shine;
+  and what they spread is dust, with no film, and shines as it did.
 - **Wax** has no sheen of its own: it is its polish that shines. The gloss is
   how slick the film of wax is at the pixel (as for the resist) times the
   square of how far the surface is pressed flat (a film half polished still
