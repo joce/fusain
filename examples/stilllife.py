@@ -26,6 +26,7 @@ laid across them, and living contours come last.
 """
 
 # cspell:words bary catmull hwck interp isscalar keepdims nmax savez stilllife tris
+# cspell:words uinteger
 
 from __future__ import annotations
 
@@ -627,33 +628,57 @@ def fold_lines(n=60):
     return [(catmull_rom(np.array(p, float), n), a, w) for p, a, w in FOLDS]
 
 
-def segment_distance(q, a, b):
-    ab = b - a
-    t = np.clip(((q - a) @ ab) / max(ab @ ab, 1e-12), 0, 1)
-    return np.linalg.norm(q - (a + t[:, None] * ab), axis=1), t
+@njit(cache=True, error_model="numpy")
+def _nearer(q, a, ab, along_ab, reach, i, best, seg, along):  # pragma: no cover
+    """Where the segment ``i`` (from ``a`` along ``ab``) is nearer to a point
+    of ``q`` than the segments before it, note its distance, its number and
+    how far along it the nearest point lies (0 to 1).  ``along_ab`` is each
+    point's component along the segment, times its length, and ``reach`` the
+    segment's squared length."""
+    for j in range(q.shape[0]):
+        t = min(max(along_ab[j] / reach, 0.0), 1.0)
+        ex = q[j, 0] - (a[0] + t * ab[0])
+        ey = q[j, 1] - (a[1] + t * ab[1])
+        d = math.sqrt(ex * ex + ey * ey)
+        if d < best[j]:
+            best[j], seg[j], along[j] = d, i, t
 
 
 def folds_at(x, z):
     """Height of the folds over the table at (x, z), and the folds'
     direction there (unit (dx, dz)), weighted by how near each fold is."""
     q = np.stack([x.ravel(), z.ravel()], 1)
+    lines = fold_lines()
+    # A few thousand points at a time, so that each fold's pass over them
+    # stays in the processor's cache.
+    both = [folds_over(q[k : k + 4096], lines) for k in range(0, len(q), 4096)]
+    height = np.concatenate([h for h, _ in both])
+    heading = np.concatenate([d for _, d in both])
+    return height.reshape(x.shape), heading.reshape(*x.shape, 2)
+
+
+def folds_over(q, lines):
+    """Height and heading of the folds' ``lines`` at the points ``q`` (n, 2).
+    How far along a segment each point lies is worked out by numpy, whose
+    rounding the drawing has always had; the search for the nearest segment
+    is compiled."""
     height = np.zeros(len(q))
     heading = np.tile([0.0, 1.0], (len(q), 1)) * 0.2
-    for line, amp, width in fold_lines():
+    for line, amp, width in lines:
+        steps = np.diff(line, axis=0)
         best = np.full(len(q), np.inf)
-        tang = np.zeros((len(q), 2))
-        along = np.zeros(len(q))
-        for i in range(len(line) - 1):
-            d, t = segment_distance(q, line[i], line[i + 1])
-            closer = d < best
-            best[closer] = d[closer]
-            tang[closer] = unit_rows(line[i + 1] - line[i])
-            along[closer] = ((i + t) / (len(line) - 1))[closer]
+        seg = np.zeros(len(q), np.intp)
+        t = np.zeros(len(q))
+        for i, ab in enumerate(steps):
+            reach = max(ab @ ab, 1e-12)
+            _nearer(q, line[i], ab, (q - line[i]) @ ab, reach, i, best, seg, t)
+        tang = unit_rows(steps)[seg]
+        along = (seg + t) / (len(line) - 1)
         taper = np.sin(np.pi * np.clip(along, 0, 1)) ** 0.5
         bump = amp * taper * np.exp(-0.5 * (best / width) ** 2)
         height = np.maximum(height, bump) + 0.25 * np.minimum(height, bump)
         heading += tang * np.exp(-0.5 * (best / (2 * width)) ** 2)[:, None]
-    return height.reshape(x.shape), unit_rows(heading).reshape(*x.shape, 2)
+    return height, unit_rows(heading)
 
 
 def flat_under(x, z):
@@ -1755,6 +1780,27 @@ class Hatcher:
         d = math.cos(a) * self.maps.dir1 + math.sin(a) * self.maps.dir2
         return unit_rows(d).astype(np.float32)
 
+    def chances(self, cells, size):
+        """What ``rng.random(size)[cells]`` would give, for the sorted
+        ``cells``, with the generator left where drawing all ``size`` numbers
+        leaves it: only the stretch that holds the cells is drawn, and the
+        rest is skipped over.  (Skipping forgets a half-used 32-bit draw,
+        which the integers drawn elsewhere leave pending: put it back.)"""
+        bits = self.rng.bit_generator
+        assert isinstance(bits, np.random.PCG64)  # the one that can skip
+        pending = bits.state
+        first, end = (int(cells[0]), int(cells[-1]) + 1) if len(cells) else (size, size)
+        bits.advance(first)
+        stretch = self.rng.random(end - first)
+        bits.advance(size - end)
+        after = bits.state
+        after["has_uint32"], after["uinteger"] = (
+            pending["has_uint32"],
+            pending["uinteger"],
+        )
+        bits.state = after
+        return stretch[cells - first]
+
     def lay(self, ps: Pass, target, limit=3000):
         """Hatch until what is laid comes near ``target`` (coverage) between
         the pass's floor and floor + cap."""
@@ -1765,13 +1811,18 @@ class Hatcher:
         coarse = shrink(goal[: h // CELL * CELL, : w // CELL * CELL], CELL)
         laid = np.zeros_like(coarse)
         self.full = np.zeros(goal.shape, np.uint8)
+        # Only a cell with some target can lack ink (what is laid is never
+        # taken away), so only those are weighed.
+        wanting = np.flatnonzero(coarse > 0)
         for _ in range(limit):
-            deficit = coarse - laid
-            pick = deficit * self.rng.random(deficit.shape) ** 0.35
-            i = int(np.argmax(pick))
-            cy, cx = divmod(i, coarse.shape[1])
-            if deficit[cy, cx] < 0.3 * ps.cap:
+            chance = self.chances(wanting, coarse.size)
+            if len(wanting) == 0:
                 break
+            deficit = coarse.ravel()[wanting] - laid.ravel()[wanting]
+            k = int(np.argmax(deficit * chance**0.35))
+            if deficit[k] < 0.3 * ps.cap:
+                break
+            cy, cx = divmod(int(wanting[k]), coarse.shape[1])
             centre = (np.array([cx, cy]) + self.rng.random(2)) * CELL
             if not self.bundle(ps, centre, goal, field, part, laid):
                 laid[cy, cx] += ps.cap  # nothing could be laid here
