@@ -282,8 +282,11 @@ def test_a_blob_is_a_dot_a_little_wider_than_the_line_and_thickest_in_the_middle
     assert np.argmax(start) == 20
     assert np.count_nonzero(start) > np.count_nonzero(run)
     assert np.count_nonzero(start) <= 2 * eng.BLOB_WIDE * (0.5 * 3 + 0.5) + 1
-    # it fills the tooth: all of the pixels under its middle are inked
+    # all of the pixels under its middle are inked; beyond the line, where
+    # the paper had no ink, it inks a share of a pixel, the more the nearer
+    # its middle
     assert inked[20, 19:22].min() == 1.0 and inked[19:22, 20].min() == 1.0
+    assert 0.0 < inked[18, 19] < inked[18, 20] < 1.0
 
 
 def _corner(run: float, seed: int, turn=(160.5, 90.5)) -> tuple[float, float]:
@@ -409,6 +412,108 @@ def test_a_pen_that_never_blots_and_a_leaky_one():
         sheets.append(sheet.ink[..., IV])
     corner = (slice(15, 26), slice(95, 106))  # (a turn, at (100.5, 20.5))
     assert sheets[1][corner].sum() > 1.1 * sheets[0][corner].sum()
+
+
+def _drops(sheet, volume, xs=range(80, 120, 4), y=20.0) -> float:
+    """Leave a drop of this volume from a blue pen at each of ``xs``, as
+    the ball does (:func:`fusain._engine.blot`). Returns the volume laid."""
+    pen = pens.BLUE
+    kept = np.array([pen.ink.S, pen.flow, pen.blots, *pen.mirrors], dtype=np.float64)
+    k = np.ascontiguousarray(pen.ink.K, dtype=np.float64)
+    laid = 0.0
+    for x in xs:
+        laid += eng.blot(
+            sheet.cover,
+            sheet.held,
+            sheet.under,
+            sheet.loose,
+            sheet.ink,
+            sheet.inked,
+            x + 0.5,
+            y,
+            volume,
+            eng.BLOB_WIDE * 2.0,
+            eng.BALL_INK * pen.flow,
+            k,
+            kept,
+        )
+    return laid
+
+
+@pytest.mark.parametrize("paper", [papers.CARTRIDGE, papers.ROUGH])
+def test_a_drop_inks_a_pixel_as_far_as_it_is_ink(paper):
+    """A drop inks as much of a pixel's bare paper as it would cover a firm
+    pass thick, on its own: a tiny one next to nothing. (Any drop, however
+    small, inked all of a pixel that held a pass of ink: a billionth of a
+    firm pass, left every four pixels along a line drawn three times firmly
+    between two rows, inked a third of the half of its edge pixels left
+    bare, 0.50 to 0.34, and darkened the line by a seventh.)"""
+    sheet = Sheet(200, 40, paper=paper, seed=3)
+    for _ in range(3):
+        sheet.stroke([(10, 20.0), (190, 20.0)], pens.BLUE.with_(blots=0.0), 0.8)
+    assert sheet.ink is not None and sheet.inked is not None
+    line = (slice(17, 24), slice(78, 122))
+    edge = (sheet.inked[line] > 0.0) & (sheet.inked[line] < 1.0)
+    assert edge.sum() > 60 and 0.4 < (1.0 - sheet.inked[line][edge]).mean() < 0.6
+    tone = _luminance(sheet)[line].mean()
+    for volume in (1e-9, 1e-4, 0.01):
+        dropped = sheet.copy()
+        assert dropped.ink is not None and dropped.inked is not None
+        assert _drops(dropped, volume) == pytest.approx(10 * volume, rel=1e-6)
+        assert _ink(dropped) == pytest.approx(_ink(sheet) + 10 * volume, rel=1e-6)
+        # each pixel's bare paper is inked as far as the drop there covers
+        # it a firm pass thick
+        bare = 1.0 - sheet.inked[line].astype(np.float64)
+        dv = dropped.ink[line][..., IV] - sheet.ink[line][..., IV]
+        covers = np.minimum(dv / eng.BALL_INK, 1.0)
+        inked = dropped.inked[line]
+        assert inked == pytest.approx(1.0 - bare * (1.0 - covers), abs=1e-6)
+        darker = 1.0 - _luminance(dropped)[line].mean() / tone
+        if volume <= 1e-4:  # (next to nothing)
+            assert (1.0 - inked[edge]).mean() > bare[edge].mean() - 0.001
+            assert darker < 0.001
+        else:
+            assert 0.001 < darker < 0.05
+
+
+def _blob_radius(pen, pressure: float) -> tuple[float, float]:
+    """The radius of the blob a pen leaves where it lands (from the spread
+    of its ink, as a dot thickest at its middle), and the width of its line
+    further on (likewise)."""
+    sheets = []
+    for blots in (0.0, 1.0):
+        sheet = Sheet(200, 40, seed=_loaded())
+        sheet.stroke([(20.5, 20.5), (180, 20.5)], pen.with_(blots=blots), pressure)
+        assert sheet.ink is not None
+        sheets.append(sheet.ink[..., IV].astype(np.float64))
+    ys, xs = np.mgrid[:40, :200]
+    blob = sheets[1] - sheets[0]
+    out = (xs + 0.5 - 20.5) ** 2 + (ys + 0.5 - 20.5) ** 2
+    line = sheets[0][:, 60:140]
+    across = (ys[:, 60:140] + 0.5 - 20.5) ** 2
+    return (
+        float(np.sqrt(3.0 * (blob * out).sum() / blob.sum())),
+        float(2.0 * np.sqrt(3.0 * (line * across).sum() / line.sum())),
+    )
+
+
+def test_a_light_line_leaves_a_narrower_blob():
+    """A blob is as much wider than the paper the ball meets where it is
+    left as BLOB_WIDE says: a lighter line, narrower, leaves a narrower blob,
+    still a little wider than the line. (It was as wide at any pressure: a
+    pen six pixels wide left a blob of radius 4.2 at 0.05, where its line is
+    3.6 wide.)"""
+    pen = pens.ballpoint("#22357e", width=6)
+    measured = [_blob_radius(pen, p) for p in (0.05, 0.15, 0.3, 0.9)]
+    blobs, lines = [b for b, _ in measured], [w for _, w in measured]
+    assert all(a < b for a, b in itertools.pairwise(blobs))
+    assert all(a < b for a, b in itertools.pairwise(lines))
+    # as the line narrows, so does the blob
+    assert blobs[0] < 0.8 * blobs[-1]
+    assert abs(blobs[0] / blobs[-1] - lines[0] / lines[-1]) < 0.12
+    # and it is wider than its line (the ball, 6 wide, reaches 3.5 pixels)
+    assert all(2.0 * b > 1.1 * w for b, w in zip(blobs, lines, strict=True))
+    assert blobs[-1] == pytest.approx(eng.BLOB_WIDE * 3.5, rel=0.05)
 
 
 def test_a_blob_off_the_edge_of_the_sheet_or_on_wax_is_not_counted_as_laid():
@@ -541,6 +646,19 @@ def test_what_a_pen_in_the_hand_gathers_is_on_the_paper_or_on_its_ball():
     lines, drops = laid[0], laid[1] - laid[0]
     assert pens_[0].load == 0.0 and drops > 0.0
     assert drops + pens_[1].load == pytest.approx(eng.BALL_GATHER * lines, rel=1e-4)
+
+
+def test_a_ball_holds_at_most_a_drop_and_gathers_no_more():
+    """What the ball would gather beyond the most it holds is not gathered:
+    it is neither on the paper nor on the ball. A long straight line fills
+    the rim, and the next one keeps it full."""
+    pen = HeldPen(pens.BLUE)
+    sheet = Sheet(320, 60, seed=1)
+    first = sheet.stroke([(10, 20.5), (310, 20.5)], pen, 0.8)
+    assert eng.BALL_GATHER * first > 1.5 * MOST
+    assert pen.load == pytest.approx(MOST, rel=1e-12)
+    sheet.stroke([(10, 40.5), (310, 40.5)], pen, 0.8)
+    assert pen.load == pytest.approx(MOST, rel=1e-12)
 
 
 # --------------------------------------------------------------------------

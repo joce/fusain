@@ -9,11 +9,12 @@ ink is clear, so lines that cross and layers of hatching darken; and it
 soaks into the paper, where no rubber eraser reaches it (a knife or a sand
 eraser takes it with the surface of the paper). The ball gathers ink as it
 rolls and leaves a blob where the line turns sharply and, now and then,
-where it starts, the lighter the lighter the line (``blots=0`` for a pen
-that never blots). Pressed firmly it leaves a groove, which a pencil shaded
-over it skips. And ink in heavy layers bronzes under a lamp: it mirrors
-the light its dye absorbs most, so blue ink shines copper; a black ink is a
-blend of dyes, and shines as its violet does.
+where it starts, the lighter and the narrower the lighter the line
+(``blots=0`` for a pen that never blots). Pressed firmly it leaves a
+groove, which a pencil shaded over it skips. And ink in heavy layers
+bronzes under a lamp: it mirrors the light its dye absorbs most, so blue
+ink shines copper; a black ink is a blend of dyes, and shines as its violet
+does.
 """
 
 from __future__ import annotations
@@ -139,13 +140,23 @@ class HeldPen:
     mostly next to none, which it leaves where it lands, and takes away what
     it gathers.
 
+    The rim of its ball holds a drop at most (``BALL_BLOB`` firm passes thick
+    over the square of the ball's radius, half a pixel more than half its
+    width, times the pen's ``flow`` and ``blots``: 0.48 for a pen 3 wide).
+    What it would gather beyond that is not gathered, and is nowhere: not
+    on the paper, not on the ball. So what its drops laid and what is on
+    its ball are the share ``BALL_GATHER`` (times ``blots``) of the ink its
+    lines laid only while the rim has never been full; long lines with no
+    sharp turn (a hatching's) fill it, and keep it full.
+
     Parameters
     ----------
     pen:
         Which pen, e.g. ``pens.BLUE``.
 
     ``load`` is the volume of ink on the rim of its ball now: none when it is
-    first taken up. It has its pen's width.
+    first taken up, never more than the drop it holds at most. It has its
+    pen's width.
     """
 
     def __init__(self, pen: Pen):
@@ -162,7 +173,8 @@ class HeldPen:
 
     @property
     def load(self) -> float:
-        """Volume of ink on the rim of its ball now."""
+        """Volume of ink on the rim of its ball now: at most the drop it
+        holds (see :class:`HeldPen`)."""
         return float(self._rim[0])
 
     def wipe(self) -> float:
