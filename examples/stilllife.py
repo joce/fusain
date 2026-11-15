@@ -1906,13 +1906,15 @@ class Hatcher:
             spacing[k] = rng.uniform(0.85, 1.15)
             slide[k] = rng.normal(0, 0.15 * length)
             cut[k] = rng.uniform(0.35, 0.65)
-        # The direction is in single precision, as the field is, and so are
-        # its multiples (the picture has always had that rounding).
+        # The direction's multiples are worked out in its own precision,
+        # which is the field's (single) where NumPy keeps a product of a
+        # single-precision number and a Python one single, as from 2.0, and
+        # double before: the picture has always had that rounding.
         place = np.arange(n) - (n - 1) / 2  # in strokes from the middle
         starts = (
             centre
-            + across * (place * gap * spacing).astype(np.float32)[:, None]
-            + d * slide.astype(np.float32)[:, None]
+            + across * (place * gap * spacing).astype(d.dtype)[:, None]
+            + d * slide.astype(d.dtype)[:, None]
         )
         ahead = length * cut  # the length of each stroke's first way
         steps = (np.stack([ahead, length - ahead], 1) / 2).astype(np.int64)
