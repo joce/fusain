@@ -245,6 +245,22 @@ def test_a_width_per_point_of_the_path():
     assert np.array_equal(one.pigment(), other.pigment())
 
 
+@pytest.mark.parametrize("medium", [pencils.B4, pens.BLUE])
+def test_a_number_is_the_same_all_along(medium):
+    # a number is evaluated along the stroke without murex: as murex does it
+    path = [(40, 80), (160, 90), (280, 80)]
+    numbers: dict[str, Any] = {"pressure": np.float32(0.7)}
+    profiles: dict[str, Any] = {"pressure": lambda u: np.float32(0.7) + 0 * u}
+    if medium is pencils.B4:
+        numbers.update(width=5, tilt=np.float64(0.25))
+        profiles.update(width=[5.0], tilt=[0.25, 0.25, 0.25])
+    one, other = _sheet(papers.CARTRIDGE), _sheet(papers.CARTRIDGE)
+    laid = one.stroke(path, medium, **numbers)
+    assert laid > 0 and laid == other.stroke(path, medium, **profiles)
+    for name in ("press", "dent", "cover", "held", "under", "loose", "ink"):
+        assert np.array_equal(getattr(one, name), getattr(other, name)), name
+
+
 def test_a_stick_turned_onto_its_side_as_it_goes():
     stick = Stick(charcoal.VINE, width=5, lead=5, side=60)
     sheet = _sheet()

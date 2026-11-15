@@ -568,6 +568,28 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- A short stroke takes a little less time around its kernel (fusain-238),
+  and no picture changes: the thorough fingerprint (325 drawings) and
+  every image of `examples/output/` come out as before, to the byte. A
+  pressure, a width or a tilt given as a number is made an array of that
+  number straight away; murex was asked to evaluate it as a profile, and
+  fusain then broadcast and checked what came back: about 4 microseconds
+  each for a pressure and a width, 9 for a tilt. The shape of the tip is
+  filled in column by column, where three arrays were stacked and copied
+  (4 microseconds). Measured with the kernel replaced by a compiled
+  function of the same arguments that does nothing (CPU time, best of 25,
+  on a shared 4-core machine): each of the 2000 short strokes of
+  `tools/benchmark.py` took 95 microseconds around its kernel and takes
+  75; the strokes of a shading, whose pressure is a function, 167 and 155.
+  With the kernel, the 2000 short strokes take 0.50 s of CPU, from 0.55 s
+  (best of 20, three times over), a tenth less; 40 small patches of
+  hatching, 1.64 to 1.72 s, from 1.71 to 1.75 s; shading the whole sheet,
+  whose strokes are long, as before. What is left of the 75: murex's
+  sampling of the path, about 33 (making the path, 5; its dense points,
+  10; resampling them, 18, of which numpy spacing the samples takes 5 and
+  interpolating them 5); fusain's own checks and arrays, about 14; handing
+  the kernel its 19 arguments, 1.3 (one argument takes 0.15: packing them
+  into fewer would save next to nothing).
 - What a ballpoint's ball gathers beyond the most it holds is documented
   (fusain-45t; `HeldPen`, `fusain._engine.roll_stroke` and
   `docs/design.md`). The rim holds a drop at most (`BALL_BLOB`: 0.48 for a
