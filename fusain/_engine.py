@@ -4,16 +4,39 @@ Kernels are ``@njit(cache=True, error_model="numpy")``, without ``fastmath``
 and without ``parallel``, so that a drawing repeats exactly.
 
 What a kernel calls for every pixel is compiled into its caller
-(``inline="always"``): numba otherwise counts a reference to each array such
-a helper is given, and back, at every call, which took a third of the time
-of a stroke and half of that of a rub. It changes no result;
-``tools/benchmark.py`` measures what it is worth.
+(``inline="always"``), and written so that numba counts no reference for it.
+Numba counts a reference to an array when a helper is given it, and one back
+when the helper is done with it, each an atomic operation: left in, they
+were half the time of a stroke and two thirds of that of a rub. It drops
+the pair only where it can see the two as one: where the helper is done
+with the array at one place, whichever way it went. So, of what is called
+for every pixel:
+
+- a helper is given numbers where the kernel has them, and returns numbers
+  (:func:`in_parts`, :func:`turned`);
+- one that is given an array to read reads what it needs of it first, before
+  its first ``if`` (:func:`within_ends`, :func:`bed_of`);
+- one that changes an array, or reads it late, has no early ``return`` and
+  no ``if`` that holds its last use of it: what it does only sometimes is in
+  a loop that runs once or not at all, ``for _ in once(...)``
+  (:func:`press_dust`, :func:`drag_film`). What a loop uses is done with
+  where the loop ends, whatever went on inside it. All that is done
+  sometimes goes in one such loop, and no ``break`` leaves a loop: one that
+  must stop early is a ``while`` that says when (:func:`sunk_into`).
+
+And a kernel that is called for every step of a stroke (:func:`bear`) calls
+no other kernel and allocates no array (its caller gives it room to work
+in), or its own arrays are counted at every call. ``tools/refcounts.py``
+tells what each kernel still counts (the kernel that rubs, a great deal:
+its helpers are not yet written so); ``tools/benchmark.py`` measures what
+that is worth. None of it changes a result.
 
 Speed must not change the picture: ``tools/fingerprint.py`` tells. What is
 exact here and must stay so: a table holds values worked out by the very
 expression it replaces (:func:`streaks_of`); a loop skips only pixels that
 it would have left as they were (:func:`row_span`, :func:`settle_dust`);
-and no sum is taken in another order.
+a helper that reads a pixel first reads what it would have read later, of
+what nothing has changed since; and no sum is taken in another order.
 """
 
 from __future__ import annotations
@@ -26,6 +49,16 @@ from numba import njit
 
 #: What a kernel calls for every pixel (see above).
 _inlined = njit(cache=True, error_model="numpy", inline="always")
+
+
+@_inlined
+def once(some):
+    """What ``for _ in once(some):`` runs over: once if ``some``, and not at
+    all if not. It is an ``if`` for a helper that is given arrays (see
+    above): the helper is done with what the loop uses where the loop ends,
+    and not here on one path and there on another."""
+    return range(1 if some else 0)
+
 
 #: Pigment is packed per pixel as [K (N bands), S, volume, sheen], all
 #: extensive (summed over the pigment present; the sheen is the volume times
@@ -335,7 +368,7 @@ POLISH_HOLDS = 0.9
 STAIN = 0.008
 #: An eraser slides on wax that holds against it, and drags some of it
 #: along: this share of what it would have lifted, had the wax not held
-#: (:func:`drag_wax`). It lays that back, held, DRAG_LAY of it over each
+#: (:func:`push_along`). It lays that back, held, DRAG_LAY of it over each
 #: of its widths, on what is beside it and after it: a vinyl eraser smears
 #: a burnished dark a width or so along its way.
 WAX_DRAG = 0.05
@@ -395,9 +428,9 @@ def streak_at(dx, dy, tx, ty, streaks, salt):
     across = (dy * tx - dx * ty) / STREAK_WIDTH + STREAK_MIDDLE
     band = int(math.floor(across))
     blend = across - band
-    if 0 <= band < STREAK_BANDS:
-        low, high = streaks[band], streaks[band + 1]
-    else:  # (a tip too wide for the table)
+    known = min(max(band, 0), STREAK_BANDS - 1)
+    low, high = streaks[known], streaks[known + 1]
+    if known != band:  # (a tip too wide for the table)
         low = unit_noise(band, 0, salt + 1)
         high = unit_noise(band + 1, 0, salt + 1)
     streak = low * (1.0 - blend)
@@ -522,25 +555,25 @@ def press_dust(held, under, loose, bonded, cover, iy, ix, share):
     """Press the ``share`` of the dust and of the paste at a pixel into the
     paper: not what is set or a film (``bonded``), and less of the rest the
     more of those lies between it and the paper."""
-    if loose[iy, ix, IV] <= 0.0 and under[iy, ix, IV] <= 0.0:
-        return  # (no dust here: most pixels of a first pass)
-    from_loose, from_under = share, share
-    barrier = hard_at(bonded, iy, ix)
-    if barrier > 0.0:
-        share *= 1.0 - min(barrier / max(cover[iy, ix], 1e-6) / COVERS, 1.0)
-        from_loose = share * free_share(bonded, loose, iy, ix, 1)
-        from_under = share * free_share(bonded, under, iy, ix, 0)
-    for part in range(LOOSE):
-        moved = loose[iy, ix, part] * from_loose
-        loose[iy, ix, part] -= moved
-        held[iy, ix, part] += moved
-        moved = under[iy, ix, part] * from_under
-        under[iy, ix, part] -= moved
-        held[iy, ix, part] += moved
-    if bonded[iy, ix, 1, PASTE] > 0.0:
-        bonded[iy, ix, 1, PASTE] -= bonded[iy, ix, 1, PASTE] * share
-    if bonded[iy, ix, 0, PASTE] > 0.0:
-        bonded[iy, ix, 0, PASTE] -= bonded[iy, ix, 0, PASTE] * share
+    # (else no dust here: most pixels of a first pass)
+    for _ in once(loose[iy, ix, IV] > 0.0 or under[iy, ix, IV] > 0.0):
+        from_loose, from_under = share, share
+        barrier = hard_at(bonded, iy, ix)
+        if barrier > 0.0:
+            share *= 1.0 - min(barrier / max(cover[iy, ix], 1e-6) / COVERS, 1.0)
+            from_loose = share * free_share(bonded, loose, iy, ix, 1)
+            from_under = share * free_share(bonded, under, iy, ix, 0)
+        for part in range(LOOSE):
+            moved = loose[iy, ix, part] * from_loose
+            loose[iy, ix, part] -= moved
+            held[iy, ix, part] += moved
+            moved = under[iy, ix, part] * from_under
+            under[iy, ix, part] -= moved
+            held[iy, ix, part] += moved
+        if bonded[iy, ix, 1, PASTE] > 0.0:
+            bonded[iy, ix, 1, PASTE] -= bonded[iy, ix, 1, PASTE] * share
+        if bonded[iy, ix, 0, PASTE] > 0.0:
+            bonded[iy, ix, 0, PASTE] -= bonded[iy, ix, 0, PASTE] * share
 
 
 @_inlined
@@ -569,14 +602,13 @@ def drag_film(layer, bonded, drag, iy, ix, which, up):
     in a layer is one mixture: a tool that lifts a film lifts it so too.)"""
     film = bonded[iy, ix, which, FILM]
     there = layer[iy, ix, IV]
-    if film <= 0.0 or there <= 0.0:
-        return
-    share = up * min(film / there, 1.0)
-    bonded[iy, ix, which, FILM] = film - film * up
-    for part in range(LOOSE):
-        taken = layer[iy, ix, part] * share
-        layer[iy, ix, part] -= taken
-        drag[part] += taken
+    for _ in once(film > 0.0 and there > 0.0):
+        share = up * min(film / there, 1.0)
+        bonded[iy, ix, which, FILM] = film - film * up
+        for part in range(LOOSE):
+            taken = layer[iy, ix, part] * share
+            layer[iy, ix, part] -= taken
+            drag[part] += taken
 
 
 @_inlined
@@ -638,13 +670,19 @@ def set_down(held, cover, drag, now):
 
 
 @_inlined
-def bond_dust(bonded, layer, iy, ix, which, share, film):
-    """Bond the ``share`` of the loose dust in one layer at a pixel: the
-    share ``film`` of that is set, as under a film, and the rest turns to
-    paste."""
+def unbonded(bonded, layer, iy, ix, which):
+    """The loose dust in one layer at a pixel (``which``: 0 underneath, 1 on
+    top): what is neither set, nor a film, nor paste."""
     there = bonded[iy, ix, which, SET] + bonded[iy, ix, which, FILM]
     there += bonded[iy, ix, which, PASTE]
-    caught = max(layer[iy, ix, IV] - there, 0.0) * share
+    return max(layer[iy, ix, IV] - there, 0.0)
+
+
+@_inlined
+def bond_dust(bonded, iy, ix, which, caught, film):
+    """Bond the volume ``caught`` of the loose dust in one layer at a pixel:
+    the share ``film`` of it is set, as under a film, and the rest turns to
+    paste."""
     bonded[iy, ix, which, SET] += caught * film
     bonded[iy, ix, which, PASTE] += caught * (1.0 - film)
 
@@ -678,10 +716,13 @@ def settle_pixel(fresh, cover, bonded, under, loose, pasty, binds, iy, ix):
         bonded[iy, ix, 0, kind] += moved
     paste = rest * pasty
     binder = film + paste
+    # (the loose dust of each layer, before any of it is bonded)
+    below = unbonded(bonded, under, iy, ix, 0)
+    on_top = unbonded(bonded, loose, iy, ix, 1)
     if binder > 0.0 and binds > 0.0:
         share = binds * min(binder * thin, 1.0)
-        bond_dust(bonded, under, iy, ix, 0, share, film / binder)
-        bond_dust(bonded, loose, iy, ix, 1, share, film / binder)
+        bond_dust(bonded, iy, ix, 0, below * share, film / binder)
+        bond_dust(bonded, iy, ix, 1, on_top * share, film / binder)
     bonded[iy, ix, 1, FILM] += film
     bonded[iy, ix, 1, PASTE] += paste
     return rest, film
@@ -818,13 +859,14 @@ def bed_of(held, under, loose, bonded, covered, iy, ix, crumbs):
     ground no dustier than the tip's own mark: bare paper, its own layers,
     or those of a medium that holds better."""
     lying = under[iy, ix, IV] + loose[iy, ix, IV]
-    if lying <= 0.0:
-        return 0.0, 0.0  # (no dust here: most pixels of a first pass)
     fixed = bonded[iy, ix, 0, SET] + bonded[iy, ix, 1, SET]
     stuck = bonded[iy, ix, 0, FILM] + bonded[iy, ix, 1, FILM]
     stuck += bonded[iy, ix, 0, PASTE] + bonded[iy, ix, 1, PASTE]
+    fast = held[iy, ix, IV] + stuck
+    if lying <= 0.0:
+        return 0.0, 0.0  # (no dust here: most pixels of a first pass)
     dust = lying - stuck
-    bed = (dust - crumbs * (held[iy, ix, IV] + stuck)) / covered - BED_FROM
+    bed = (dust - crumbs * fast) / covered - BED_FROM
     if bed <= 0.0:
         return 0.0, 0.0
     return bed, min(max(dust - fixed, 0.0) / dust, 1.0)
@@ -841,12 +883,13 @@ def riding(held, under, loose, bonded, covered, iy, ix, crumbs, beds):
     so what the paper holds there is not either (with the crumbs counted
     for it): what fills the tooth for it there is what lies on the bed."""
     bed, afloat = bed_of(held, under, loose, bonded, covered, iy, ix, crumbs)
+    paper = held[iy, ix, IV]
     if bed <= 0.0:
         return 0.0, 0.0
     rides = beds * min(bed / COVERS, 1.0)
     # (dust that is set took less of the room than loose dust)
     took = afloat + FIXED_ROOM * (1.0 - afloat)
-    below = (1.0 + crumbs * took) * held[iy, ix, IV] / covered
+    below = (1.0 + crumbs * took) * paper / covered
     return beds * bed * took + rides * below, rides
 
 
@@ -884,7 +927,7 @@ def span_of(now, dy, lean, half, top, x0, x1):
     return row_span(now[0], dy, lean, half, top, x0, x1)
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def sunk_into(dent, now, x0, x1, y0, y1, lean, half, top):
     """How far down a groove the tip at ``now`` (see :func:`bear`) goes, as
     ``dent`` counts it: as far as the least indented of the paper it covers
@@ -895,18 +938,22 @@ def sunk_into(dent, now, x0, x1, y0, y1, lean, half, top):
     height, width = dent.shape
     x, y = now[0], now[1]
     cx, cy = int(math.floor(x)), int(math.floor(y))
-    if 0 <= cy < height and 0 <= cx < width and dent[cy, cx] <= 0.0:
-        return 0.0  # (the paper under its middle is not indented: most often)
+    # (the paper under its middle is not indented, most often: no row to see)
+    level = 0 <= cy < height and 0 <= cx < width and dent[cy, cx] <= 0.0
     lowest = math.inf
-    for iy in range(y0, y1):
+    iy = y1 if level else y0
+    # (as far as the first paper it covers that is not indented; loops that
+    # end on that, where a ``return`` would be: see the top of the file)
+    while iy < y1 and lowest > 0.0:
         dy = iy + 0.5 - y
         xa, xb = span_of(now, dy, lean, half, top, x0, x1)
-        for ix in range(xa, xb):
+        ix = xa
+        while ix < xb and lowest > 0.0:
             if dent[iy, ix] < lowest and bearing_at(ix + 0.5 - x, dy, now)[1] > 0.0:
                 lowest = dent[iy, ix]
-                if lowest <= 0.0:
-                    return 0.0
-    return lowest if lowest < math.inf else 0.0
+            ix += 1
+        iy += 1
+    return lowest if 0.0 < lowest < math.inf else 0.0
 
 
 @_inlined
@@ -916,21 +963,23 @@ def within_ends(px, py, ends):
     line across its end, where it is cut. ``ends`` is [x, y, and heading
     (x, y) where it starts, 1 if it is cut square there, the same where it
     ends]."""
+    x0, y0, tx0, ty0, cut0 = ends[0], ends[1], ends[2], ends[3], ends[4]
+    x1, y1, tx1, ty1, cut1 = ends[5], ends[6], ends[7], ends[8], ends[9]
     share = 1.0
-    if ends[4] > 0.0:
-        ahead = (px - ends[0]) * ends[2] + (py - ends[1]) * ends[3]
+    if cut0 > 0.0:
+        ahead = (px - x0) * tx0 + (py - y0) * ty0
         share = min(max(ahead + 0.5, 0.0), 1.0)
-    if ends[9] > 0.0:
-        short = (ends[5] - px) * ends[7] + (ends[6] - py) * ends[8]
+    if cut1 > 0.0:
+        short = (x1 - px) * tx1 + (y1 - py) * ty1
         share = min(share, min(max(short + 0.5, 0.0), 1.0))
     return share if share > 1e-6 else 0.0  # (what rounding leaves past it)
 
 
 @_inlined
-def bear_on_row(row, now, iy, xa, xb, ends, streaks, salt):
-    """How a tip at ``now`` (see :func:`bear`) bears on the pixels ``xa`` to
-    ``xb`` of the row ``iy``, which depends on nothing the sheet holds: for
-    each, in the four rows of ``row`` (counted from ``xa``), how far inside
+def bear_on_row(row, now, iy, xa, count, ends, streaks, salt):
+    """How a tip at ``now`` (see :func:`bear`) bears on ``count`` pixels of
+    the row ``iy``, from ``xa`` on, which depends on nothing the sheet holds:
+    for each, in the four rows of ``row`` (counted from ``xa``), how far inside
     the edge of the tip it is (0 if the tip does not mark it), how hard the
     tip bears on it, where it does mark it the level in the tooth it
     reaches there in this pass, and how far that part of the tip slides
@@ -944,7 +993,8 @@ def bear_on_row(row, now, iy, xa, xb, ends, streaks, salt):
     x, y, tx, ty = now[0], now[1], now[2], now[3]
     reach, pressure, at_x, at_y, turn = now[7], now[8], now[11], now[12], now[14]
     dy = iy + 0.5 - y
-    for ix in range(xa, xb):
+    for at in range(count):
+        ix = xa + at
         dx = ix + 0.5 - x
         share, edge = bearing_at(dx, dy, now)
         # (landing or lifting: only where it is put)
@@ -953,16 +1003,17 @@ def bear_on_row(row, now, iy, xa, xb, ends, streaks, salt):
             edge = 0.0
         if edge > 0.0:
             edge *= within_ends(ix + 0.5, iy + 0.5, ends)
-        row[0, ix - xa] = edge
-        row[1, ix - xa] = pressure * share * streak_at(dx, dy, tx, ty, streaks, salt)
+        row[0, at] = edge
+        row[1, at] = pressure * share * streak_at(dx, dy, tx, ty, streaks, salt)
         # (where the stroke turns, the side of the tip on the outside of the
         # turn slides further than its middle, and the inside less)
-        row[3, ix - xa] = abs(1.0 - turn * (dy * tx - dx * ty))
-    for ix in range(xa, xb):
-        if row[0, ix - xa] > 0.0:
-            level = 1.0 - reach * row[1, ix - xa] ** REACH_POWER
+        row[3, at] = abs(1.0 - turn * (dy * tx - dx * ty))
+    for at in range(count):
+        ix = xa + at
+        if row[0, at] > 0.0:
+            level = 1.0 - reach * row[1, at] ** REACH_POWER
             level += JITTER * (unit_noise(ix, iy, salt) - 0.5)
-            row[2, ix - xa] = level
+            row[2, at] = level
 
 
 @njit(cache=True, error_model="numpy")
@@ -1031,14 +1082,18 @@ def bear(
     lying = 0.0
     for iy in range(y0, y1):
         xa, xb = span_of(now, iy + 0.5 - y, lean, half, top, x0, x1)
+        count = xb - xa
+        if count <= 0:  # (none of this row is under the tip)
+            continue
         # first how the tip bears on each pixel of the row, which is its
         # shape and nothing else; then what that does to the paper
-        bear_on_row(row, now, iy, xa, xb, ends, streaks, salt)
-        for ix in range(xa, xb):
-            edge = row[0, ix - xa]
+        bear_on_row(row, now, iy, xa, count, ends, streaks, salt)
+        for at in range(count):
+            ix = xa + at
+            edge = row[0, at]
             if edge <= 0.0:
                 continue
-            local, level, slide = row[1, ix - xa], row[2, ix - xa], row[3, ix - xa]
+            local, level, slide = row[1, at], row[2, at], row[3, at]
             # (to a tip riding on it a tooth pressed flat is level with its
             # peaks, and nothing in a groove stands higher than its floor)
             raised = tooth[iy, ix] + (1.0 - tooth[iy, ix]) * press[iy, ix]
@@ -1138,99 +1193,40 @@ def turning(xs, ys, i):
     return 2.0 * angle / going
 
 
-@njit(cache=True, error_model="numpy")
-def slide_on(
-    tooth,
-    press,
-    dent,
-    cover,
-    held,
-    under,
-    loose,
-    fresh,
-    bonded,
-    drag,
-    k,
-    law,
-    now,
-    step,
-    ends,
-    streaks,
-    row,
-    salt,
-):
-    """Lay what the tip at ``now`` leaves as it slides ``step`` pixels, turning
-    as the stroke turns (``now[14]``): :func:`bear`, all at once where no
-    part of the tip slides over a pixel more than once in the step, the
-    most it can (a pass's worth: ``now[9]`` per pixel slid). Where the
-    stroke turns so sharply that the far end of the tip would sweep further
-    than that, it is laid in as many parts as that takes, the tip turned bit
-    by bit across the angle it turns through in the step: what it sweeps is
-    spread along the arc it sweeps, a pass's worth at most on each pixel at
-    a time, and not piled on the pixels under it. Returns as :func:`bear`."""
-    angle = now[14] * step
-    parts = int(math.ceil((step + now[4] * abs(angle)) * now[9]))
+@_inlined
+def in_parts(step, angle, wide, per_pass):
+    """In how many parts a tip lays what it leaves as it slides ``step``
+    pixels, turning by ``angle`` as the stroke turns: in one, all at once,
+    where no part of the tip slides over a pixel more than once in the
+    step, the most it can (a pass's worth: ``per_pass`` per pixel slid).
+    Where the stroke turns so sharply that the far end of the tip (``wide``
+    from its middle) would sweep further than that, in as many parts as
+    that takes, the tip turned bit by bit across the angle it turns through
+    in the step (:func:`turned`): what it sweeps is spread along the arc it
+    sweeps, a pass's worth at most on each pixel at a time, and not piled
+    on the pixels under it."""
+    return max(int(math.ceil((step + wide * abs(angle)) * per_pass)), 1)
+
+
+@_inlined
+def turned(tx, ty, angle, part, parts):
+    """The heading of a tip going the way (``tx``, ``ty``) for the ``part``
+    of the ``parts`` in which it is laid as it turns by ``angle``
+    (:func:`in_parts`): as it is, laid all at once."""
     if parts <= 1:
-        return bear(
-            tooth,
-            press,
-            dent,
-            cover,
-            held,
-            under,
-            loose,
-            fresh,
-            bonded,
-            drag,
-            k,
-            law,
-            now,
-            step,
-            ends,
-            streaks,
-            row,
-            salt,
-        )
-    tx, ty = now[2], now[3]
-    laid, lying = 0.0, 0.0
-    for part in range(parts):
-        turned = angle * ((part + 0.5) / parts - 0.5)
-        cos, sin = math.cos(turned), math.sin(turned)
-        now[2], now[3] = tx * cos - ty * sin, ty * cos + tx * sin
-        dv, rest = bear(
-            tooth,
-            press,
-            dent,
-            cover,
-            held,
-            under,
-            loose,
-            fresh,
-            bonded,
-            drag,
-            k,
-            law,
-            now,
-            step / parts,
-            ends,
-            streaks,
-            row,
-            salt,
-        )
-        laid += dv
-        lying += rest
-    now[2], now[3] = tx, ty
-    return laid, lying
+        return tx, ty
+    turn = angle * ((part + 0.5) / parts - 0.5)
+    cos, sin = math.cos(turn), math.sin(turn)
+    return tx * cos - ty * sin, ty * cos + tx * sin
 
 
 @njit(cache=True, error_model="numpy")
-def tip_at(now, shape, flat, reach, i, xs, ys, pressures, even):
+def tip_at(now, tilt, side, flat, reach, i, xs, ys, pressures, even):
     """Fill ``now`` (see :func:`bear`) for a tip ``flat`` wide at sample
-    ``i``, of ``shape`` [its width, tilt, length of its side], whose side
+    ``i``, held at ``tilt``, its side ``side`` long, whose side
     lies flat along its length (``even`` 1: a stick of charcoal, pastel or
     crayon) or is the cone of a sharpened lead (0). Returns how far from its
     centre it reaches."""
-    tilt, side = shape[1], shape[2]
     wide = 0.5 * (flat + max(side - flat, 0.0) * tilt) + 0.5
     long = 0.5 * flat + 0.5
     # (a stick laid flat bears alike to its ends; a cone of lead bears
@@ -1473,7 +1469,9 @@ def lay_stroke(
     # where the tip last bore, and how
     now = np.zeros(15)
     even = medium[6]  # (whether its side lies flat along its length)
-    tip_at(now, shapes[0], shapes[0, 0], reach, 0, xs, ys, pressures, even)
+    tip_at(
+        now, shapes[0, 1], shapes[0, 2], shapes[0, 0], reach, 0, xs, ys, pressures, even
+    )
     for i in range(count):
         step = steps[i]
         if pressures[i] <= 0.0 or step <= 0.0:
@@ -1481,7 +1479,8 @@ def lay_stroke(
         flat = shapes[i, 0]
         if wear > 0.0:  # the flat grows with what the tip has laid
             flat = min((flat**3 + wear * max(worn + total, 0.0)) ** (1.0 / 3.0), lead)
-        bound = tip_at(now, shapes[i], flat, reach, i, xs, ys, pressures, even)
+        tilt, side = shapes[i, 1], shapes[i, 2]
+        bound = tip_at(now, tilt, side, flat, reach, i, xs, ys, pressures, even)
         reached = max(reached, bound)
         ends_near(ends, near, i * spacing, (count - 1 - i) * spacing, bound + spacing)
         lands = i == 0 or pressures[i - 1] <= 0.0
@@ -1493,26 +1492,36 @@ def lay_stroke(
             step += 0.5 * landing
         for way in (-1.0, 0.0, 1.0):
             if way == 0.0:
-                dv, rest = slide_on(
-                    tooth,
-                    press,
-                    dent,
-                    cover,
-                    held,
-                    under,
-                    loose,
-                    fresh,
-                    bonded,
-                    drag,
-                    k,
-                    law,
-                    now,
-                    step,
-                    near,
-                    streaks,
-                    row,
-                    salt,
-                )
+                # (it turns as the stroke turns: where that is sharp, it is
+                # laid in parts, turned bit by bit)
+                tx, ty, angle = now[2], now[3], now[14] * step
+                parts = in_parts(step, angle, now[4], now[9])
+                dv, rest = 0.0, 0.0
+                for part in range(parts):
+                    now[2], now[3] = turned(tx, ty, angle, part, parts)
+                    more, left = bear(
+                        tooth,
+                        press,
+                        dent,
+                        cover,
+                        held,
+                        under,
+                        loose,
+                        fresh,
+                        bonded,
+                        drag,
+                        k,
+                        law,
+                        now,
+                        step / parts,
+                        near,
+                        streaks,
+                        row,
+                        salt,
+                    )
+                    dv += more
+                    rest += left
+                now[2], now[3] = tx, ty
             elif (way < 0.0 and lands) or (way > 0.0 and lifts):
                 dv, rest = put_down(
                     tooth,
