@@ -1847,7 +1847,12 @@ SATURATED = 0.25
 class Hand:
     """The draughtsman at work: the sheet, the study it is drawn from, the
     world's lines, the values and directions he plans to draw them in, and
-    an eye on what the sheet looks like so far."""
+    an eye on what the sheet looks like so far. What he sees sets how hard
+    each mark is pressed, never where the marks may go nor how many he
+    tries: those, and every random draw, come from the study, so that a
+    sheet seen a shade darker or lighter (as any change to how a medium
+    lies gives) is drawn with the same strokes, a shade lighter or
+    darker."""
 
     def __init__(self, st: Study, world: World):
         self.sheet = Sheet(WIDTH, HEIGHT, paper=SHEET_PAPER, seed=SEED)
@@ -1946,9 +1951,19 @@ def lay_tone(
     if width is None:
         width = float(np.clip(across(mask) / (1.0 + 4.0 * tilt), 2.0, 6.0))
     breadth = width * (1.0 + 4.0 * tilt)
-    field = pressure * shrink(mask, int(margin * breadth)) * edge_fade()
-    if field.max() > 0.0:
+    reach = shrink(mask, int(margin * breadth)) * edge_fade()
+    # (laid wherever the mask is, however little the tone wants there, so
+    # that the same strokes are laid whatever was seen)
+    if reach.max() > 0.0:
+        field = pressure * reach
         hand.sheet.shade(box_of(mask), lead, lookup(field), width, angle, tilt=tilt)
+
+
+#: The least a rub presses anywhere in its mask: a tool that rubs a field
+#: lifts off where the field is nothing, and each stretch it rubs is a pass
+#: of its own, with its own grain; kept on the paper all through the mask,
+#: it makes the same passes however the field it follows came out.
+LIGHTEST_RUB = 0.002
 
 
 def rub_area(hand: Hand, mask, tool, pressure, angle, width=None) -> None:
@@ -1957,7 +1972,7 @@ def rub_area(hand: Hand, mask, tool, pressure, angle, width=None) -> None:
     (a number or a field) asks, the tool kept inside the mask's edge so
     that it does not smear what lies next to it."""
     reach = tool.width if width is None else width
-    field = pressure * shrink(mask, int(0.2 * reach))
+    field = np.maximum(pressure, LIGHTEST_RUB) * shrink(mask, int(0.2 * reach))
     if np.max(field) > 0.0:
         hand.sheet.rub(box_of(mask), tool, lookup(field), width, angle)
 
@@ -2023,6 +2038,36 @@ def pick(rng, weight: np.ndarray, count: int) -> np.ndarray:
     idx = rng.choice(w.size, count, p=w / total)
     y, x = np.divmod(idx, WIDTH)
     return np.stack([x, y], axis=1) + rng.uniform(-0.5, 0.5, (count, 2))
+
+
+#: How far, in the share of a need, a mark fades in as the need passes the
+#: share drawn for it (see ``scatter``).
+FADE = 0.1
+
+
+def scatter(rng, where: np.ndarray, want: np.ndarray, every: float):
+    """Where marks go over ``where`` (a mask the study fixes) and how much
+    of each to lay there, 0..1, for marks wanted as ``want`` asks (0..1, as
+    seen on the sheet): one place for each ``every`` pixels of ``where``,
+    and for each a share drawn at random; a mark is laid where ``want``
+    passes its share, fading in over ``FADE``. The places, and every draw,
+    are what the study gives, whatever was seen: a tone seen a little
+    darker or lighter lays the same marks a little harder or lighter, never
+    others elsewhere. As many are laid, on average, as if one were placed
+    for each ``every`` of ``want``."""
+    spots = pick(rng, where.astype(np.float64), int(where.sum() / every))
+    shares = rng.random(len(spots))
+    here = want[spots[:, 1].astype(int), spots[:, 0].astype(int)]
+    laid = np.clip((here - shares) / FADE + 0.5, 0.0, 1.0)
+    return spots, laid * np.clip(2.0 * here / FADE, 0.0, 1.0)
+
+
+def wanting(need, least: float):
+    """How far ``need`` is worth working, 0..1: not at all where nothing is
+    needed, fully from twice ``least`` on, smoothly between, so that a need
+    seen a little greater or smaller asks a little more or less, never all
+    or nothing."""
+    return filters.smoothstep(0.0, 2.0 * least, need)
 
 
 def trace(field, x, y, heading, length, bend, rng, step=2.5) -> np.ndarray:
@@ -2091,31 +2136,36 @@ def lay_bundle(hand: Hand, marks: Marks, centre, heading, firm, field, keep) -> 
         draw_line(hand, pts, marks.lead, np.clip(p, 0.0, 1.0), marks.width, marks.tilt)
 
 
-def lay_marks(hand: Hand, marks: Marks, need, cover=1.0, angle=None, keep=None) -> None:
-    """Bundles of strokes where ``need`` asks, as many as cover that need
-    ``cover`` times over: along the study's directions, or at ``angle``
-    (radians on the sheet)."""
-    count = int(cover * float(need.sum()) / marks.area())
+def lay_marks(
+    hand: Hand, marks: Marks, where, need, cover=1.0, angle=None, keep=None
+) -> None:
+    """Bundles of strokes over ``where`` as ``need`` asks there (0..1), as
+    many as cover that need ``cover`` times over: along the study's
+    directions, or at ``angle`` (radians on the sheet)."""
+    spots, laid = scatter(hand.rng, where, need, marks.area() / cover)
     field = hand.angle if angle is None and marks.follow else None
     lo, hi = marks.pressure
-    for cx, cy in pick(hand.rng, need, count):
+    for (cx, cy), share in zip(spots, laid, strict=True):
         here = need[int(cy), int(cx)]
         heading = hand.angle[int(cy), int(cx)] if angle is None else angle
         heading += hand.rng.normal(0.0, marks.turn)
-        lay_bundle(hand, marks, (cx, cy), heading, lo + (hi - lo) * here, field, keep)
+        firm = share * (lo + (hi - lo) * here)
+        lay_bundle(hand, marks, (cx, cy), heading, firm, field, keep)
 
 
 def drag(hand: Hand, starts, lengths, tool, pressure, heading=np.pi / 2, width=None):
-    """Pull a stump or a finger from each start, ``lengths`` pixels: one
-    tool, not cleaned between two pulls, so that once it is loaded it
-    leaves the tone as dark as it found it."""
+    """Pull a stump or a finger from each start, ``lengths`` pixels, as
+    hard as ``pressure`` (a number, or one for each): one tool, not cleaned
+    between two pulls, so that once it is loaded it leaves the tone as dark
+    as it found it."""
     rng = hand.rng
     held = Smudger(tool, width)
-    for (x, y), length in zip(starts, lengths, strict=True):
+    pressures = np.broadcast_to(pressure, len(lengths))
+    for (x, y), length, firm in zip(starts, lengths, pressures, strict=True):
         a = heading + rng.normal(0.0, 0.05)
         end = (x + length * math.cos(a), y + length * math.sin(a))
         mid = (0.5 * (x + end[0]) + rng.normal(0, 1.0), 0.5 * (y + end[1]))
-        hand.sheet.smudge([(x, y), mid, end], held, pressure)
+        hand.sheet.smudge([(x, y), mid, end], held, float(firm))
 
 
 # ----------------------------------------------------------------------
@@ -2191,7 +2241,7 @@ def draw_ridges(hand: Hand) -> None:
             for k, angle in enumerate(angles):
                 # (each layer half of what the tone still wants)
                 press = pressed_for(lead, 0.5 * need, dark + 0.5 * k * need)
-                lay_tone(hand, mask, lead, press * (need > 0.006), angle)
+                lay_tone(hand, mask, lead, press * wanting(need, 0.006), angle)
                 rub_area(hand, mask, held, 0.9, angle + 90.0)
                 rub_area(hand, mask, held, 0.9, 0.0)
     for ident, _, _, _ in RIDGE_HANDS:
@@ -2205,7 +2255,7 @@ def draw_ridges(hand: Hand) -> None:
         mask = ridge_mask(hand, ident)
         if ident != RIDGE3:
             marks = Marks(point, 2.0, (10.0, 30.0), (0.12, 0.5), (2, 5), 1.3)
-            lay_marks(hand, marks, hand.need(mask), 0.8, keep=mask)
+            lay_marks(hand, marks, mask, hand.need(mask), 0.8, keep=mask)
         crest(hand, ident)
     snow = hand.mask(SNOW)
     rng = hand.rng
@@ -2225,7 +2275,7 @@ def draw_middle(hand: Hand) -> None:
     hand.look()
     for angle in (85.0, 96.0):
         need = hand.need(mask)
-        press = np.clip(0.1 + 3.5 * need, 0.0, 0.85) * (need > 0.01)
+        press = np.clip(0.1 + 3.5 * need, 0.0, 0.85) * wanting(need, 0.01)
         lay_tone(hand, mask, pencils.B2, press, angle)
         rub_area(hand, mask, tools.STUMP, 0.85, angle - 85.0, 16.0)
         hand.look()
@@ -2280,14 +2330,7 @@ def draw_mist(hand: Hand) -> None:
     band = (hand.st.veil > 0.2) & (rows > CY - 260) & (rows < CY + 120)
     band &= ~hand.mask(TRUNK, BOUGH, ROCK, GROUND, SHINGLE, REED)
     band &= ~grow(hand.mask(RIDGE1, RIDGE2, RIDGE3, SNOW), 2)
-    lift = hand.excess(band, blur=5)
-    rng = hand.rng
-    for cx, cy in pick(rng, lift, int(lift.sum() / 120.0)):
-        length = rng.uniform(60.0, 200.0)
-        firm = np.clip(0.2 + 1.8 * lift[int(cy), int(cx)], 0.0, 0.9)
-        bow = rng.normal(0.0, 1.5)
-        path = [(cx - length / 2, cy), (cx, cy + bow), (cx + length / 2, cy - bow)]
-        hand.sheet.erase(path, tools.KNEADED, firm, rng.uniform(10.0, 22.0))
+    lift_mist(hand, band, 1.0)
 
 
 #: What the water mirrors near the eye (as against the far shore and sky).
@@ -2328,7 +2371,7 @@ def block_in(hand: Hand) -> None:
     mass = Marks(
         pencils.B4, 3.0, (8.0, 24.0), (0.5, 0.95), (3, 6), 0.8, "taper", 0.15, 0.05
     )
-    lay_marks(hand, mass, hand.need(pine), 2.5, keep=pine)
+    lay_marks(hand, mass, pine, hand.need(pine), 2.5, keep=pine)
     planks(hand, pencils.HB, pencils.B4)
 
 
@@ -2366,13 +2409,13 @@ def build_up(hand: Hand) -> None:
     stones = Marks(
         pencils.B4, 2.0, (4.0, 12.0), (0.3, 0.9), (1, 3), 1.6, "taper", 0.4, 0.1, False
     )
-    lay_marks(hand, stones, hand.need(shingle), 2.0, 0.0, shingle)
+    lay_marks(hand, stones, shingle, hand.need(shingle), 2.0, 0.0, shingle)
     rock_form(hand)
     pine = hand.mask(TRUNK, BOUGH)
     marks = Marks(
         pencils.B6, 2.6, (6.0, 20.0), (0.6, 1.0), (3, 6), 0.8, "taper", 0.15, 0.05
     )
-    lay_marks(hand, marks, np.sqrt(hand.need(pine)), 2.5, keep=pine)
+    lay_marks(hand, marks, pine, np.sqrt(hand.need(pine)), 2.5, keep=pine)
     boughs(hand)
     planks(hand, pencils.B2, pencils.B6)
     along = -math.degrees(float(np.median(hand.st.angle[hand.mask(HULL)])))
@@ -2425,21 +2468,22 @@ def reflections(hand: Hand, water: np.ndarray, final: bool = False) -> None:
         mask = water & np.isin(hand.st.mirrored, ids)
         near = ids == NEAR_THINGS
         need = hand.need(mask, 4 if lead is pencils.B2 else 8)
-        if need.max() < 0.03:
+        if not mask.any():
             continue
-        soft = filters.box_blur((need > 0.03).astype(np.float64), 10)
+        enough = wanting(need, 0.03)
+        soft = filters.box_blur(enough, 10)
         dark = hand.tone()
         if final:
-            press = np.minimum(pressed_for(lead, need, dark), 0.8) * (need > 0.03)
+            press = np.minimum(pressed_for(lead, need, dark), 0.8) * enough
             lay_tone(hand, mask, lead, press, 0.0 if near else 90.0)
             if near:
                 rub_area(hand, mask, tools.FINGER, 0.5 * soft, 0.0, 18.0)
             continue
         for k, angle in enumerate((60.0, 120.0)):
             press = pressed_for(lead, 0.5 * need, dark + 0.5 * k * need)
-            lay_tone(hand, mask, lead, np.minimum(press, 0.9) * (need > 0.03), angle)
+            lay_tone(hand, mask, lead, np.minimum(press, 0.9) * enough, angle)
         rub_area(hand, mask, tools.FINGER, 0.6 * soft, 0.0, 18.0)
-        pull_down(hand, need, 0.3 if near else 0.45)
+        pull_down(hand, mask, need, 0.3 if near else 0.45)
     if final:
         gaps(hand, water)
 
@@ -2457,11 +2501,11 @@ def rock_form(hand: Hand) -> None:
     form = Marks(
         pencils.B4, 2.2, (6.0, 16.0), (0.35, 0.95), (3, 5), 0.85, "taper", 0.12, 0.03
     )
-    lay_marks(hand, form, hand.need(side), 3.0, keep=side)
+    lay_marks(hand, form, side, hand.need(side), 3.0, keep=side)
     dark = Marks(
         pencils.B8, 2.2, (5.0, 14.0), (0.65, 1.0), (3, 5), 0.8, "taper", 0.12, 0.03
     )
-    lay_marks(hand, dark, np.sqrt(hand.need(under)), 3.5, keep=under)
+    lay_marks(hand, dark, under, np.sqrt(hand.need(under)), 3.5, keep=under)
     rub_area(hand, side, tools.TORTILLON, 0.5, 30.0)
     top = rock & (up >= 0.86)
     rng = hand.rng
@@ -2481,7 +2525,7 @@ def rock_details(hand: Hand) -> None:
     line = Marks(
         pencils.B8, 2.2, (6.0, 18.0), (0.7, 0.95), (1, 2), 1.0, "taper", 0.05, 0.03
     )
-    lay_marks(hand, line, below * 1.0, 3.0, angle=0.0)
+    lay_marks(hand, line, below, below * 1.0, 3.0, angle=0.0)
     rng = hand.rng
     for x, z, size, flat, _ in ROCKS:
         P = project(np.array([[x, size * flat * 0.9, z]]), EYE)[0]
@@ -2517,10 +2561,11 @@ def plank_strokes(hand: Hand, run: np.ndarray, lead, width: float, want) -> None
         piece = run[k : k + n + 1]
         k += n + int(rng.integers(0, 3))
         need = at(want, piece[:, 0], piece[:, 1])
-        if need.max() < 0.02:
-            continue
+        # (every piece is drawn, as lightly as the plank wants it)
         firm = (
-            np.clip(0.35 + 1.2 * need, 0.0, 1.0) * profile("taper", len(piece)) ** 0.5
+            np.clip(0.35 + 1.2 * need, 0.0, 1.0)
+            * profile("taper", len(piece)) ** 0.5
+            * wanting(need.max(), 0.02)
         )
         draw_line(hand, piece, lead, firm, width)
 
@@ -2550,12 +2595,12 @@ def lift_mist(hand: Hand, where: np.ndarray, firm: float) -> None:
     it came out too dark when last seen."""
     lift = hand.excess(where, blur=5)
     rng = hand.rng
-    for cx, cy in pick(rng, lift, int(lift.sum() / 120.0)):
+    for (cx, cy), share in zip(*scatter(rng, where, lift, 120.0), strict=True):
         length = rng.uniform(60.0, 200.0)
-        p = float(np.clip(0.2 + 1.8 * firm * lift[int(cy), int(cx)], 0.0, 0.9))
+        p = share * np.clip(0.2 + 1.8 * firm * lift[int(cy), int(cx)], 0.0, 0.9)
         bow = rng.normal(0.0, 1.5)
         path = [(cx - length / 2, cy), (cx, cy + bow), (cx + length / 2, cy - bow)]
-        hand.sheet.erase(path, tools.KNEADED, p, rng.uniform(10.0, 22.0))
+        hand.sheet.erase(path, tools.KNEADED, float(p), rng.uniform(10.0, 22.0))
 
 
 def lift_ruffles(hand: Hand) -> None:
@@ -2656,7 +2701,7 @@ def needles(hand: Hand, pine: np.ndarray) -> None:
     )
     for _ in range(4):
         part = fringe * (hand.rng.random(fringe.shape) < 0.25)
-        lay_marks(hand, marks, part * 1.0, marks.area() / 12.0, angle=np.pi / 2)
+        lay_marks(hand, marks, part, part * 1.0, marks.area() / 12.0, angle=np.pi / 2)
         pencil.sharpen()
 
 
@@ -2776,7 +2821,7 @@ def deepen(hand: Hand, mask: np.ndarray, rounds: int) -> None:
     )
     for _ in range(rounds):
         hand.look()
-        lay_marks(hand, marks, (hand.need(core, 1) > 0.02) * 1.0, 2.0, keep=core)
+        lay_marks(hand, marks, core, wanting(hand.need(core, 1), 0.02), 2.0, keep=core)
 
 
 def clear_lights(hand: Hand) -> None:
@@ -2810,11 +2855,11 @@ def clear_lights(hand: Hand) -> None:
     lift_mist(hand, where, 0.9)
     rng = hand.rng
     grey = np.clip(lift - 0.05, 0.0, 1.0)
-    for cx, cy in pick(rng, grey, int(grey.sum() / 40.0)):
+    for (cx, cy), share in zip(*scatter(rng, where, grey, 40.0), strict=True):
         length = rng.uniform(40.0, 150.0)
         bow = rng.normal(0.0, 1.2)
         path = [(cx - length / 2, cy - bow), (cx, cy + bow), (cx + length / 2, cy)]
-        firm = float(np.clip(0.15 + 2.5 * grey[int(cy), int(cx)], 0.0, 0.5))
+        firm = share * float(np.clip(0.15 + 2.5 * grey[int(cy), int(cx)], 0.0, 0.5))
         hand.sheet.erase(
             path,
             tools.ERASER,
@@ -2823,16 +2868,16 @@ def clear_lights(hand: Hand) -> None:
         )
 
 
-def pull_down(hand: Hand, need: np.ndarray, pressure: float) -> None:
-    """Drag the finger down through a reflection from where it is darkest,
-    further the nearer the water is to the eye."""
+def pull_down(hand: Hand, mask: np.ndarray, need: np.ndarray, pressure: float):
+    """Drag the finger down through a reflection over ``mask`` from where it
+    is darkest, further the nearer the water is to the eye."""
     rng = hand.rng
-    starts = pick(rng, need, int(need.sum() / 60.0))
+    starts, laid = scatter(rng, mask, need, 60.0)
     if not len(starts):
         return
     below = np.maximum(starts[:, 1] - CY, 5.0)
     lengths = np.clip(below * rng.uniform(0.1, 0.25, len(starts)), 8.0, 70.0)
-    drag(hand, starts, lengths, tools.FINGER, pressure, width=12.0)
+    drag(hand, starts, lengths, tools.FINGER, pressure * laid, width=12.0)
 
 
 def gaps(hand: Hand, water: np.ndarray) -> None:
@@ -2899,7 +2944,9 @@ def bank_edge(hand: Hand) -> None:
         0.03,
         False,
     )
-    lay_marks(hand, marks, edge * 0.8 * edge_fade(), 2.0, angle=0.0, keep=grow(edge, 3))
+    lay_marks(
+        hand, marks, edge, edge * 0.8 * edge_fade(), 2.0, angle=0.0, keep=grow(edge, 3)
+    )
 
 
 def plan_angles(st: Study) -> np.ndarray:
@@ -2950,7 +2997,7 @@ def bank_tone(hand: Hand) -> None:
         lie = Marks(
             lead, 2.4, (18.0, 46.0), (0.25, 0.9), (2, 4), 1.1, "taper", 0.06, 0.02
         )
-        lay_marks(hand, lie, hand.need(bank, 3), cover, keep=keep)
+        lay_marks(hand, lie, bank, hand.need(bank, 3), cover, keep=keep)
         rub_area(hand, bank, finger, 0.3, 0.0)
     loose_edge(hand)
 
@@ -2962,13 +3009,16 @@ def top_light(hand: Hand) -> None:
     as much as each came out too dark."""
     ground = hand.mask(GROUND)
     hand.look()
-    lift = hand.excess(ground, 3) * (edge_fade() > 0.5)
+    where = ground & (edge_fade() > 0.5)
+    lift = hand.excess(where, 3)
     rng = hand.rng
-    for cx, cy in pick(rng, lift * (lift > 0.03), int(lift.sum() / 20.0)):
+    for (cx, cy), share in zip(
+        *scatter(rng, where, lift * wanting(lift, 0.03), 20.0), strict=True
+    ):
         a = hand.angle[int(cy), int(cx)] + rng.normal(0.0, 0.1)
         half = rng.uniform(8.0, 18.0)
         dx, dy = half * math.cos(a), half * math.sin(a)
-        firm = float(np.clip(0.3 + 2.0 * lift[int(cy), int(cx)], 0.0, 0.8))
+        firm = share * float(np.clip(0.3 + 2.0 * lift[int(cy), int(cx)], 0.0, 0.8))
         path = [(cx - dx, cy - dy), (cx, cy + rng.normal(0, 0.5)), (cx + dx, cy + dy)]
         hand.sheet.erase(
             path, tools.KNEADED, (firm * profile("taper", 7)).tolist(), 6.0
@@ -3103,7 +3153,7 @@ def loose_edge(hand: Hand) -> None:
     loose = Marks(
         pencils.B4, 2.0, (25.0, 60.0), (0.25, 0.5), (1, 2), 3.0, "taper", 0.1, 0.04
     )
-    lay_marks(hand, loose, band * 0.15, 1.0, keep=hand.mask(GROUND))
+    lay_marks(hand, loose, band, band * 0.15, 1.0, keep=hand.mask(GROUND))
 
 
 def ground_stones(hand: Hand, where: np.ndarray) -> None:
