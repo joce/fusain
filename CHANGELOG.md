@@ -413,23 +413,24 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- Strokes take half the time and rubs four tenths of it, and no picture
-  changes: every array of a sheet after any sequence of calls, every number
-  returned and every rendered image is what it was, to the last bit (the
-  recorded fingerprint, the thorough one, 325 drawings, and every image of
-  `examples/output/`). On a sheet of 1120 by 820 pixels (one core of a
-  2.3 GHz Xeon, best of 5): shading it with an HB of width 6 takes 1.5 s,
-  from 2.9 s, and over a tone 1.6 s, from 3.0 s; with a soft pastel of
-  width 24, 1.1 s, from 2.0 s, and over charcoal 1.6 s, from 2.5 s; with
-  the side of a stick of vine charcoal, 0.75 s, from 1.7 s; with a coloured
-  pencil pressed hard, 1.75 s, from 3.5 s; 2000 short strokes take 0.44 s,
-  from 0.78 s; rubbing the sheet with a finger takes 2.4 s, from 6.6 s;
-  with a stump over graphite, 3.2 s, from 7.1 s; with a kneaded eraser,
-  2.4 s, from 6.2 s. That is what the two options of numba's that its
-  documentation does not list give on the same code, to within 5% (1.46,
-  1.66, 1.08, 1.55, 0.76, 1.82 and 0.45 s; 2.34, 3.25 and 2.36 s), with
-  documented options only (fusain-95m). Compiling the kernels the first
-  time takes what it took, 18 s. What it took:
+- Strokes take half the time, rubs with a finger or a stump four tenths of
+  it and rubs with an eraser a fifth, and no picture changes: every array
+  of a sheet after any sequence of calls, every number returned and every
+  rendered image is what it was, to the last bit (the recorded fingerprint,
+  the thorough one, 325 drawings, and every image of `examples/output/`).
+  On a sheet of 1120 by 820 pixels (one core of a 2.3 GHz Xeon, best of 5):
+  shading it with an HB of width 6 takes 1.4 s, from 2.9 s, and over a tone
+  1.65 s, from 3.0 s; with a soft pastel of width 24, 1.0 s, from 2.0 s,
+  and over charcoal 1.4 s, from 2.5 s; with the side of a stick of vine
+  charcoal, 0.72 s, from 1.7 s; with a coloured pencil pressed hard,
+  1.75 s, from 3.5 s; 2000 short strokes take 0.43 s, from 0.78 s; rubbing
+  the sheet with a finger takes 2.4 s, from 6.6 s; with a stump over
+  graphite, 3.2 s, from 7.1 s; with a kneaded eraser, 1.1 s, from 6.2 s.
+  That is as fast as with the two options of numba's that its
+  documentation does not list, or faster (on the code as it was, they gave
+  1.46, 1.66, 1.08, 1.55, 0.76, 1.82 and 0.45 s; 2.34, 3.25 and 2.36 s),
+  with documented options only (fusain-95m). Compiling the kernels the
+  first time takes what it took, 18 s. What it took:
   - Numba counts a reference to an array each time a helper is given it,
     and one back when the helper is done with it, two atomic operations,
     and drops the pair only where it can see the two as one. With an early
@@ -454,6 +455,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   - `tools/refcounts.py` tells what each kernel still counts, from its
     LLVM, and `tests/test_refcounts.py` fails if one counts anything as it
     works (nothing, on Python 3.11 to 3.15).
+  - A tip or a tool does no work that would leave a pixel as it is. An
+    eraser presses nothing in, stirs nothing and spreads nothing, and went
+    through all the parts of the pixel's dust for each, adding and taking
+    nothing: half the time of its rub. A dry tip pressed firmly on paper
+    without wax polishes nothing and drags nothing, and went through all
+    that the paper holds there: 5 to 10% of a stroke of charcoal or pastel.
   For those who call `fusain._engine` themselves: `slide_on`,
   `slide_graphite`, `drag_wax` and `lift_bonded` are gone (`in_parts` and
   `turned`, `push_along` and `slip_of`, `take_bonded`); `tip_at` takes the

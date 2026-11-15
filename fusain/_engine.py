@@ -38,9 +38,13 @@ result.
 Speed must not change the picture: ``tools/fingerprint.py`` tells. What is
 exact here and must stay so: a table holds values worked out by the very
 expression it replaces (:func:`streaks_of`); a loop skips only pixels that
-it would have left as they were (:func:`row_span`, :func:`settle_dust`);
-a helper that reads a pixel first reads what it would have read later, of
-what nothing has changed since; and no sum is taken in another order.
+it would have left as they were (:func:`row_span`, :func:`settle_dust`),
+and a helper only work that would have left the pixel as it is, taking
+nothing from it and adding nothing to it (:func:`press_dust`,
+:func:`stir_up` and :func:`spread_dust` under an eraser, :func:`burnish`
+under a dry tip that drags nothing); a helper that reads a pixel first reads
+what it would have read later, of what nothing has changed since; and no
+sum is taken in another order.
 """
 
 from __future__ import annotations
@@ -559,8 +563,10 @@ def press_dust(held, under, loose, bonded, cover, iy, ix, share):
     """Press the ``share`` of the dust and of the paste at a pixel into the
     paper: not what is set or a film (``bonded``), and less of the rest the
     more of those lies between it and the paper."""
-    # (else no dust here: most pixels of a first pass)
-    for _ in once(loose[iy, ix, IV] > 0.0 or under[iy, ix, IV] > 0.0):
+    dusty = loose[iy, ix, IV] > 0.0 or under[iy, ix, IV] > 0.0
+    # (else no dust here, most pixels of a first pass; or a tool that
+    # presses nothing in, an eraser)
+    for _ in once(dusty and share > 0.0):
         from_loose, from_under = share, share
         barrier = hard_at(bonded, iy, ix)
         if barrier > 0.0:
@@ -640,6 +646,16 @@ def burnish(held, under, loose, bonded, press, drag, iy, ix, polish, lift, lay):
         given = drag[part] * down
         drag[part] -= given
         held[iy, ix, part] += given - taken
+
+
+@_inlined
+def anything(packed):
+    """Whether there is anything of what a tip drags or a tool carries
+    (``packed``): any part of it at all."""
+    some = False
+    for part in range(packed.shape[0]):
+        some = some or packed[part] != 0.0
+    return some
 
 
 @njit(cache=True, error_model="numpy")
@@ -1082,6 +1098,7 @@ def bear(
     lean, half, top = tip_extent(tx, ty, wide, long)
     # (a tip narrower than a groove goes down into it)
     down = sunk_into(dent, now, x0, x1, y0, y1, lean, half, top) * sunk
+    dragging = anything(drag)  # (most tips never drag anything)
     laid = 0.0
     lying = 0.0
     for iy in range(y0, y1):
@@ -1131,19 +1148,23 @@ def bear(
                 # (a blender melts into the film, however thin it is)
                 slick = waxy + (1.0 - waxy) * melts
                 polish, lay_back = firm * slick * passing, dragged * slide * touch
-                burnish(
-                    held,
-                    under,
-                    loose,
-                    bonded,
-                    press,
-                    drag,
-                    iy,
-                    ix,
-                    polish,
-                    stir,
-                    lay_back,
-                )
+                # (a tip that polishes nothing here and drags nothing would
+                # leave the pixel as it is: a dry tip on paper without wax)
+                if polish > 0.0 or dragging:
+                    dragging = True
+                    burnish(
+                        held,
+                        under,
+                        loose,
+                        bonded,
+                        press,
+                        drag,
+                        iy,
+                        ix,
+                        polish,
+                        stir,
+                        lay_back,
+                    )
             # the tip presses some of the dust under it into the paper
             pressed = min(PRESS_IN * bearing, 1.0) * passing
             press_dust(held, under, loose, bonded, cover, iy, ix, pressed)
@@ -1585,7 +1606,9 @@ def spread_dust(loose, near, giving, iy, ix, take, back):
     taken."""
     taken = loose[iy, ix, IV] * take
     given = giving[IV] * back
-    for part in range(LOOSE):
+    # (over no part where nothing is taken and nothing laid: under a tool
+    # that does not smear, with nothing on its face)
+    for part in range(LOOSE if take > 0.0 or back > 0.0 else 0):
         up = loose[iy, ix, part] * take
         down = giving[part] * back
         near[part] += up - down
@@ -1602,13 +1625,15 @@ def face_gives(giving, near, rate):
     by how the tool bears on it and whatever order they come in. ``giving``
     is filled with what a pixel gets for each unit of that share; what the
     face takes up in a step it gives from the next on. Returns how many
-    such units there are to give."""
+    such units there are to give: none, of a face with nothing on it."""
     each = 1.0
     if rate > 1e-9:
         each = (1.0 - math.exp(-rate)) / rate
+    some = False
     for part in range(giving.shape[0]):
         giving[part] = max(near[part], 0.0) * each  # (but for rounding)
-    return 1.0 / each
+        some = some or giving[part] > 0.0
+    return 1.0 / each if some else 0.0
 
 
 @njit(cache=True, error_model="numpy")
@@ -2041,7 +2066,8 @@ def stir_up(under, loose, bonded, iy, ix, stirred):
     hard = bonded[iy, ix, 0, SET] + bonded[iy, ix, 0, FILM]
     if hard > 0.0:
         moving = stirred * free_share(bonded, under, iy, ix, 0)
-    for part in range(LOOSE):
+    # (over no part where nothing is stirred: under an eraser)
+    for part in range(LOOSE if moving > 0.0 else 0):
         moved = under[iy, ix, part] * moving
         under[iy, ix, part] -= moved
         loose[iy, ix, part] += moved
