@@ -12,9 +12,10 @@ from .tools import Tool
 class Smudger:
     """A stump, a finger or a chamois as it is held: the tool, and the
     pigment it has picked up, which it keeps from one pass to the next until
-    it is cleaned. A stump that is loaded gives back about as much as it
-    takes, so it blends a tone without wearing it away, and it draws a pale
-    tone of its own on bare paper::
+    it is cleaned. A stump fills slowly as it is rubbed in a tone and takes
+    nothing more once it is full, so it blends a tone without wearing it
+    away; and bare paper takes the dust off it, so it draws a tone of its
+    own there::
 
         from fusain import Sheet, Smudger, pencils, tools
         stump = Smudger(tools.STUMP)

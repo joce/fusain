@@ -149,8 +149,8 @@ def test_a_stump_and_a_kneaded_eraser_take_little_and_a_hard_eraser_most():
             line, tool, 0.8
         )
     # (a stump takes little into its load of dust that is loose, too: a
-    # fourteenth of what lies in its way, and of set dust an eighth of that)
-    assert takes["stump"] < 0.2
+    # twenty-fifth of what lies in its way, and of set dust a quarter of that)
+    assert takes["stump"] < 0.35
     assert takes["kneaded"] < 0.35
     a, b = loose.copy(), fixed.copy()
     assert b.erase(line, tools.ERASER, 0.8) > 0.8 * a.erase(line, tools.ERASER, 0.8)

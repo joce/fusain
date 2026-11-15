@@ -717,10 +717,11 @@ class Sheet:
         A bare tool is clean when it lands, so it leaves the paper lighter
         where it does, and it takes away what it still carries when it lifts.
         A :class:`fusain.Smudger` is a tool in the hand: it lands with what
-        it picked up before and keeps what it carries, so that once loaded it
-        takes no more from a tone than it gives it (at each place it does
-        one or the other, by the difference), and tones bare paper, lightly
-        and for long. It has its own width, so it takes none.
+        it picked up before and keeps what it carries. It fills slowly and
+        takes nothing more once it is full, so it leaves a tone as dark as
+        it was; and bare paper takes the dust off it readily, so a loaded
+        stump draws a tone of its own there (and leaves some wherever it
+        strays off a tone). It has its own width, so it takes none.
 
         Returns the volume of pigment the tool took off the sheet, less what
         it laid back: for a bare tool, what was left on it at the end; for a
@@ -786,9 +787,8 @@ class Sheet:
 
         The tool keeps what it carries from one pass to the next, and over
         the stretches where the pressure is nothing and it is lifted: it
-        lands with it, so once it is loaded (over twenty or so of its
-        widths) it takes no more than it gives, and the tone is blended,
-        not worn away. A bare
+        lands with it, takes less the fuller it is and nothing once it is
+        full, and the tone is blended, not worn away. A bare
         tool starts clean and takes away what it carries at the end; a
         :class:`fusain.Smudger` (which has its own width and takes none)
         starts with what it picked up before, and keeps it.
@@ -892,6 +892,7 @@ class Sheet:
                     tool.press,
                     tool.smear,
                     tool.scrape,
+                    tool.holds,
                 ],
                 dtype=np.float64,
             ),

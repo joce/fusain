@@ -34,13 +34,15 @@ class Tool:
         wax, and the film itself come off as what the paper holds does. An
         eraser lifts strongly. A stump or a finger lifts little: most of
         what they move is the dust on their face (``smear``), which goes a
-        fraction of their width; what is lifted is carried far.
+        fraction of their width; what is lifted is carried far, and fills
+        the tool slowly (``holds``).
     lay:
         The share of its load that it lays back down over each of its own
-        widths (0 for an eraser, which keeps it). Where it would lay as much
-        as it lifts it does neither, so once it is loaded it leaves a tone
-        as it is; on bare paper it lays a tone of its own, the paler and the
-        longer the smaller this is.
+        widths on bare paper (0 for an eraser, which keeps it). Bare tooth
+        takes the dust off a loaded tool readily; paper that carries pigment
+        takes less, and none once the pigment covers its tooth. So a loaded
+        stump tones bare paper, and leaves a tone as it is. (The paste of an
+        oil pastel sticks to any paper.)
     press:
         How strongly it presses the dust into the paper, where it is held.
     smear:
@@ -61,6 +63,13 @@ class Tool:
         pastel it lifts the less the thicker the wax is, and hardly
         anything once the wax is polished. A tool that scrapes (grit, a
         blade) takes that share of what the wax would have kept from it.
+    holds:
+        How much pigment it holds when it is full, as a volume for each
+        pixel of its face (a firm layer of charcoal is about half a unit
+        thick). It lifts the less the fuller it is, and nothing once full,
+        so a stump or a finger fills slowly as it is rubbed in a tone and
+        then leaves the tone alone. By default a tool holds whatever it
+        takes, as an eraser does.
     """
 
     lift_loose: float
@@ -71,6 +80,7 @@ class Tool:
     width: float = 12.0
     name: str = ""
     scrape: float = 0.0
+    holds: float = math.inf
 
     def __post_init__(self):
         for field in ("lift_loose", "lift_held", "lay", "press", "smear"):
@@ -81,6 +91,8 @@ class Tool:
             raise ValueError(f"lay is a share, at most 1, got {self.lay!r}")
         if not (math.isfinite(self.scrape) and 0 <= self.scrape <= 1):
             raise ValueError(f"scrape must be between 0 and 1, got {self.scrape!r}")
+        if not self.holds > 0:
+            raise ValueError(f"holds must be above 0, got {self.holds!r}")
         if not (math.isfinite(self.width) and self.width > 0):
             raise ValueError(
                 f"width must be a number of pixels above 0: {self.width!r}"
@@ -92,15 +104,18 @@ class Tool:
 
 
 #: A paper stump: firm and pointed. It smears the dust along and rubs it in.
-#: A little of the dust stays in it: used for long it is grey, and tones
-#: bare paper lightly and for long (half its load goes in twenty or so of
-#: its widths).
-STUMP = Tool(0.2, 0.02, lay=0.1, press=0.5, smear=2.0, width=10.0, name="stump")
+#: A little of the dust stays in it at each pass: rubbed for long in a tone
+#: it is full, and tones bare paper for thirty or so of its widths.
+STUMP = Tool(
+    0.04, 0.02, lay=0.3, press=0.5, smear=2.0, width=10.0, name="stump", holds=1.5
+)
 #: A tortillon: a small, hard stump for details.
 TORTILLON = STUMP.with_(width=5.0, name="tortillon")
-#: A finger: broad and soft. It spreads the dust and presses it in, and
-#: carries little of it away.
-FINGER = Tool(0.16, 0.01, lay=0.08, press=0.8, smear=2.5, width=22.0, name="finger")
+#: A finger: broad and soft. It spreads the dust and presses it in; it
+#: fills more slowly than a stump, and holds less for its size.
+FINGER = Tool(
+    0.03, 0.01, lay=0.25, press=0.8, smear=2.5, width=22.0, name="finger", holds=1.0
+)
 #: A chamois: it wipes most of the dust away and spreads the rest thin.
 CHAMOIS = Tool(1.6, 0.04, lay=0.12, press=0.1, smear=1.0, width=30.0, name="chamois")
 #: A kneaded eraser: it lifts the dust, and a little of what is held; so

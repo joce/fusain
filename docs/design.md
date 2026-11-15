@@ -255,11 +255,11 @@ A tool is a tip plus, usually, a medium.
 - **A tool in the hand** (built). A `Smudger` is to a `Tool` what a `Stick`
   is to a medium: the tool as it is held, with what it carries, which it
   keeps from one pass to the next until `clean()`. It lands with its load,
-  so once loaded it takes no more from a tone than it gives it: a tone can
-  be rubbed again and again without wearing away, no pass leaves a pale dot
-  where it lands, and a stump loaded on a dark patch draws a pale tone on
-  bare paper, a little at a time (half of one load goes in twenty or so of
-  its widths, and it is all but spent after a hundred). A bare
+  and it takes less the fuller it is and nothing once it is full: a tone
+  can be rubbed again and again without wearing away, no pass leaves a pale
+  dot where it lands, and a stump loaded on a dark patch draws a tone on
+  bare paper, which takes the dust off it readily (one load lasts thirty or
+  so of its widths). A bare
   `Tool` is clean each time it is put to the paper and takes away what it
   still carries; `Sheet.rub` keeps the load across its own passes either
   way.
@@ -446,14 +446,32 @@ quarters, after 18 passes; two widths after 72), with a tenth of the other
 colour two widths out; and of what a stump drags out of a tone onto bare
 paper, two thirds lies within one width of the edge. What a tool lifts into
 its load is the small share that goes far, and a stump or a finger lifts
-little (`Tool.lift_loose`) and lays it back slowly (`Tool.lay`): the trail
-of that stump is a fortieth of the tone three widths out and goes on,
-fainter. At each pixel a loaded tool gives or takes, not both: where it
-would lay as much as it lifts it does neither, and where not, only the
-difference. So a finger loaded with one colour and rubbed over a tone of
-another as heavy leaves it clean, where an exchange both ways would bring
-its colour all over it, and still it lays a tone on bare paper and takes
-from a tone when it is clean. Wax is as slick to the dust a tool brings as
+little (`Tool.lift_loose`, a twenty-fifth of the dust in a pass): the trail
+of that stump is a fiftieth of the tone three widths out and goes on,
+fainter.
+
+The load is what a tool tones with, and two rules make a stump that has
+been used for long a different thing from one dragged once through a tone.
+A stump or a finger holds so much (`Tool.holds`, a volume for each pixel
+of its face) and lifts the less the fuller it is: it fills slowly, over a
+hundred widths and more of rubbing in a tone, and once full it takes
+nothing more. And it gives the dust of its load to bare tooth only
+(`hunger`): where the paper carries nothing it lays `Tool.lay` of its load
+over each of its widths, less where pigment lies already, and nothing once
+that covers the tooth (`COVERS` thick, on the covered share of the pixel).
+So a full stump leaves a tone as it is, however often it goes over it, and
+a finger loaded with one colour leaves a tone of another clean, where an
+exchange both ways would bring its colour all over it; but on bare paper
+the same stump draws a tone of its own: loaded on a patch of 6B, 0.72 of
+the paper's tone where it lands, 0.83 eight of its widths on, 0.91 after
+sixteen and 0.96 after twenty-four, by when it has laid nearly all it
+held. (In the first build it laid 0.59, 0.92, 0.98 and 0.99: darker where
+it landed, and spent sooner.) A stump dragged once through a tone has
+hardly begun to fill, and leaves little beyond what was on its face. A
+full stump also lays dust on whatever bare paper it strays onto at the
+edge of a tone, as a dirty stump does. Paste sticks to any paper, bare or
+not, so what a finger has taken of an oil pastel it lays back as it goes.
+Wax is as slick to the dust a tool brings as
 to a dry stick (`RESIST_DRY`, where the wax covers the tooth): a stump
 loaded with charcoal and dragged across one firm line of crayon leaves on
 it an eighth of what it leaves on the paper either side, and the line

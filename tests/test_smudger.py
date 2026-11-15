@@ -61,11 +61,14 @@ def test_rubbing_a_dark_tone_again_and_again_does_not_wear_it_away():
     assert _total(sheet) + stump.load == pytest.approx(laid, rel=1e-5)
     assert abs(float(_luminance(sheet)[inside].mean()) - once) < 0.01
     # a bare tool starts each rub clean, and still takes little: it carries
-    # its load from one pass to the next of a rub
+    # its load from one pass to the next of a rub, and each rub takes one
+    # (a stump holds half as much again as it used to carry off such a tone)
     bare = Sheet(300, 120, seed=1)
     bare.shade(area, pencils.B8, 0.9)
     taken = sum(bare.rub(area, tools.STUMP, 0.9) for _ in range(8))
-    assert 0.0 < taken < 0.04 * laid
+    assert 0.0 < taken < 0.06 * laid
+    full = tools.STUMP.holds * np.pi * (0.5 * tools.STUMP.width + 0.5) ** 2
+    assert taken < 8 * 1.1 * full
     assert _total(bare) + taken == pytest.approx(laid, rel=1e-5)
 
 
@@ -190,9 +193,8 @@ def test_a_finger_blends_a_join_of_oil_pastels_the_same_way():
 
 
 def test_a_loaded_finger_brings_little_onto_a_tone_of_another_colour():
-    # a finger loaded on orange and rubbed over blue of the same weight: it
-    # gives or takes where it carries more or less than lies there, not
-    # both, so the blue stays blue
+    # a finger loaded on orange and rubbed over blue: paper that carries
+    # pigment takes nothing off its load, so the blue stays blue
     sheet = Sheet(400, 200, seed=1)
     orange, blue = pastels.soft(ORANGE), pastels.soft(BLUE)
     for angle in (25, -40):
@@ -205,6 +207,56 @@ def test_a_loaded_finger_brings_little_onto_a_tone_of_another_colour():
     top = sheet.loose[60:140, 260:340, :N].astype(np.float64).sum(axis=(0, 1))
     orange_there, blue_there = _of_each(orange, blue, top)
     assert orange_there < 0.03 * blue_there
+
+
+def test_a_stump_fills_slowly_and_takes_no_more_once_it_is_full():
+    # a stump holds so much (``Tool.holds`` for each pixel of its face); it
+    # takes less the fuller it is, and a full one takes nothing more
+    full = tools.STUMP.holds * np.pi * (0.5 * tools.STUMP.width + 0.5) ** 2
+    sheet, laid = _toned(charcoal.VINE, 9.0)
+    stump = Smudger(tools.STUMP)
+    # one pass through 32 widths of charcoal: a fifth of what it holds
+    assert 0.1 * full < sheet.smudge([(40, 100), (360, 100)], stump, 0.7) < 0.4 * full
+    # (rubbed well inside a tone: on the bare paper round it, it would leave
+    # what it carries)
+    lifted = []  # (what it has lifted, without the dust on its face)
+    for _ in range(3):
+        sheet.rub(INNER, stump, 0.7)
+        lifted.append(float(stump._carried[0, IV]))
+    assert 0.4 * full < lifted[0] < lifted[1] < lifted[2] < full
+    assert lifted[1] - lifted[0] < 0.75 * lifted[0] and lifted[2] > 0.9 * full
+    assert _total(sheet) + stump.load == pytest.approx(laid, rel=1e-5)
+    # a heavy pastel fills it in one rub, and the next takes nothing
+    sheet, laid = _toned(pastels.soft(BLUE), 9.0)
+    stump = Smudger(tools.STUMP)
+    sheet.rub(INNER, stump, 0.7)
+    assert 0.9 * full < float(stump._carried[0, IV]) <= full * (1 + 1e-9)
+    assert abs(sheet.rub(INNER, stump, 0.7)) < 0.05 * full
+    # an eraser, a chamois or a tool of one's own holds whatever it takes
+    eraser = Smudger(tools.KNEADED)
+    assert sheet.rub(TONE, eraser, 0.9) > 20 * full
+
+
+def test_bare_tooth_takes_the_dust_off_a_loaded_stump_and_covered_paper_does_not():
+    # a stump loaded with charcoal, dragged over bare paper, on across a
+    # patch of pastel and over bare paper again: it tones the paper on
+    # either side, and leaves the pastel as it was
+    _, stump, _ = _loaded(charcoal.VINE)
+    sheet = Sheet(400, 200, seed=2)
+    blue = pastels.soft(BLUE)
+    for angle in (25, -40):
+        sheet.shade((160, 20, 260, 180), blue, 0.7, 14, angle)
+    drawn = sheet.copy()
+    sheet.smudge([(40, 100), (380, 100)], stump, 0.6)
+    brought = (sheet.pigment() - drawn.pigment()).astype(np.float64)
+    way = slice(96, 104)
+    before, after = brought[way, 90:140].mean(), brought[way, 290:340].mean()
+    assert before > 0.03 and after > 0.4 * before
+    top = sheet.loose[way, 180:240, :N].astype(np.float64).sum(axis=(0, 1))
+    charcoal_there, blue_there = _of_each(charcoal.VINE, blue, top)
+    assert charcoal_there < 0.03 * blue_there
+    tone = _luminance(sheet)
+    assert tone[way, 90:140].mean() < 0.85 and tone[way, 290:340].mean() < 0.93
 
 
 # --------------------------------------------------------------------------
@@ -227,49 +279,53 @@ def test_a_loaded_stump_leaves_a_crayon_line_clean():
     on_the_line = brought[108:112, way].mean()
     assert before > 0.02 and abs(on_the_line) < 0.2 * before
     # what the wax refuses stays on the stump, which carries it on
-    assert after > 0.85 * before
+    assert after > 0.75 * before
     assert _total(sheet) + stump.load == pytest.approx(total, rel=1e-6)
     # the line keeps its tone where the stump crossed it; the paper greys
     tone = _luminance(sheet)
     crossed, beside = tone[108:112, way].mean(), tone[108:112, 110:130].mean()
-    assert beside - 0.03 < crossed <= beside + 0.005
+    assert beside - 0.05 < crossed <= beside + 0.005
     assert tone[96:102, way].mean() < beside - 0.07
 
 
 @pytest.mark.parametrize(
-    ("medium", "most", "least"),
+    ("medium", "least", "most"),
     [
-        (charcoal.VINE, 0.08, 0.0),
-        (pastels.soft("#2456a6"), 0.08, 0.0),
-        (pencils.B8, 0.08, 0.0),
-        (pastels.oil("#2456a6"), 0.9, 0.5),
+        (charcoal.VINE, 0.0, 0.15),
+        (pastels.soft("#2456a6"), 0.0, 0.15),
+        (pencils.B8, 0.0, 0.15),
+        (pastels.oil("#2456a6"), 0.35, 0.9),
     ],
     ids=["charcoal", "soft pastel", "8B", "oil pastel"],
 )
-def test_wax_refuses_the_dust_a_finger_brings_and_takes_its_paste(medium, most, least):
-    # a finger loaded on a patch of the medium, rubbed over bare paper and
-    # on over three firm layers of crayon: what the crayon takes of it,
-    # against what the paper before it took (dust: 0.7 of it before, the
-    # finger having less left by then; now next to nothing. Paste sticks)
-    scrap = Sheet(500, 200, seed=1)
-    for angle in (30, -40):
-        scrap.shade((20, 20, 160, 180), medium, 0.8, 9.0, angle=angle)
-    finger = Smudger(tools.FINGER)
-    scrap.rub((25, 25, 155, 175), finger, 0.7)
-    sheet = Sheet(400, 200, seed=2)
-    for layer in range(3):
-        sheet.shade(
-            (200, 20, 380, 180), crayons.wax("#f4f1ea"), 0.8, 9.0, angle=30 + 50 * layer
-        )
-    drawn = sheet.copy()
-    total = _total(sheet) + finger.load
-    for y in (60, 100, 140):
-        sheet.smudge([(40, y), (360, y)], finger, 0.7)
-    brought = (sheet.pigment() - drawn.pigment()).astype(np.float64)
-    on_paper, on_wax = brought[50:150, 80:180].mean(), brought[50:150, 240:340].mean()
-    assert on_paper > 0.005
+def test_wax_refuses_the_dust_a_finger_brings_and_takes_its_paste(medium, least, most):
+    # a finger loaded on a patch of the medium and rubbed across a sheet:
+    # what it leaves on three firm layers of crayon, against what it leaves
+    # at the same place on a sheet that is bare. Dust: a tenth (what the
+    # bare flecks between the crayon take); paste sticks, and half of what
+    # a finger carries of an oil pastel is paste
+    left = []
+    for waxed in (False, True):
+        scrap = Sheet(500, 200, seed=1)
+        for angle in (30, -40):
+            scrap.shade((20, 20, 160, 180), medium, 0.8, 9.0, angle=angle)
+        finger = Smudger(tools.FINGER)
+        scrap.rub((25, 25, 155, 175), finger, 0.7)
+        sheet = Sheet(400, 200, seed=2)
+        for layer in range(3 if waxed else 0):
+            sheet.shade(
+                (120, 20, 380, 180), crayons.wax("#f4f1ea"), 0.8, 9.0, 30 + 50 * layer
+            )
+        drawn = sheet.copy()
+        total = _total(sheet) + finger.load
+        for y in (60, 100, 140):
+            sheet.smudge([(40, y), (360, y)], finger, 0.7)
+        brought = (sheet.pigment() - drawn.pigment()).astype(np.float64)
+        left.append(float(brought[50:150, 160:340].mean()))
+        assert _total(sheet) + finger.load == pytest.approx(total, rel=1e-6)
+    on_paper, on_wax = left
+    assert on_paper > 0.0008
     assert least * on_paper <= on_wax < most * on_paper
-    assert _total(sheet) + finger.load == pytest.approx(total, rel=1e-6)
 
 
 @pytest.mark.parametrize(("layers", "least"), [(1, 0.55), (3, 0.55)])
@@ -376,24 +432,20 @@ def test_a_loaded_stump_draws_a_pale_tone_on_bare_paper():
     assert sheet.pigment()[:, 150:].max() == 0
     taken = sheet.smudge([(200, 60), (480, 60)], stump, 0.6)
     # it left most of what it carried: less than nothing taken
-    assert taken == pytest.approx(stump.load - load) and taken < -0.6 * load
+    assert taken == pytest.approx(stump.load - load) and taken < -0.9 * load
     trail = sheet.pigment()[:, 150:]
     assert float(trail.sum(dtype=np.float64)) == pytest.approx(-taken, rel=1e-4)
     assert trail[:50].max() == 0 and trail[70:].max() == 0  # only where it went
-    # a tone far paler than the patch it was loaded on, deepest where the
-    # stump lands (with the dust on its face) and fading slowly as it goes:
-    # a stump gives its load back a little at a time, and still tones the
-    # paper 24 of its widths on (it used to lay a mid-grey that was all but
-    # spent by then: 0.59, 0.92, 0.98 and 0.99 of the paper's tone)
+    # a tone paler than the patch it was loaded on, deepest where the stump
+    # lands and fading as it goes: bare tooth takes the dust off a loaded
+    # stump readily. It tones the paper for longer than it did: it used to
+    # lay 0.59, 0.92, 0.98 and 0.99 of the paper's tone over these 28 widths
     tone = _luminance(sheet)
     along = [float(tone[56:64, x : x + 20].mean()) for x in (200, 280, 360, 440)]
     assert along == sorted(along)
-    assert float(tone[40:160, 40:100].mean()) < 0.15 < 0.8 < along[0] < 0.93
-    assert 0.93 < along[1] < along[3] < 0.985
-    # and the next pass too, with what it has left
-    left = stump.load
-    assert sheet.smudge([(200, 120), (480, 120)], stump, 0.6) < -0.5 * left
-    assert float(_luminance(sheet)[116:124, 280:300].mean()) < 0.995
+    assert float(tone[40:160, 40:100].mean()) < 0.15 < 0.5 < along[0] < 0.76
+    assert 0.76 < along[1] < 0.88 and 0.86 < along[2] < 0.95
+    assert 0.93 < along[3] < 0.98
     assert _total(sheet) + stump.load == pytest.approx(laid, rel=1e-5)
 
 
@@ -417,8 +469,7 @@ def test_a_tool_loaded_on_a_scrap_draws_on_another_sheet():
     taken = sheet.rub((20, 20, 280, 80), stump, 0.6)
     assert taken < -0.5 * load
     assert _total(sheet) + stump.load == pytest.approx(load, rel=1e-5)
-    # (a pale tone, laid a little at a time: it was 0.83 of the paper's)
-    assert float(_luminance(sheet)[12:28, 30:60].mean()) < 0.96
+    assert float(_luminance(sheet)[12:28, 30:60].mean()) < 0.92
 
 
 def test_what_it_carries_is_still_that_pigment():

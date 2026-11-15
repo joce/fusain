@@ -84,9 +84,10 @@ def test_the_pressure_may_be_a_map_and_the_tool_is_lifted_where_it_is_nothing():
     assert not np.array_equal(before[:, 40:90], after[:, 40:90])
     assert np.array_equal(before[:, 115:230], after[:, 115:230])
     # lifted over the gap, the stump lands on the bare paper beyond with the
-    # dust it carries, and tones it (lightly: it carries far only a small
-    # share of what it moves; it used to bring a twentieth of what was laid)
-    assert after[:, 245:].sum() > 0.01 * laid
+    # dust it carries, and tones it (lightly: it has gone over little of the
+    # tone, and a stump fills slowly; it used to bring a twentieth of what
+    # was laid)
+    assert after[:, 245:].sum() > 0.008 * laid
     assert _total(sheet) + taken == pytest.approx(laid, rel=1e-5)
 
 

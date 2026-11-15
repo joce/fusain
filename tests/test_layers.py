@@ -257,7 +257,9 @@ def test_what_a_finger_smears_of_an_oil_pastel_is_still_paste():
     for k in range(3):
         sheet.smudge([(40, 60 + 8 * k), (198, 60 + 8 * k)], finger, 0.7)
     # the finger carries paste, and lays paste
-    assert finger._carried[:, IP].sum() > 0.9 * finger.load > 0
+    # (but for what it has rubbed off what the paper holds, which it keeps:
+    # paper that carries pigment takes no dust back from it)
+    assert finger._carried[:, IP].sum() > 0.85 * finger.load > 0
     smeared = _sum(sheet.pigment()[beyond])
     assert smeared > 10.0 + there
     # (and presses part of it into the paper; none of it is dust)
