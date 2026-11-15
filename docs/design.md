@@ -424,8 +424,22 @@ raking one; it is added to what the pigment sends back.
   pressure. It counts
   wherever the wax lies: a film laid over dust is on top and shines; what
   the paper holds shines through whatever dust lies over it, as graphite
-  does. The light is white, less than half as strong as graphite's and in a
-  wider lobe: a soft, even gloss, which a raking lamp still shows.
+  does. The light is white, less than half as strong as graphite's, and in a
+  narrower lobe, since a film of wax polished flat is smoother than one of
+  graphite flakes: it falls to half about 15 degrees from where the lamp is
+  mirrored, and to a fifth at 23 degrees, which is how far from the eye
+  above the sheet the default lamp is mirrored. So with the lamp overhead
+  burnished wax shines, a soft white gloss, and under the default lamp a
+  burnished dark stays deep, as it does in life away from the glare: four
+  firm layers of a dark coloured pencil burnished with the blender go from
+  L* 7 to 10 under it and to 19 overhead, and the gloss that the firm
+  layers alone show varies from place to place by a third of what it did.
+  (In the lobe it had first, wider than graphite's, the gloss greyed that
+  dark to 18 under the default lamp, and followed the polish stroke by
+  stroke.)
+  How narrow is assumed, not measured: polished wax is taken for a smooth
+  dielectric whose facets lean about 0.16 on average (a semi-gloss
+  finish; graphite's, in its lobe, about 0.38).
 - **Ballpoint ink** bronzes where it is heavy: from one and a half firm
   passes thick, fully at four and a half, so eight layers of firm hatching
   bronze half-way and a single line not at all; what is drawn over the ink

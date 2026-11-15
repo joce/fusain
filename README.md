@@ -356,10 +356,11 @@ Bottom row: a 2H laid lightly and pressed hard, which flattens the tooth so
 that the little graphite it lays has a sheen; a coloured pencil, its right
 half burnished; a crayon and an oil pastel pressed hard; and blue, black and
 red ballpoint hatched eight times over. Three things shine, each in its own
-way: graphite like metal; wax softly, once it is polished (the harder it was
-pressed, the more), under any lamp; and heavy ink like bronze, in the colour
-it absorbs most (black ink, a blend of dyes, in its violet's), with the lamp
-overhead.
+way: graphite like metal, under most lamps; wax softly, once it is polished
+(the harder it was pressed, the more), with the lamp near overhead, and
+hardly under the default lamp, so that a burnished dark stays deep; and
+heavy ink like bronze, in the colour it absorbs most (black ink, a blend of
+dyes, in its violet's), with the lamp overhead.
 
 ![The papers under a raking light](examples/output/papers.png)
 

@@ -28,6 +28,26 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   third before) and at 0.5 a twentieth (none); three firm layers of HB
   flatten the tooth by 0.74 (0.72). A light touch of 0.4 flattens a trace
   where the lead bears hardest (three layers of HB: 0.004, from 0).
+- Under the default lamp a burnished dark stays deep (fusain-5je). The
+  gloss of polished wax was in a lobe wider than graphite's
+  (`WAX_SHININESS` 5), nine tenths of which the default lamp sent to the
+  eye: four firm layers of a dark coloured pencil burnished with the
+  blender went from L* 6.8 to 18.1 under it, and the firm layers alone
+  from 10.3 to 17.9, following how far each stroke had polished them. A film of wax
+  polished flat is smoother than one of graphite flakes, and its lobe is
+  now narrower (`WAX_SHININESS` 80): its light falls to half about 15
+  degrees from where the lamp is mirrored, and to a fifth at 23 degrees,
+  where the default lamp is. That is assumed, not measured (a smooth
+  dielectric whose facets lean about 0.16 on average, a semi-gloss
+  finish): a burnished coloured pencil shines where it mirrors the lamp
+  and is deep away from the glare. The burnished dark now goes to 10.3
+  under the default lamp, and to 18.8 overhead (18.9 before); the firm
+  layers to 12.6, and the gloss on them varies from place to place by 0.52
+  L* (smoothed over the grain), from 1.51. Under a raking lamp polished
+  wax no longer shines. Graphite and ink shine as they did.
+  `examples/macaw.py` is rendered under the default lamp again, gloss
+  included: on its burnished darks the gloss adds 1.3 L* (4.8 with the
+  wide lobe), varying by 0.5 (1.7).
 
 ### Changed
 

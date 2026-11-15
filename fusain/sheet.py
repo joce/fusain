@@ -51,11 +51,17 @@ SHININESS = 12.0
 #: The gloss of wax: what a film of wax as slick as it gets
 #: (:data:`fusain._engine.WAX_FULL`), polished flat, adds to the light when
 #: it mirrors the lamp squarely, and how narrow that light is. Less than
-#: graphite and wider: a soft, even gloss, where graphite's is metallic.
+#: graphite, and narrower: a film of wax polished flat is smoother than one
+#: of graphite flakes. Its light falls to half about 15 degrees from where
+#: the lamp is mirrored and to a fifth at 23 degrees, where the default
+#: lamp is mirrored, so that under it a burnished dark stays deep, as it
+#: does in life away from the glare; with the lamp overhead it shines.
+#: (Assumed, not measured: a smooth dielectric whose facets lean about
+#: 0.16 on average, a semi-gloss finish.)
 #: A film half polished still scatters most of the light: the gloss goes as
 #: how far the surface is pressed flat, to the power WAX_POLISH.
 WAX_SHEEN = 0.025
-WAX_SHININESS = 5.0
+WAX_SHININESS = 80.0
 WAX_POLISH = 2.0
 #: The bronze of ink: what ink as heavy as it gets adds, in its own colour
 #: (it mirrors most the light it absorbs most, so blue ink shines copper).
@@ -530,9 +536,11 @@ class Sheet:
         The lamp also shows what shines (:meth:`shine`). Seen from straight
         above, a heavy layer of graphite mirrors a high lamp and looks
         silvery, and hardly mirrors a raking one; polished wax has a softer,
-        wider gloss; and heavy ballpoint ink bronzes, in the colour it
-        absorbs most. ``gloss`` scales all of it: 0 renders the drawing
-        matte, as a scanner sees it.
+        narrower gloss, which shows with the lamp near overhead and hardly
+        under the default lamp, so that a burnished dark stays deep; and
+        heavy ballpoint ink bronzes, in the colour it absorbs most.
+        ``gloss`` scales all of it: 0 renders the drawing matte, as a
+        scanner sees it.
 
         When lit, raises ValueError unless ``light`` is three finite numbers
         with z > 0 and ``relief`` and ``gloss`` are finite and not negative.
