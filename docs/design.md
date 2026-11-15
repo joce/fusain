@@ -300,7 +300,16 @@ inside less: each part lays as far as it slides. That matters for a broad
 tip: a band 90 pixels wide laid by the side of a stick round a quarter
 circle of radius 150 would have 1.10 of its middle's tone on the inside
 and 0.84 on the outside, had each part laid as far as the middle went; it
-has 0.95 and 0.96.
+has 0.95 and 0.96. No part of a tip lays more than a pass's worth on a
+pixel in a step, though: where the stroke turns so sharply that its far
+end would sweep further than that (under a sixth or so of the half-width
+of the mark: 7.5 pixels for that band, under half a pixel for a point 4
+wide), the step is laid in parts, the tip turned bit by bit across the
+angle, so that what it sweeps is spread along the arc. And a tip is the
+same turned half round, so where a stroke doubles back on itself the hand
+draws it back without turning it. (A part was laid as far as it slid,
+however far: at a cusp tens of passes in a step, which pressed in more
+dust than there was.)
 
 A stroke ends round, in the outline of its tip, which reaches half the tip
 past the ends of its path; or flat, cut square across at the ends of its

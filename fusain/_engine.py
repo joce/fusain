@@ -995,10 +995,13 @@ def bear(
 
 @njit(cache=True, error_model="numpy")
 def turning(xs, ys, i):
-    """How fast the path through the points (``xs``, ``ys``) turns at
-    sample ``i``: in radians per pixel, positive where it turns towards the
-    side of the tip :func:`streak_at` counts as across it the positive way.
-    Nothing at its ends."""
+    """How fast the tip turns at sample ``i`` of the path through the points
+    (``xs``, ``ys``): in radians per pixel, positive where it turns towards
+    the side of the tip :func:`streak_at` counts as across it the positive
+    way. Nothing at its ends. A tip is the same turned half round, so where
+    the path turns by more than a quarter turn, the hand turns it the short
+    way and draws it back: where a stroke doubles back on itself (to and
+    fro), the tip does not turn at all."""
     if i <= 0 or i >= xs.shape[0] - 1:
         return 0.0
     ax, ay = xs[i] - xs[i - 1], ys[i] - ys[i - 1]
@@ -1006,7 +1009,97 @@ def turning(xs, ys, i):
     going = math.sqrt(ax * ax + ay * ay) + math.sqrt(bx * bx + by * by)
     if going <= 1e-9:
         return 0.0
-    return 2.0 * math.atan2(ax * by - ay * bx, ax * bx + ay * by) / going
+    angle = math.atan2(ax * by - ay * bx, ax * bx + ay * by)
+    if angle > 0.5 * math.pi:
+        angle -= math.pi
+    elif angle < -0.5 * math.pi:
+        angle += math.pi
+    return 2.0 * angle / going
+
+
+@njit(cache=True, error_model="numpy")
+def slide_on(
+    tooth,
+    press,
+    dent,
+    cover,
+    held,
+    under,
+    loose,
+    fresh,
+    bonded,
+    drag,
+    k,
+    law,
+    now,
+    step,
+    ends,
+    streaks,
+    row,
+    salt,
+):
+    """Lay what the tip at ``now`` leaves as it slides ``step`` pixels, turning
+    as the stroke turns (``now[14]``): :func:`bear`, all at once where no
+    part of the tip slides over a pixel more than once in the step, the
+    most it can (a pass's worth: ``now[9]`` per pixel slid). Where the
+    stroke turns so sharply that the far end of the tip would sweep further
+    than that, it is laid in as many parts as that takes, the tip turned bit
+    by bit across the angle it turns through in the step: what it sweeps is
+    spread along the arc it sweeps, a pass's worth at most on each pixel at
+    a time, and not piled on the pixels under it. Returns as :func:`bear`."""
+    angle = now[14] * step
+    parts = int(math.ceil((step + now[4] * abs(angle)) * now[9]))
+    if parts <= 1:
+        return bear(
+            tooth,
+            press,
+            dent,
+            cover,
+            held,
+            under,
+            loose,
+            fresh,
+            bonded,
+            drag,
+            k,
+            law,
+            now,
+            step,
+            ends,
+            streaks,
+            row,
+            salt,
+        )
+    tx, ty = now[2], now[3]
+    laid, lying = 0.0, 0.0
+    for part in range(parts):
+        turned = angle * ((part + 0.5) / parts - 0.5)
+        cos, sin = math.cos(turned), math.sin(turned)
+        now[2], now[3] = tx * cos - ty * sin, ty * cos + tx * sin
+        dv, rest = bear(
+            tooth,
+            press,
+            dent,
+            cover,
+            held,
+            under,
+            loose,
+            fresh,
+            bonded,
+            drag,
+            k,
+            law,
+            now,
+            step / parts,
+            ends,
+            streaks,
+            row,
+            salt,
+        )
+        laid += dv
+        lying += rest
+    now[2], now[3] = tx, ty
+    return laid, lying
 
 
 @njit(cache=True, error_model="numpy")
@@ -1270,7 +1363,7 @@ def lay_stroke(
             step += 0.5 * landing
         for way in (-1.0, 0.0, 1.0):
             if way == 0.0:
-                dv, rest = bear(
+                dv, rest = slide_on(
                     tooth,
                     press,
                     dent,

@@ -27,7 +27,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   quarter circle of radius 150, a band 90 wide has 0.95 of its middle's
   tone on the inside and 0.96 on the outside, where it would have 1.10 and
   0.84 had each part laid as far as the middle went. (Every stroke that
-  curves changes by that, a little at its rims.) A shading lays the bands
+  curves changes by that, a little at its rims.) No part of a tip lays more
+  than a pass's worth on a pixel in a step: where a stroke turns so sharply
+  that its far end would sweep further (under about a sixth of the
+  half-width of the mark), the step is laid in parts turned bit by bit
+  across the angle, and where it doubles back the tip is drawn back
+  without turning round. A shading lays the bands
   of a stick laid flat side by side, overlapping only by their rounded
   ends, as its point's strokes overlap; they were half a band apart. Two
   crossed layers of the side of vine charcoal on Ingres paper at 0.8 are

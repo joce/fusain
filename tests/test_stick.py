@@ -286,6 +286,59 @@ def test_a_band_laid_flat_is_as_even_where_the_stroke_turns():
     assert laid == pytest.approx(pigment.sum(), rel=1e-5)
 
 
+#: Paths that turn as sharply as a path can: doubling back a little off the
+#: line, exactly on it, with a needle-sharp hairpin, and in a zigzag.
+SHARP = {
+    "cusp": [(100, 150), (200, 150), (100, 150.5)],
+    "reversal": [(100, 150), (200, 150), (100, 150)],
+    "needle": [(100, 150), (200, 150), (200.2, 150.2), (100, 150.4)],
+    "zigzag": [(60, 100), (110, 200), (160, 100), (210, 200), (260, 100), (310, 200)],
+}
+
+
+@pytest.mark.parametrize("film", [False, True], ids=["over dust", "over a film"])
+@pytest.mark.parametrize("path", SHARP.values(), ids=SHARP.keys())
+@pytest.mark.parametrize(
+    "medium, width",
+    [
+        (charcoal.COMPRESSED, 6.0),
+        (pencils.B2, 6.0),
+        (Stick(pastels.soft("#203050"), 8, 8, 60), None),
+    ],
+    ids=["compressed charcoal", "a pencil", "a pastel"],
+)
+def test_the_side_of_a_tip_turned_sharply_leaves_nothing_below_nothing(
+    medium, width, path, film
+):
+    # (a part of the tip was laid as far as it slid in a step, which at a
+    # cusp is tens of times a pass: it pressed in more dust than there was,
+    # and left the dust as low as -10)
+    sheet = Sheet(400, 300, seed=1)
+    sheet.shade((20, 20, 380, 280), pastels.soft("#e0c080"), 0.7, width=12)
+    if film:
+        sheet.shade((20, 20, 380, 280), crayons.wax("#2456a6"), 0.8, width=10)
+    before = sheet.pigment().sum(dtype=np.float64)
+    laid = sheet.stroke(path, medium, 1.0, width, tilt=1.0)
+    for name in ("held", "under", "loose", "bonded", "cover", "press"):
+        assert getattr(sheet, name).min() > -1e-6, name
+    assert sheet.pigment().sum(dtype=np.float64) == pytest.approx(before + laid)
+
+
+def test_a_stick_drawn_to_and_fro_does_not_turn_round():
+    """A tip is the same turned half round: where a stroke doubles back, the
+    hand draws it back, and its band is even up to where it turns."""
+    assert eng.turning(np.array([0.0, 5.0, 0.0]), np.zeros(3), 1) == 0.0
+    sheet = Sheet(400, 300, paper=LEVEL, seed=1)
+    stick = Stick(charcoal.VINE, 6, 6, 60)
+    laid = sheet.stroke([(100, 150), (250, 150), (100, 150)], stick, 0.6, tilt=1.0)
+    along = sheet.pigment()[125:175].astype(np.float64).mean(axis=0)
+    # (it piled up where it turned: 0.71 at most, against 0.51 out and back)
+    assert along[150:240].min() > 0.95 * along[150:240].max()
+    assert sheet.pigment().max() < 1.2 * along[150:240].max()
+    assert not along[254:].any()  # and it ends within its thickness
+    assert laid == pytest.approx(sheet.pigment().sum(dtype=np.float64), rel=1e-5)
+
+
 def test_a_shading_lays_the_bands_of_a_stick_laid_flat_side_by_side(monkeypatch):
     def gaps(medium) -> list[float]:
         sheet, centres = Sheet(300, 300, seed=2), []
