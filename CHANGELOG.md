@@ -6,6 +6,60 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Strokes and rubs are about twice as fast, and no picture changes: every
+  array of a sheet after any sequence of calls, every number returned and
+  every rendered image is what it was, to the last bit. On a sheet of 1120
+  by 820 pixels (best of five runs, one core of a 2.1 GHz Xeon): shading it
+  with an HB of width 6 takes 1.8 s, from 3.1 s; with a soft pastel of width
+  24, 1.2 s, from 2.5 s; with the side of a stick of vine charcoal, 1.3 s,
+  from 2.9 s; rubbing it with a finger, 2.3 s, from 5.9 s; with a kneaded
+  eraser, 2.7 s, from 6.5 s; with a stump over graphite, 4.2 s, from 7.7 s;
+  and hatching it with a ballpoint, 0.54 s, from 0.83 s. Rendering it takes
+  what it took, 3.2 s, most of it Kubelka-Munk, which is murex's to make
+  faster. `examples/lake.py` takes three minutes, from nearly four (about
+  half of what is left is its looking at the sheet as it goes), and
+  `deco.py` and `broadway.py` a quarter to a third less; the examples that
+  mostly plan their strokes in numpy (`stilllife.py`, `farm.py`,
+  `macaw.py`) a seventh less at most. What it took:
+  - What a kernel calls for every pixel is compiled without numba's
+    reference counting (`_nrt=False`: it allocates nothing and keeps no
+    array) and into its caller (`forceinline=True`). Counting a reference to
+    each array a helper was given, and back, at every call was a third of
+    the time of a stroke and half of that of a rub. Both are options of
+    numba's `njit` that its documentation does not list (the first is
+    marked private); neither changes a result, and without the first all
+    that follows is worth a quarter at most.
+  - How a tip bears on the pixels of a row (its shape, the streaks of the
+    pass, the level it reaches in the tooth) is worked out for the whole row
+    before anything is laid on it; only the pixels of a row that the tip can
+    cover are looked at (a stick on its side covers a small part of the
+    square around it); the streaks of a pass are looked up in a table; the
+    dust of a pass settles in one visit of each pixel; and the loops over
+    the bands of a pigment are vectorised.
+  - The dense points of a path are worked out once for a stroke, where
+    they were worked out twice (to sample it and for its length).
+- `lay_stroke` and `rub_stroke` (in `fusain._engine`) take what they took;
+  `bear`, `put_down` and `streak_at` take the streaks of the pass
+  (`streaks_of`), and the first two the row they work in.
+
+### Added
+
+- `tools/fingerprint.py`: whether a change has altered the picture. It
+  draws a suite of small drawings (every family of medium, sticks and tilt,
+  width profiles and flat ends, shading, tools bare and in the hand, a
+  knife, a blender, fixative, a stylus, ballpoint pens, on several papers)
+  and hashes every array that the sheets, the sticks and the tools in the hand hold,
+  the numbers the calls returned and the rendered images.
+  `tools/fingerprint.json` holds the hashes of the code as it was before it
+  was made faster, and `tests/test_fingerprint.py` checks them (they are
+  skipped, with the reason, on a machine whose `pow` or numpy rounds
+  differently from the one they were recorded on). `--thorough` draws the
+  suite on every paper with three seeds, to save before a change and compare
+  after; `--record` is for a change that is meant to alter the picture.
+- `tools/benchmark.py`: the timings above.
+
 ### Added
 
 - `tools.KNIFE` and `tools.SAND_ERASER`, and `Tool.scrape` (0 to 1): how

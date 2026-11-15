@@ -2,15 +2,36 @@
 
 Kernels are ``@njit(cache=True, error_model="numpy")``, without ``fastmath``
 and without ``parallel``, so that a drawing repeats exactly.
+
+What a kernel calls is compiled with ``_nrt=False`` as well: it allocates
+nothing and keeps none of the arrays it is given, so it need not count a
+reference to each of them and back at every call, which numba otherwise
+does, for every pixel under the tip. That took a third of the time of a
+stroke and half of that of a rub. And what is called for every pixel is
+compiled into its caller (``forceinline=True``). Neither changes a result;
+``tools/benchmark.py`` measures what they are worth.
+
+Speed must not change the picture: ``tools/fingerprint.py`` tells. What is
+exact here and must stay so: a table holds values worked out by the very
+expression it replaces (:func:`streaks_of`); a loop skips only pixels that
+it would have left as they were (:func:`row_span`, :func:`settle_dust`);
+and no sum is taken in another order.
 """
 
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import numpy as np
 from murex.spectral import N_BANDS
 from numba import njit
+
+#: What a kernel calls, and what it calls for every pixel (see above). The
+#: two options are numba's, and not in its type stubs.
+_CALLED: dict[str, Any] = {"cache": True, "error_model": "numpy", "_nrt": False}
+_called = njit(**_CALLED)
+_inlined = njit(**_CALLED, forceinline=True)
 
 #: Pigment is packed per pixel as [K (N bands), S, volume, sheen], all
 #: extensive (summed over the pigment present; the sheen is the volume times
@@ -79,6 +100,11 @@ WEAR = 0.08
 #: in bands about STREAK_WIDTH pixels wide that run the length of the stroke.
 STREAK = 0.35
 STREAK_WIDTH = 1.3
+#: The bands of a pass are numbered across the tip, the one under its middle
+#: being STREAK_MIDDLE; a pass looks up the first STREAK_BANDS of them in a
+#: table (enough for a tip some 160 pixels wide).
+STREAK_MIDDLE = 64.0
+STREAK_BANDS = 128
 #: Thickness at which the tooth of a paper of depth 1 and bite 1 is full of
 #: the softest lead pressed hard, and the share of it the hardest fills.
 FILL = 2.6
@@ -260,7 +286,7 @@ SLIDE_POWER = 5.0
 SLIDE_LOOSE = 0.15
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def unit_noise(ix: int, iy: int, salt: int) -> float:
     """A number in 0..1 for this pixel and this pass, always the same one."""
     h = (ix * 73856093) ^ (iy * 19349663) ^ (salt * 83492791)
@@ -271,7 +297,7 @@ def unit_noise(ix: int, iy: int, salt: int) -> float:
     return (h & 0xFFFFFF) / 16777216.0
 
 
-@njit(cache=True, error_model="numpy")
+@_called
 def heading(xs, ys, i):
     """Which way the tip is going at sample ``i``, as a unit vector."""
     count = xs.shape[0]
@@ -284,19 +310,35 @@ def heading(xs, ys, i):
 
 
 @njit(cache=True, error_model="numpy")
-def streak_at(dx, dy, tx, ty, salt):
+def streaks_of(salt):
+    """How hard each band of a tip bears in this pass, for the bands that
+    :func:`streak_at` looks up: a number in 0..1 for each, and for the one
+    after the last."""
+    streaks = np.empty(STREAK_BANDS + 1)
+    for band in range(STREAK_BANDS + 1):
+        streaks[band] = unit_noise(band, 0, salt + 1)
+    return streaks
+
+
+@_inlined
+def streak_at(dx, dy, tx, ty, streaks, salt):
     """How much more or less than its share (1) the tip bears at the pixel
     ``dx``, ``dy`` from its centre: by how far across the tip that is, the
-    same all along the stroke."""
-    across = (dy * tx - dx * ty) / STREAK_WIDTH + 64.0
+    same all along the stroke. ``streaks`` is :func:`streaks_of` this pass."""
+    across = (dy * tx - dx * ty) / STREAK_WIDTH + STREAK_MIDDLE
     band = int(math.floor(across))
     blend = across - band
-    streak = unit_noise(band, 0, salt + 1) * (1.0 - blend)
-    streak += unit_noise(band + 1, 0, salt + 1) * blend
+    if 0 <= band < STREAK_BANDS:
+        low, high = streaks[band], streaks[band + 1]
+    else:  # (a tip too wide for the table)
+        low = unit_noise(band, 0, salt + 1)
+        high = unit_noise(band + 1, 0, salt + 1)
+    streak = low * (1.0 - blend)
+    streak += high * blend
     return 1.0 + STREAK * (2.0 * streak - 1.0)
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def tip_bearing(dx, dy, tx, ty, wide, long, rounded):
     """How a tip bears on the pixel ``dx``, ``dy`` from its centre, going the
     way (``tx``, ``ty``): the share of its pressure it has there, and how far
@@ -313,7 +355,35 @@ def tip_bearing(dx, dy, tx, ty, wide, long, rounded):
     return min(inside / (rounded * across + 0.5), 1.0), min(inside, 1.0)
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
+def tip_extent(tx, ty, wide, long):
+    """Where the tip of :func:`tip_bearing` lies, row by row: on the row
+    ``dy`` below its centre it covers the pixels within ``half`` times the
+    square root of ``top - dy * dy`` of the point ``lean * dy`` to the right
+    of its centre, and none if that is negative (``top`` is the square of
+    how far above and below its centre the tip reaches). Returns ``lean``,
+    ``half`` and ``top``. (Exact but for rounding: allow a pixel more.)"""
+    top = long * long * ty * ty + wide * wide * tx * tx
+    lean = (long * long - wide * wide) * tx * ty / top
+    return lean, long * wide / top, top
+
+
+@_inlined
+def row_span(x, dy, lean, half, top, x0, x1):
+    """The pixels that a tip centred at ``x`` can cover on the row ``dy``
+    below its centre, among those from ``x0`` to ``x1``: from the first
+    returned to the one before the second, with a pixel to spare either
+    way. ``lean``, ``half`` and ``top`` are :func:`tip_extent`; for a round
+    tip of radius r, 0, 1 and r * r. The rest of the square around a tip is
+    a fifth of it for a round one, and most of it for a stick on its side."""
+    middle = x + lean * dy
+    reach = half * math.sqrt(max(top - dy * dy, 0.0)) + 1.0
+    return max(int(math.floor(middle - reach)), x0), min(
+        int(math.ceil(middle + reach)), x1
+    )
+
+
+@_inlined
 def free_share(bonded, layer, iy, ix, which):
     """The share of a layer at a pixel (``which``: 0 underneath, 1 on top)
     that can still be moved: loose dust and paste, which is neither set nor
@@ -325,7 +395,7 @@ def free_share(bonded, layer, iy, ix, which):
     return 1.0 - min(hard / there, 1.0)
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def hard_at(bonded, iy, ix):
     """The volume at a pixel, in the two layers together, that is set or a
     film: what lies between a tool and whatever is under it."""
@@ -333,7 +403,7 @@ def hard_at(bonded, iy, ix):
     return hard + bonded[iy, ix, 1, SET] + bonded[iy, ix, 1, FILM]
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def press_dust(held, under, loose, bonded, cover, iy, ix, share):
     """Press the ``share`` of the dust and of the paste at a pixel into the
     paper: not what is set or a film (``bonded``), and less of the rest the
@@ -359,7 +429,7 @@ def press_dust(held, under, loose, bonded, cover, iy, ix, share):
         bonded[iy, ix, 0, PASTE] -= bonded[iy, ix, 0, PASTE] * share
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def burnish(held, press, drag, iy, ix, polish, lift, lay):
     """Polish a pixel by ``polish`` (the share of one full pass on a film as
     slick as it gets): press its tooth flat, take ``lift`` times that share
@@ -376,7 +446,7 @@ def burnish(held, press, drag, iy, ix, polish, lift, lay):
         held[iy, ix, part] += given - taken
 
 
-@njit(cache=True, error_model="numpy")
+@_called
 def set_down(held, cover, drag, x, y, tx, ty, wide, long, rounded):
     """Where the tip lifts off, at (``x``, ``y``), lay what it still drags
     (``drag``, packed as the held layer is) on the marked paper under it.
@@ -410,7 +480,7 @@ def set_down(held, cover, drag, x, y, tx, ty, wide, long, rounded):
     return 0.0
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def bond_dust(bonded, layer, iy, ix, which, share, film):
     """Bond the ``share`` of the loose dust in one layer at a pixel: the
     share ``film`` of that is set, as under a film, and the rest turns to
@@ -422,7 +492,7 @@ def bond_dust(bonded, layer, iy, ix, which, share, film):
     bonded[iy, ix, which, PASTE] += caught * (1.0 - film)
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def settle_pixel(fresh, cover, bonded, under, loose, pasty, iy, ix):
     """Make room at a pixel for what a pass has left to settle there
     (``fresh``: what the paper did not hold of it, and its film): what lay on
@@ -458,7 +528,23 @@ def settle_pixel(fresh, cover, bonded, under, loose, pasty, iy, ix):
     return rest, film
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
+def settle_row(fresh, cover, bonded, under, loose, k, s, sheen, pasty, iy, x0, x1):
+    """Settle what a pass has left on the pixels ``x0`` to ``x1`` of a row
+    (:func:`settle_dust`)."""
+    for ix in range(x0, x1):
+        if fresh[iy, ix, 0] <= 0.0 and fresh[iy, ix, 1] <= 0.0:
+            continue  # (nothing, or settled already)
+        rest, film = settle_pixel(fresh, cover, bonded, under, loose, pasty, iy, ix)
+        new = rest + film
+        for band in range(k.shape[0]):
+            loose[iy, ix, band] += new * k[band]
+        loose[iy, ix, IS] += new * s
+        loose[iy, ix, IV] += new
+        loose[iy, ix, IX] += new * sheen
+
+
+@_called
 def settle_dust(fresh, cover, bonded, under, loose, k, s, sheen, pasty, xs, ys, bound):
     """At the end of a pass, put what it left to lie on the sheet (``fresh``,
     two volumes per pixel: what the paper does not hold of the medium, of
@@ -468,27 +554,38 @@ def settle_dust(fresh, cover, bonded, under, loose, k, s, sheen, pasty, xs, ys, 
     bond part of the loose dust they come to lie on. Only where the tip
     went: within ``bound`` of the points (``xs``, ``ys``)."""
     height, width = cover.shape
+    # (the square around the point before: settled already)
+    px0, px1, py0, py1 = 0, 0, 0, 0
     for i in range(xs.shape[0]):
         x0 = max(int(math.floor(xs[i] - bound)), 0)
         x1 = min(int(math.ceil(xs[i] + bound)), width)
         y0 = max(int(math.floor(ys[i] - bound)), 0)
         y1 = min(int(math.ceil(ys[i] + bound)), height)
         for iy in range(y0, y1):
-            for ix in range(x0, x1):
-                if fresh[iy, ix, 0] <= 0.0 and fresh[iy, ix, 1] <= 0.0:
-                    continue  # (nothing, or settled already)
-                rest, film = settle_pixel(
-                    fresh, cover, bonded, under, loose, pasty, iy, ix
+            start = x0
+            if py0 <= iy < py1:  # (only what lies to either side of it)
+                settle_row(
+                    fresh,
+                    cover,
+                    bonded,
+                    under,
+                    loose,
+                    k,
+                    s,
+                    sheen,
+                    pasty,
+                    iy,
+                    x0,
+                    min(x1, px0),
                 )
-                new = rest + film
-                for band in range(N):
-                    loose[iy, ix, band] += new * k[band]
-                loose[iy, ix, IS] += new * s
-                loose[iy, ix, IV] += new
-                loose[iy, ix, IX] += new * sheen
+                start = max(x0, px1)
+            settle_row(
+                fresh, cover, bonded, under, loose, k, s, sheen, pasty, iy, start, x1
+            )
+        px0, px1, py0, py1 = x0, x1, y0, y1
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def resist_dry(wax):
     """How much less of a medium with the share ``wax`` of wax a film of wax
     takes than bare paper does because the medium is dry: the tooth has to
@@ -496,7 +593,7 @@ def resist_dry(wax):
     return RESIST_DRY * (1.0 - min(wax / STICKS, 1.0))
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def resist_waxy(softness, wax):
     """How much less of it the film takes because the medium is waxy: wax
     slides on wax, unless it is a greasy paste, which sticks."""
@@ -504,14 +601,14 @@ def resist_waxy(softness, wax):
     return RESIST * (1.0 - GREASE * greasy) * min(wax / STICKS, 1.0)
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def resist_of(softness, wax):
     """How much less of a medium a film of wax as slick as it gets takes than
     bare paper does."""
     return resist_dry(wax) + resist_waxy(softness, wax)
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def paste_of(softness, wax):
     """The share that is paste, not dust, of what the paper does not hold of
     a medium: none of a dry medium or of a firm waxy one, all of a greasy
@@ -520,7 +617,7 @@ def paste_of(softness, wax):
     return min(wax / STICKS, 1.0) * min(greasy / PASTY, 1.0)
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def lying_share(under, loose, bonded, covered, iy, ix):
     """The share of the marked part of a pixel on which something lies over
     what the paper holds: dust, set or not, or paste. (A film lies on those,
@@ -530,7 +627,7 @@ def lying_share(under, loose, bonded, covered, iy, ix):
     return min(max(lying, 0.0) / covered / COVERS, 1.0)
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def deposit(held, fresh, iy, ix, dv, binding, over, k, s, sheen, wax):
     """Lay the volume ``dv`` of a medium at a pixel: the paper holds the
     share ``binding`` of it, but for the share ``over`` of that, a film on
@@ -539,7 +636,10 @@ def deposit(held, fresh, iy, ix, dv, binding, over, k, s, sheen, wax):
     there."""
     film = dv * binding * over
     kept = dv * binding - film
-    for band in range(N):
+    # (over the bands of k, which are the N of the sheet: with a count it
+    # cannot see, the compiler keeps this a loop, four or eight bands at a
+    # time, where it would unroll N steps one band at a time)
+    for band in range(k.shape[0]):
         held[iy, ix, band] += kept * k[band]
     held[iy, ix, IS] += kept * s
     held[iy, ix, IV] += kept
@@ -550,7 +650,7 @@ def deposit(held, fresh, iy, ix, dv, binding, over, k, s, sheen, wax):
     return dv - kept
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def within_ends(px, py, ends):
     """How much of the pixel centred at (``px``, ``py``) a stroke cut square
     at its ends leaves: 1 but behind the line across its start or beyond the
@@ -567,7 +667,50 @@ def within_ends(px, py, ends):
     return share if share > 1e-6 else 0.0  # (what rounding leaves past it)
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
+def bear_on_row(row, now, iy, xa, xb, ends, streaks, salt):
+    """How a tip at ``now`` (see :func:`bear`) bears on the pixels ``xa`` to
+    ``xb`` of the row ``iy``, which depends on nothing the sheet holds: for
+    each, in the three rows of ``row`` (counted from ``xa``), how far inside
+    the edge of the tip it is (0 if the tip does not mark it), how hard the
+    tip bears on it, and where it does mark it, the level in the tooth it
+    reaches there in this pass.
+
+    It is worked out for the whole row before anything is laid, in loops
+    that do one thing each: the processor then works on several pixels at
+    once, where one loop that also laid the medium went a pixel at a time
+    (each has its divisions, its square roots and a power to wait for)."""
+    x, y, tx, ty, wide, long, rounded = (
+        now[0],
+        now[1],
+        now[2],
+        now[3],
+        now[4],
+        now[5],
+        now[6],
+    )
+    reach, pressure, at_x, at_y = now[7], now[8], now[11], now[12]
+    dy = iy + 0.5 - y
+    for ix in range(xa, xb):
+        dx = ix + 0.5 - x
+        share, edge = tip_bearing(dx, dy, tx, ty, wide, long, rounded)
+        if edge > 0.0 and at_x == at_x:
+            # (landing or lifting: only where it is put)
+            ax, ay = ix + 0.5 - at_x, iy + 0.5 - at_y
+            if tip_bearing(ax, ay, tx, ty, wide, long, rounded)[1] <= 0.0:
+                edge = 0.0
+        if edge > 0.0:
+            edge *= within_ends(ix + 0.5, iy + 0.5, ends)
+        row[0, ix - xa] = edge
+        row[1, ix - xa] = pressure * share * streak_at(dx, dy, tx, ty, streaks, salt)
+    for ix in range(xa, xb):
+        if row[0, ix - xa] > 0.0:
+            level = 1.0 - reach * row[1, ix - xa] ** REACH_POWER
+            level += JITTER * (unit_noise(ix, iy, salt) - 0.5)
+            row[2, ix - xa] = level
+
+
+@_called
 def bear(
     tooth,
     press,
@@ -584,6 +727,8 @@ def bear(
     now,
     step,
     ends,
+    streaks,
+    row,
     salt,
 ):
     """Lay what a tip leaves as it slides ``step`` pixels over the paper
@@ -600,20 +745,13 @@ def bear(
     this paper's tooth one of a paper of depth 1 is, how far one pass of it
     at full pressure flattens the tooth, how much less of it a flattened
     tooth takes, how far it melts into a film of wax it polishes]. ``ends``
-    is as for :func:`within_ends`.
+    is as for :func:`within_ends` and ``streaks`` as for :func:`streak_at`;
+    ``row`` is room to work in, three rows as wide as the sheet
+    (:func:`bear_on_row`).
 
     Returns the volume laid and what of it is left to settle on top."""
     height, width = tooth.shape
-    x, y, tx, ty, wide, long, rounded = (
-        now[0],
-        now[1],
-        now[2],
-        now[3],
-        now[4],
-        now[5],
-        now[6],
-    )
-    reach, pressure, at_x, at_y = now[7], now[8], now[11], now[12]
+    x, y, tx, ty, wide, long = now[0], now[1], now[2], now[3], now[4], now[5]
     per_pass, dragged = now[9] * step, now[10] * step
     lay, full, dry, slides, filmy = law[0], law[1], law[2], law[3], law[4]
     binding, s, sheen, wax = law[5], law[6], law[7], law[8]
@@ -626,24 +764,20 @@ def bear(
     x1 = min(int(math.ceil(x + bound)), width)
     y0 = max(int(math.floor(y - bound)), 0)
     y1 = min(int(math.ceil(y + bound)), height)
+    lean, half, top = tip_extent(tx, ty, wide, long)
     laid = 0.0
     lying = 0.0
     for iy in range(y0, y1):
-        for ix in range(x0, x1):
-            dx, dy = ix + 0.5 - x, iy + 0.5 - y
-            share, edge = tip_bearing(dx, dy, tx, ty, wide, long, rounded)
+        xa, xb = row_span(x, iy + 0.5 - y, lean, half, top, x0, x1)
+        # first how the tip bears on each pixel of the row, which is its
+        # shape and nothing else; then what that does to the paper
+        bear_on_row(row, now, iy, xa, xb, ends, streaks, salt)
+        for ix in range(xa, xb):
+            edge = row[0, ix - xa]
             if edge <= 0.0:
                 continue
-            if at_x == at_x:  # (landing or lifting: only where it is put)
-                ax, ay = ix + 0.5 - at_x, iy + 0.5 - at_y
-                if tip_bearing(ax, ay, tx, ty, wide, long, rounded)[1] <= 0.0:
-                    continue
-            edge *= within_ends(ix + 0.5, iy + 0.5, ends)
-            if edge <= 0.0:
-                continue
-            local = pressure * share * streak_at(dx, dy, tx, ty, salt)
-            level = 1.0 - reach * local**REACH_POWER
-            level += JITTER * (unit_noise(ix, iy, salt) - 0.5)
+            local = row[1, ix - xa]
+            level = row[2, ix - xa]
             # (a tooth pressed flat is level with its peaks, and nothing
             # in a groove stands higher than its floor)
             ground = tooth[iy, ix] + (1.0 - tooth[iy, ix]) * press[iy, ix]
@@ -692,7 +826,7 @@ def bear(
     return laid, lying
 
 
-@njit(cache=True, error_model="numpy")
+@_called
 def tip_at(now, shape, flat, reach, i, xs, ys, pressures):
     """Fill ``now`` (see :func:`bear`) for a tip ``flat`` wide at sample
     ``i``, of ``shape`` [its width, tilt, length of its side]. Returns how
@@ -715,7 +849,7 @@ def tip_at(now, shape, flat, reach, i, xs, ys, pressures):
     return max(wide, long)
 
 
-@njit(cache=True, error_model="numpy")
+@_called
 def put_down(
     tooth,
     press,
@@ -731,6 +865,8 @@ def put_down(
     law,
     now,
     ends,
+    streaks,
+    row,
     salt,
     spacing,
     way,
@@ -764,6 +900,8 @@ def put_down(
             now,
             spacing,
             ends,
+            streaks,
+            row,
             salt,
         )
         laid += dv
@@ -822,7 +960,7 @@ def ends_of(xs, ys, square_start, square_end):
     return ends
 
 
-@njit(cache=True, error_model="numpy")
+@_called
 def ends_near(ends, near, after, before, reach):
     """Fill ``near`` with the square cuts of ``ends`` (see
     :func:`ends_of`) that apply to a tip ``after`` pixels along the stroke
@@ -906,6 +1044,8 @@ def lay_stroke(
     law, reach = law_of(medium, paper)
     ends = ends_of(xs, ys, tip[4], tip[5])
     near = np.empty(10)  # (the cuts that apply where the tip is now)
+    streaks = streaks_of(salt)
+    row = np.empty((3, tooth.shape[1]))
     count = xs.shape[0]
     reached = 0.0  # the furthest the tip has been from its path
     # what a tip that polishes drags along
@@ -950,6 +1090,8 @@ def lay_stroke(
                     now,
                     step,
                     near,
+                    streaks,
+                    row,
                     salt,
                 )
             elif (way < 0.0 and lands) or (way > 0.0 and lifts):
@@ -968,6 +1110,8 @@ def lay_stroke(
                     law,
                     now,
                     near,
+                    streaks,
+                    row,
                     salt,
                     landing,
                     way,
@@ -999,24 +1143,23 @@ def lay_stroke(
     )
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def spread_dust(loose, near, iy, ix, take, back):
     """Take the share ``take`` of the dust on top at a pixel onto the face of
     the tool (``near``, packed as dust is), and lay the share ``back`` of
     what is on its face down on the pixel. Returns the volumes laid and
     taken."""
-    given, taken = 0.0, 0.0
+    taken = loose[iy, ix, IV] * take
+    given = (near[IV] + taken) * back
     for part in range(LOOSE):
         up = loose[iy, ix, part] * take
         down = (near[part] + up) * back
         near[part] += up - down
         loose[iy, ix, part] += down - up
-        if part == IV:
-            given, taken = down, up
     return given, taken
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def slide_graphite(held, loose, slid, bonded, cover, iy, ix, rubbed, back):
     """Slide the graphite that the paper holds at a pixel under a tool that
     has ``rubbed`` it (how strongly it smears, times its share of a pass):
@@ -1044,7 +1187,7 @@ def slide_graphite(held, loose, slid, bonded, cover, iy, ix, rubbed, back):
     return given
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def lift_bonded(layer, bonded, load, iy, ix, which, up_dust, up_paste, up_held):
     """The share of a layer at a pixel that a tool takes when not all of it
     is loose dust: the shares ``up_dust`` of its loose dust, ``up_paste`` of
@@ -1065,7 +1208,7 @@ def lift_bonded(layer, bonded, load, iy, ix, which, up_dust, up_paste, up_held):
     return up_dust * (1.0 - hard - pasty) + up_paste * pasty + up_held * hard
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def wax_grip(held, cover, flat, iy, ix, scrape):
     """The share of its lift a tool keeps on what a pixel holds, for the
     wax there: all of it where there is none, less the thicker the wax is
@@ -1079,7 +1222,7 @@ def wax_grip(held, cover, flat, iy, ix, scrape):
     return 1.0 - (1.0 - scrape) * waxy * fast
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def lift(held, under, loose, bonded, load, iy, ix, lifts, share):
     """Lift onto a tool (``load``) what it takes at a pixel in the ``share``
     of a pass at full pressure. ``lifts`` is [how strongly it lifts the
@@ -1117,7 +1260,7 @@ def lift(held, under, loose, bonded, load, iy, ix, lifts, share):
     held[iy, ix, IW] -= held[iy, ix, IW] * up_held
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def spread_top(loose, bonded, near, iy, ix, rate, back):
     """Spread what lies on top at a pixel from grain to grain: take the share
     ``rate`` of what can be moved of it onto the face of the tool (``near``),
@@ -1135,7 +1278,7 @@ def spread_top(loose, bonded, near, iy, ix, rate, back):
     return given, taken
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def stir_up(under, loose, bonded, iy, ix, stirred):
     """Stir the share ``stirred`` of what can be moved of the layer
     underneath at a pixel up into the layer on top. Returns the volume in
@@ -1217,6 +1360,7 @@ def rub_stroke(
     per_pixel = lay / (2.0 * bound * math.pi * bound * bound)
     per_near = SPREAD / (2.0 * bound * math.pi * bound * bound)
     lifts = np.array([lift_loose, lift_held, smear, 1.0])
+    streaks = streaks_of(salt)
     load = carried[0]
     near = carried[1]  # the dust on the face of the tool, soon laid back
     slid = carried[2]  # held graphite it is pushing along, likewise
@@ -1232,14 +1376,16 @@ def rub_stroke(
         y0 = max(int(math.floor(y - bound)), 0)
         y1 = min(int(math.ceil(y + bound)), height)
         for iy in range(y0, y1):
-            for ix in range(x0, x1):
-                dx, dy = ix + 0.5 - x, iy + 0.5 - y
+            dy = iy + 0.5 - y
+            xa, xb = row_span(x, dy, 0.0, 1.0, bound * bound, x0, x1)
+            for ix in range(xa, xb):
+                dx = ix + 0.5 - x
                 d = math.sqrt(dx * dx + dy * dy)
                 edge = min(bound - d, 1.0)
                 if edge <= 0.0:
                     continue
                 local = pressure * min((bound - d) / rim, 1.0) * edge
-                local *= streak_at(dx, dy, tx, ty, salt)
+                local *= streak_at(dx, dy, tx, ty, streaks, salt)
                 share = local * per_pass * step  # of one pass at full pressure
                 lifts[3] = wax_grip(held, cover, flat, iy, ix, scrape)
                 lift(held, under, loose, bonded, load, iy, ix, lifts, share)
@@ -1278,7 +1424,7 @@ def rub_stroke(
                 cover[iy, ix] += (1.0 - cover[iy, ix]) * stirred * dusty
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def ball_grip(cover, held, under, loose, iy, ix):
     """The share of its ink a ball lays at a pixel: all of it on bare paper,
     less where it skids on a film of pigment or of wax."""
@@ -1292,7 +1438,7 @@ def ball_grip(cover, held, under, loose, iy, ix):
     return (1.0 - skid * covered) * (1.0 - RESIST_DRY * waxy * covered)
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def surge_at(travel, salt):
     """How much more or less ink than its share (1) the ball gives after
     rolling ``travel`` pixels."""
@@ -1304,7 +1450,7 @@ def surge_at(travel, salt):
     return 1.0 + BALL_UNEVEN * (2.0 * surge - 1.0)
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def blot(cover, held, under, loose, ink, inked, x, y, volume, radius, full, k, s):
     """Leave a drop of ink of this ``volume`` at (``x``, ``y``): a round dot
     of this ``radius``, thickest at its middle. It lies in the valleys of
@@ -1332,7 +1478,7 @@ def blot(cover, held, under, loose, ink, inked, x, y, volume, radius, full, k, s
             dv *= ball_grip(cover, held, under, loose, iy, ix)
             if dv <= 0.0:
                 continue
-            for band in range(N):
+            for band in range(k.shape[0]):
                 ink[iy, ix, band] += dv * k[band]
             ink[iy, ix, IS] += dv * s
             ink[iy, ix, IV] += dv
@@ -1343,7 +1489,7 @@ def blot(cover, held, under, loose, ink, inked, x, y, volume, radius, full, k, s
     return laid
 
 
-@njit(cache=True, error_model="numpy")
+@_inlined
 def turn_of(tx, ty, wx, wy):
     """The angle, in radians (0 to pi), between two unit headings."""
     return math.atan2(abs(tx * wy - ty * wx), tx * wx + ty * wy)
@@ -1470,7 +1616,7 @@ def roll_stroke(
                 if dv <= 0.0:
                     continue  # (it skids: no ink, and no more paper inked)
                 inked[iy, ix] = max(inked[iy, ix], touch)
-                for band in range(N):
+                for band in range(k.shape[0]):
                     ink[iy, ix, band] += dv * k[band]
                 ink[iy, ix, IS] += dv * s
                 ink[iy, ix, IV] += dv

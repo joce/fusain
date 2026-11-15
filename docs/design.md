@@ -368,7 +368,10 @@ bare tool still carries at the end is counted and returned. Either way
 nothing is lost.
 
 These are numba kernels under the same rules as oilpaint's (no `fastmath`, no
-`parallel`), so a drawing repeats exactly. Their constants are in
+`parallel`), so a drawing repeats exactly, and what makes them fast changes
+no result: `tools/fingerprint.py` hashes all that a suite of drawings leaves
+on its sheets, and a change that is not meant to alter the picture leaves
+every hash as it is. Their constants are in
 `fusain/_engine.py`. They were set so that tones land near these figures,
 which are estimates from experience, not measurements of real drawings: on
 cartridge paper and without its shine, one even layer of HB reflects about

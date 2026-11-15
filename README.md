@@ -72,7 +72,7 @@ medium is then laid along the forms that result.
   stroked along the lie of the feathers, with the head carried furthest.
   The feathers and the bill are then burnished with a colourless blender,
   and the lights scratched out of the wax with the point of a knife (about
-  36,700 strokes, about two minutes).
+  36,700 strokes, over a minute).
 * `examples/stilllife.py`: a still life in blue, black and red ballpoint. A
   jug, a bottle, a bowl of cherries, apples and a striped cloth are built as
   solids and lit; the pen then works patch by patch, laying bundles of
@@ -365,6 +365,8 @@ toned grey, toned tan, black.
 uv sync --group dev --frozen   # install the package and the development tools
 uv run pytest                  # run the tests (the first run compiles the numba kernels)
 make pre-push                  # what CI runs: tox, coverage, spelling
+uv run python tools/fingerprint.py   # whether a change has altered the picture
+uv run python tools/benchmark.py     # how long strokes, rubs and renders take
 ```
 
 ## License

@@ -28,12 +28,14 @@
   "words": [
     "allclose",
     "ascontiguousarray",
+    "capsys",
     "corrcoef",
     "embeddeddolt",
     "errstate",
     "fastmath",
     "fftfreq",
     "flatnonzero",
+    "forceinline",
     "fusain",
     "htmlcov",
     "intp",
@@ -46,6 +48,7 @@
     "moveaxis",
     "Munk",
     "murex",
+    "nextafter",
     "njit",
     "oilpaint",
     "rfft",
@@ -55,6 +58,7 @@
     "smudger",
     "sRGB",
     "stilllife",
+    "tobytes",
     "tortillon"
   ]
 }
