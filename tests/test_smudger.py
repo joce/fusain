@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from murex import spectral as sp
 
-from fusain import Sheet, Smudger, charcoal, pastels, pencils, tools
+from fusain import Sheet, Smudger, charcoal, crayons, pastels, pencils, tools
 from fusain.sheet import IS, IV, N
 
 TONE = (20, 20, 380, 180)  # the rectangle shaded
@@ -200,6 +200,94 @@ def test_a_loaded_finger_brings_little_onto_a_tone_of_another_colour():
     both = np.stack([orange.pigment.K, blue.pigment.K], axis=1)
     orange_there, blue_there = np.linalg.lstsq(both, top, rcond=None)[0]
     assert orange_there < 0.03 * blue_there
+
+
+# --------------------------------------------------------------------------
+# on wax
+
+
+def test_a_loaded_stump_leaves_a_crayon_line_clean():
+    # a stump loaded with charcoal and dragged across one firm line of
+    # white crayon on bare paper (fusain-ma9: the line used to take 0.97 of
+    # what the paper either side of it took, and came out a tenth darker)
+    _, stump, _ = _loaded(charcoal.VINE)
+    sheet = Sheet(300, 200, seed=2)
+    sheet.stroke([(40, 110), (260, 110)], crayons.wax("#f4f1ea"), 0.9, 7.0)
+    drawn = sheet.copy()
+    total = _total(sheet) + stump.load
+    sheet.smudge([(150, 40), (150, 180)], stump, 0.7)
+    brought = (sheet.pigment() - drawn.pigment()).astype(np.float64)
+    way = slice(146, 154)
+    before, after = brought[96:102, way].mean(), brought[118:124, way].mean()
+    on_the_line = brought[108:112, way].mean()
+    assert before > 0.02 and abs(on_the_line) < 0.2 * before
+    # what the wax refuses stays on the stump, which carries it on
+    assert after > 0.85 * before
+    assert _total(sheet) + stump.load == pytest.approx(total, rel=1e-6)
+    # the line keeps its tone where the stump crossed it; the paper greys
+    tone = _luminance(sheet)
+    crossed, beside = tone[108:112, way].mean(), tone[108:112, 110:130].mean()
+    assert beside - 0.03 < crossed <= beside + 0.005
+    assert tone[96:102, way].mean() < beside - 0.07
+
+
+@pytest.mark.parametrize(
+    ("medium", "most", "least"),
+    [
+        (charcoal.VINE, 0.08, 0.0),
+        (pastels.soft("#2456a6"), 0.08, 0.0),
+        (pencils.B8, 0.08, 0.0),
+        (pastels.oil("#2456a6"), 0.9, 0.5),
+    ],
+    ids=["charcoal", "soft pastel", "8B", "oil pastel"],
+)
+def test_wax_refuses_the_dust_a_finger_brings_and_takes_its_paste(medium, most, least):
+    # a finger loaded on a patch of the medium, rubbed over bare paper and
+    # on over three firm layers of crayon: what the crayon takes of it,
+    # against what the paper before it took (dust: 0.7 of it before, the
+    # finger having less left by then; now next to nothing. Paste sticks)
+    scrap = Sheet(500, 200, seed=1)
+    for angle in (30, -40):
+        scrap.shade((20, 20, 160, 180), medium, 0.8, 9.0, angle=angle)
+    finger = Smudger(tools.FINGER)
+    scrap.rub((25, 25, 155, 175), finger, 0.7)
+    sheet = Sheet(400, 200, seed=2)
+    for layer in range(3):
+        sheet.shade(
+            (200, 20, 380, 180), crayons.wax("#f4f1ea"), 0.8, 9.0, angle=30 + 50 * layer
+        )
+    drawn = sheet.copy()
+    total = _total(sheet) + finger.load
+    for y in (60, 100, 140):
+        sheet.smudge([(40, y), (360, y)], finger, 0.7)
+    brought = (sheet.pigment() - drawn.pigment()).astype(np.float64)
+    on_paper, on_wax = brought[50:150, 80:180].mean(), brought[50:150, 240:340].mean()
+    assert on_paper > 0.005
+    assert least * on_paper <= on_wax < most * on_paper
+    assert _total(sheet) + finger.load == pytest.approx(total, rel=1e-6)
+
+
+@pytest.mark.parametrize(("layers", "least"), [(1, 0.55), (3, 0.55)])
+def test_a_finger_slides_on_a_film_of_wax_laid_over_dust(layers, least):
+    # crayon shaded over charcoal lies on it as a film, which sets most of
+    # the dust under it; of the rest, a finger rubbed all over used to stir
+    # over nine tenths up through the film (it leaves two thirds: firm
+    # layers of crayon drag part of their film along, and it is half as
+    # thick as covers the dust)
+    sheet = Sheet(200, 150, seed=1)
+    box, inside = (20, 20, 180, 130), (slice(40, 110), slice(40, 160))
+    sheet.shade(box, charcoal.VINE, 0.5, 9.0)
+    for layer in range(layers):
+        sheet.shade(box, crayons.wax("#f2c40f"), 0.8, 9.0, angle=50 * layer - 30)
+
+    def loose_underneath() -> float:
+        bonded = sheet.fixed[inside][..., 0] + sheet.film[inside][..., 0]
+        return float((sheet.under[inside][..., IV] - bonded).sum(dtype=np.float64))
+
+    before = loose_underneath()
+    assert before > 100
+    sheet.rub(box, tools.FINGER, 0.7)
+    assert loose_underneath() > least * before
 
 
 # --------------------------------------------------------------------------

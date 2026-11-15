@@ -150,7 +150,16 @@ def test_a_crayon_binds_part_of_the_dust_it_is_laid_over(dust):
     apart = base.copy().rub(BOX, tools.KNEADED, 0.6)
     apart += _kneaded_share(crayons.wax(YELLOW)) * laid
     assert over.copy().rub(BOX, tools.KNEADED, 0.6) < 0.9 * apart
-    assert _carried_out(over.copy()) < 0.97 * _carried_out(base.copy())
+
+    def moved(sheet) -> float:
+        """How much pigment a finger rubbed across the patch shifts in it."""
+        before = sheet.pigment().astype(np.float64)
+        _carried_out(sheet)
+        return float(np.abs(sheet.pigment() - before)[:, :181].sum()) / 2
+
+    # (what it does take up, the wax does not take back on the way, so
+    # about as much as before reaches the bare paper past the edge)
+    assert moved(over.copy()) < 0.8 * moved(base.copy())
 
 
 def test_dust_laid_over_a_film_buries_it_with_what_it_set():

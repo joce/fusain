@@ -5,6 +5,10 @@ Used with :meth:`fusain.Sheet.smudge`, :meth:`fusain.Sheet.erase` and
 paper; a :class:`fusain.Smudger` is one in the hand, which keeps what it
 picks up.
 
+A stump or a finger lays what it carries on paper, and hardly on wax, which
+is as slick to the dust on a tool as to a dry stick: charcoal smeared across
+a crayon line leaves it clean. (The paste of an oil pastel sticks.)
+
 An eraser takes a dry medium off as far as it lifts. Wax holds: a light
 layer of coloured pencil comes off a vinyl eraser fairly well, a dense one
 badly, a burnished one hardly, and a kneaded eraser barely touches any of

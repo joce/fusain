@@ -74,6 +74,33 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   draws 0.88 (the dust on its face), 0.95 eight widths on and 0.97 after
   24, having left 0.70 of its load, and the next pass still tones.
 
+- A stump or a finger lays its dust on paper and hardly on wax. A tool laid
+  what it carried on any pixel, waxed or not, so charcoal smeared across a
+  crayon line greyed it, where a stick of charcoal drawn over the same line
+  skips it. Wax is now as slick to the dust a tool brings as to a dry
+  stick: where it covers the tooth (a film `COVERS` thick, on the covered
+  share of the pixel) it takes `RESIST_DRY` less of the dust in the tool's
+  load and on its face, and of the graphite the tool pushes along; what it
+  refuses stays on the tool, which carries it on. Paste sticks: what a
+  finger carries of an oil pastel is laid on wax as on paper. A stump
+  loaded with vine charcoal and dragged across one firm line of white
+  crayon left on the line 0.97 of what it left on the paper either side,
+  and the line came out at 0.86 of the paper's tone where it was crossed,
+  against 0.97 beside; it now leaves 0.12 and the line is at 0.955. A
+  finger loaded with charcoal, soft pastel or 8B and rubbed from bare paper
+  on over three layers of crayon left on the crayon 0.7 of what it left on
+  the paper, and leaves 0.03 to 0.04; loaded with oil pastel, 0.7 as
+  before. Nothing is lost: the sheet and the tool hold between them what
+  they held. A tool also slides on a film of wax that lies over dust, and
+  on dust that is set: it stirs up and lifts the loose dust underneath only
+  as far as those do not cover it. (It took the dust up through the film,
+  and the wax no longer taking it back, a finger would have carried more
+  off a patch of charcoal with crayon over it than off the charcoal alone:
+  it shifts 0.37 as much within the patch, from 0.50, and of pastel 0.75,
+  from 0.91.) Where the film is thin the wax is not yet slick, to a tool as
+  to a stick: a white crayon line over rubbed charcoal still greys where a
+  stump crosses it (0.60 of the paper's tone to 0.41, from 0.33).
+
 ### Changed
 
 - `rub_stroke` (in `fusain._engine`) takes the tool as one array ([radius,

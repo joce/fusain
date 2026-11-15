@@ -453,7 +453,16 @@ would lay as much as it lifts it does neither, and where not, only the
 difference. So a finger loaded with one colour and rubbed over a tone of
 another as heavy leaves it clean, where an exchange both ways would bring
 its colour all over it, and still it lays a tone on bare paper and takes
-from a tone when it is clean. (In the first build a tool lifted two thirds
+from a tone when it is clean. Wax is as slick to the dust a tool brings as
+to a dry stick (`RESIST_DRY`, where the wax covers the tooth): a stump
+loaded with charcoal and dragged across one firm line of crayon leaves on
+it an eighth of what it leaves on the paper either side, and the line
+keeps its tone; what the wax refuses stays on the tool, which carries it
+on. The paste of an oil pastel sticks to wax, on a tool as on a stick. And
+a tool slides on a film of wax laid over dust, as on dust that fixative has
+set: the loose dust in the layer underneath is stirred up and lifted only
+as far as what is set or a film on top does not cover it (all of it, under
+a layer of those `COVERS` thick). (In the first build a tool lifted two thirds
 of the dust into its load in a pass and laid it back over several widths:
 a rubbed join was one even mix over all that was rubbed, and the trail of
 a stump on bare paper halved every four widths.)
