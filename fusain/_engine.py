@@ -208,13 +208,15 @@ MELT_LAY = 6.0
 FLATTEN = 5.0
 #: The tooth is what scrapes a dry medium off its stick, and a tooth pressed
 #: flat bites less: a dry medium lays this much less on it in a pass. It
-#: lays it evenly, though: all of a flattened tooth is touched.
+#: lays it evenly, though: all of a flattened tooth is touched. So with the
+#: floor of a groove, where the point that pressed it took the peaks off.
 FLAT_BITE = 0.7
 #: A hard round point pressed into the paper leaves a groove. ``dent`` is
 #: how far below the peaks of its tooth the paper has been pushed down, in
 #: depths of the tooth of a paper of depth 1: nothing stands higher there,
 #: so a tip wider than the groove, which rides on the paper either side,
-#: skips it unless it reaches that far down. A stylus at full pressure
+#: skips it unless it reaches that far down; one narrower than the groove
+#: goes down into it (:func:`sunk_into`). A stylus at full pressure
 #: indents the paper INDENT deep under its middle, on a paper of middling
 #: give (times what the paper gives, as a tip's reach), less in proportion
 #: at a lighter pressure and towards its rim, since it is round. The ball
@@ -748,6 +750,31 @@ def span_of(now, dy, lean, half, top, x0, x1):
     return row_span(now[0], dy, lean, half, top, x0, x1)
 
 
+@njit(cache=True, error_model="numpy")
+def sunk_into(dent, now, x0, x1, y0, y1, lean, half, top):
+    """How far down a groove the tip at ``now`` (see :func:`bear`) goes, as
+    ``dent`` counts it: as far as the least indented of the paper it covers
+    (``x0`` to ``x1``, ``y0`` to ``y1`` around it; the rest as for
+    :func:`span_of`). It rests on the highest of what is under it: a tip
+    wider than a groove rides on the paper either side and stays up; one
+    narrower than the groove under it goes down into it."""
+    height, width = dent.shape
+    x, y = now[0], now[1]
+    cx, cy = int(math.floor(x)), int(math.floor(y))
+    if 0 <= cy < height and 0 <= cx < width and dent[cy, cx] <= 0.0:
+        return 0.0  # (the paper under its middle is not indented: most often)
+    lowest = math.inf
+    for iy in range(y0, y1):
+        dy = iy + 0.5 - y
+        xa, xb = span_of(now, dy, lean, half, top, x0, x1)
+        for ix in range(xa, xb):
+            if dent[iy, ix] < lowest and bearing_at(ix + 0.5 - x, dy, now)[1] > 0.0:
+                lowest = dent[iy, ix]
+                if lowest <= 0.0:
+                    return 0.0
+    return lowest if lowest < math.inf else 0.0
+
+
 @_inlined
 def within_ends(px, py, ends):
     """How much of the pixel centred at (``px``, ``py``) a stroke cut square
@@ -861,6 +888,8 @@ def bear(
     y0 = max(int(math.floor(y - bound)), 0)
     y1 = min(int(math.ceil(y + bound)), height)
     lean, half, top = tip_extent(tx, ty, wide, long)
+    # (a tip narrower than a groove goes down into it)
+    down = sunk_into(dent, now, x0, x1, y0, y1, lean, half, top) * sunk
     laid = 0.0
     lying = 0.0
     for iy in range(y0, y1):
@@ -875,9 +904,9 @@ def bear(
             local, level, slide = row[1, ix - xa], row[2, ix - xa], row[3, ix - xa]
             # (to a tip riding on it a tooth pressed flat is level with its
             # peaks, and nothing in a groove stands higher than its floor)
-            ground = tooth[iy, ix] + (1.0 - tooth[iy, ix]) * press[iy, ix]
-            ground = min(ground, 1.0 - dent[iy, ix] * sunk)
-            above = ground + MICRO - level
+            raised = tooth[iy, ix] + (1.0 - tooth[iy, ix]) * press[iy, ix]
+            floor = 1.0 - dent[iy, ix] * sunk
+            above = min(raised, floor) + MICRO - level + down
             touch = min(max(above / (2.0 * MICRO), 0.0), 1.0) * edge
             if touch <= 0.0:
                 continue
@@ -910,8 +939,10 @@ def bear(
             dv = lay * math.sqrt(bearing * min(above / SPAN, 1.0)) * (room / full)
             # (to a dry medium wax is slick as soon as it covers the tooth)
             dv *= 1.0 - dry * min(waxed / COVERS, 1.0) - slides * waxy
-            # (and a flattened tooth bites it less)
-            dv *= 1.0 - smooth * press[iy, ix]
+            # (and a flattened tooth bites it less, as does the floor of a
+            # groove, which the point that pressed it left as flat)
+            levelled = min(max((raised - floor) / MICRO, 0.0), 1.0)
+            dv *= 1.0 - smooth * max(press[iy, ix], levelled)
             dv = min(dv * per_pass * slide, room) * touch
             over = 0.0  # the share of what is held that lies on dust
             if filmy > 0.0:
@@ -1154,7 +1185,8 @@ def lay_stroke(
     polishes it flat (``press``) and smears it along, and a hard tip pressed
     hard flattens the tooth itself. Where the paper is indented (``dent``,
     how far below the peaks of the tooth), the tip lays only what it reaches
-    down to.
+    down to; it goes down into a groove as far as all it covers is indented
+    (:func:`sunk_into`), so a tip narrower than a groove follows it down.
 
     Returns the volume the tip has lost: what it laid, less what it has
     dragged off the sheet.

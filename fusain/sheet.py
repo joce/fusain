@@ -376,7 +376,8 @@ class Sheet:
         pastel next to not at all. What is drawn there afterwards lies
         evenly, and the paper bites it less.
         Where the paper is indented, a tip lays only what it reaches down
-        to (:meth:`indent`).
+        to (:meth:`indent`): it rests on the highest of the paper it covers,
+        so one narrower than a groove goes down into it.
 
         What the paper holds of the medium goes under the dust that lies
         there, in the tooth; but a waxy medium (a coloured pencil, a crayon,
@@ -668,9 +669,11 @@ class Sheet:
         is soft enough and pressed hard enough to reach its floor: a line
         indented firmly stays the colour of the paper under a tone, which
         is how whiskers and fine highlights are kept; one indented lightly
-        fills in under a firm soft pencil. What was drawn there before
-        goes down with the paper, and no eraser takes a groove out. Under
-        a raking light it shows as a line of shadow.
+        fills in under a firm soft pencil. A point narrower than the groove
+        follows it down and marks its floor, which the stylus left flat,
+        and which bites it less, as a flattened tooth does. What was drawn
+        there before goes down with the paper, and no eraser takes a groove
+        out. Under a raking light it shows as a line of shadow.
 
         Raises ValueError, before anything is pressed, unless ``width`` is
         a finite number of pixels above 0 and the pressures are finite.

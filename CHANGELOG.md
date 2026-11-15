@@ -33,6 +33,29 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   crossed layers of the side of vine charcoal on Ingres paper at 0.8 are
   darker for it (0.47 of pigment per pixel, from 0.32), and leave 0.054 of
   the paper bare, from 0.10.
+- A point narrower than a groove follows it down (fusain-d7v). Every tip
+  rode on the paper either side of a groove, so a fine point drawn along
+  an indented line skipped it. A tip now rests on the highest of the paper
+  it covers: the sheet keeps no width of a groove, since the dent around
+  the tip says it, for grooves of any width, crossed or pressed over each
+  other. A tip wider than the groove still rides over it, and one
+  narrower goes down into it. Along a groove indented at 0.7 by a stylus 3
+  wide, on cartridge paper, an HB point a pixel wide lays on its floor
+  0.75 of what it lays on the paper left alone (nothing before), a 2B
+  point 3 wide 0.49 (nothing), and one 4 wide nothing, as before; in a
+  groove 6 wide a 2B point 4 wide lays 0.41. A 2B 2 wide shaded across a
+  groove lays in it 0.39 of what it lays beside it (nothing); broader
+  tips still skip it. The floor of a groove is flat where the point that
+  pressed it took the peaks off, as a flattened tooth is, and now bites a
+  dry medium as little (`FLAT_BITE`): a fine point touches all of the
+  floor and lays half as much on what it touches. So a groove fills less
+  under a broad soft pencil that reaches down to it: indented at 0.3, a
+  6B pressed hard lays 0.67 of what it lays beside it (0.96 before) and
+  shaded lightly 0.24 (0.43), a 2B shaded lightly 0.13 (0.22); a 2B over
+  a pen line laid at 0.2, 0.6 and 1.0, 0.89, 0.26 and 0.002 (0.91, 0.42
+  and 0.005). Over three layers of light pen hatching, which pressed the
+  paper down all over, an HB goes down with it and lays 1.10 of what it
+  lays on paper left alone (0.98), and over firm hatching 0.65 (0.39).
 - Burnishing and flattening set in by degrees (fusain-bre). A tip polished
   wax, or flattened the tooth, only where it bore harder than 0.6, and from
   nothing there: so of the strokes of a shading near that pressure, each a

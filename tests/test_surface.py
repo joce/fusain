@@ -279,9 +279,13 @@ def test_a_light_groove_fills_under_a_firm_soft_pencil_and_a_deep_one_does_not()
             sheet.indent(LINE, stylus)
             sheet.shade(BOX, pencils.B6, pressure, angle=60)
             filled[stylus, pressure] = _in_groove(sheet)
-    assert filled[0.3, 1.0] > 0.9
-    assert 0.3 < filled[0.3, 0.3] < 0.7
-    assert filled[0.5, 0.3] < 0.02 and filled[0.5, 1.0] > 0.5
+    # (fusain-d7v: the floor of a groove, pressed flat by the stylus, bites
+    # a dry medium less, as a flattened tooth does; the 6B reaches it as it
+    # did, and lays less there: 0.67 of what it lays beside where it laid
+    # 0.96, 0.24 where 0.43 and 0.23 where 0.58)
+    assert filled[0.3, 1.0] > 0.6
+    assert 0.15 < filled[0.3, 0.3] < 0.4
+    assert filled[0.5, 0.3] < 0.02 and filled[0.5, 1.0] > 0.15
     assert filled[0.7, 1.0] < 0.2
     # a harder lead reaches less far down
     hard, soft = _sheet(), _sheet()
@@ -298,6 +302,54 @@ def test_a_groove_is_skipped_on_a_smooth_paper_as_on_a_rough_one(paper):
     sheet.shade(BOX, pencils.B2, 0.5, angle=60)
     assert sheet.pigment()[AROUND].mean() > 0.0
     assert _in_groove(sheet) < 0.02
+
+
+def _along_groove(stylus, groove, medium, width, pressure=0.5) -> tuple[Sheet, Sheet]:
+    """A line drawn along a groove ``groove`` pixels wide, indented at
+    ``stylus``, and the same line on the paper left alone."""
+    grooved, plain = _sheet(), _sheet()
+    grooved.indent(LINE, stylus, groove)
+    for sheet in (grooved, plain):
+        sheet.stroke(LINE, medium, pressure, width)
+    return grooved, plain
+
+
+def _on_floor(stylus, groove, medium, width) -> float:
+    """What a line drawn along a groove lays on its floor, as a share of
+    what it lays on the paper left alone."""
+    grooved, plain = _along_groove(stylus, groove, medium, width)
+    return float(grooved.pigment()[GROOVE].mean() / plain.pigment()[GROOVE].mean())
+
+
+def test_a_point_narrower_than_a_groove_follows_it_down():
+    # (fusain-d7v: every tip rode on the paper either side of a groove, and
+    # a fine point drawn along one indented at 0.7 laid nothing on its
+    # floor; a tip rests on the highest of the paper it covers)
+    assert 0.5 < _on_floor(0.7, 3.0, pencils.HB, 1.0) < 0.95
+    assert _on_floor(0.7, 3.0, pencils.B2, 3.0) > 0.3
+    # one wider than the groove still rides over it
+    assert _on_floor(0.7, 3.0, pencils.B2, 4.0) < 0.01
+    # and what is narrower than a wider groove goes down into it
+    assert _on_floor(0.7, 6.0, pencils.B2, 4.0) > 0.25
+    assert _on_floor(0.7, 6.0, pencils.B2, 6.0) < 0.01
+    # shaded across a groove, a fine point goes into it and a broad one
+    # skips it
+    fine, broad = _sheet(), _sheet()
+    for sheet, width in ((fine, 2.0), (broad, 6.0)):
+        sheet.indent(LINE, 0.7)
+        sheet.shade(BOX, pencils.B2, 0.5, width, angle=60)
+    assert _in_groove(fine) > 0.2 and _in_groove(broad) < 0.01
+
+
+def test_the_floor_of_a_groove_is_level_and_bites_less():
+    """The point that pressed a groove left its floor flat, as a hard tip
+    pressed firmly leaves the tooth: a point drawn along it touches all of
+    it, and the paper bites it less."""
+    grooved, plain = _along_groove(0.7, 3.0, pencils.HB, 1.0)
+    floor, paper = grooved.cover[GROOVE].mean(), plain.cover[GROOVE].mean()
+    assert floor > 0.95 and paper < floor - 0.2
+    per_floor = grooved.pigment()[GROOVE].mean() / floor
+    assert per_floor < 0.6 * plain.pigment()[GROOVE].mean() / paper
 
 
 def test_a_groove_shows_as_a_line_of_shadow_under_a_raking_light():
@@ -409,8 +461,10 @@ def test_a_pencil_shades_over_a_light_pen_line_and_skips_a_firm_one():
         sheet.stroke(LINE, pens.BLUE, pressure)
         sheet.shade(BOX, pencils.B2, 0.3, angle=60)
         filled.append(_in_groove(sheet))
-    assert filled[0] > 0.9
-    assert 0.3 < filled[1] < 0.8
+    # (the floor the ball pressed flat bites the pencil less, fusain-d7v:
+    # 0.89 where it was 0.91, 0.26 where 0.42)
+    assert filled[0] > 0.8
+    assert 0.15 < filled[1] < 0.5
     assert filled[2] < 0.1
 
 

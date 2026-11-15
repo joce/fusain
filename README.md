@@ -151,10 +151,11 @@ sheet.indent([(100, 300), (400, 320)], pressure=0.7)   # a stylus: it lays nothi
 sheet.shade((80, 260, 420, 360), pencils.B2, pressure=0.5)   # the groove stays the white of the paper
 ```
 
-A tip rides on the paper either side of a groove and marks only what it
-reaches down to: indent whiskers, grass or a highlight firmly before shading
-and they stay white; a groove indented lightly fills in under a soft pencil
-pressed hard. A firm ballpoint line is such a groove too. And a hard pencil
+A tip wider than a groove rides on the paper either side and marks only
+what it reaches down to: indent whiskers, grass or a highlight firmly before
+shading and they stay white; a groove indented lightly fills in under a soft
+pencil pressed hard. A point narrower than the groove follows it down and
+marks its floor. A firm ballpoint line is such a groove too. And a hard pencil
 pressed firmly flattens the tooth (`Sheet.press`): what is shaded over it
 afterwards lies evenly, without the grain, and the paper bites it less.
 
