@@ -9,7 +9,18 @@ import pytest
 from murex import Pigment, Polyline
 from murex import spectral as sp
 
-from fusain import HeldPen, Pen, Sheet, crayons, papers, pastels, pencils, pens, tools
+from fusain import (
+    HeldPen,
+    Pen,
+    Sheet,
+    Smudger,
+    crayons,
+    papers,
+    pastels,
+    pencils,
+    pens,
+    tools,
+)
 from fusain import _engine as eng
 from fusain.sheet import IV
 
@@ -619,6 +630,38 @@ def test_an_eraser_takes_the_pencil_and_leaves_the_ink():
     assert _ink(sheet) == ink
     assert _tone(sheet, beside) > 0.85
     assert _tone(sheet, line) < 0.25
+
+
+@pytest.mark.parametrize("over", [False, True], ids=["ink", "ink over wax"])
+def test_a_scraping_tool_takes_no_more_ink_than_it_has_room_for(over):
+    # a sand eraser or a knife that holds next to nothing fills on the first
+    # pixels it cuts, and leaves the ink of the rest on the paper (it took
+    # the ink of every pixel it cut, whatever it held: 167 to 351 times as
+    # much as it holds)
+    for tool in (tools.SAND_ERASER, tools.KNIFE):
+        tiny = tool.with_(holds=1e-6)
+        full = tiny.holds * np.pi * (0.5 * tiny.width + 0.5) ** 2
+        sheet = Sheet(200, 150, seed=1)
+        if over:
+            sheet.shade(BOX, pencils.coloured("#c0392b"), 0.6)
+        for layer in range(2):
+            sheet.shade(BOX, pens.BLACK, 0.7, angle=30 + 60 * layer)
+        before, ink = sheet.copy(), _ink(sheet)
+        pigment = float(sheet.pigment().sum(dtype=np.float64))
+        held = Smudger(tiny)
+        for y in (60, 76, 92):
+            sheet.erase([(40, y), (160, y)], held, 0.9)
+            # (what it has lifted: what it drags along on its face it lays
+            # back, as a stump does)
+            assert 0.0 < float(held._carried[0, IV]) <= full * (1 + 1e-6)
+        # what the tool holds is what left the sheet, ink and pigment alike
+        left = _ink(sheet) + float(sheet.pigment().sum(dtype=np.float64))
+        assert left + held.load == pytest.approx(ink + pigment, rel=1e-6)
+        assert _ink(sheet) <= ink
+        # and the ink of the lines it cut once full is on the paper still
+        assert sheet.ink is not None and before.ink is not None
+        line = (slice(91, 93), slice(100, 150))
+        assert sheet.ink[line][..., IV].sum() > 0.99 * before.ink[line][..., IV].sum()
 
 
 def test_a_pencil_draws_over_light_ink_as_on_bare_paper():

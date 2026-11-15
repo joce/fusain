@@ -114,7 +114,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   the paper holds, of a film and what is set, is now held to the room it
   has left, and the paste and the wax go with it in proportion: it carries
   no more than it holds, and the sheet and the tool hold between them what
-  they held. No preset ever reaches the limit: every drawing of
+  they held. So with the ink of a ballpoint that a sand eraser or a knife
+  cuts out of the paper: it takes it as far as it has room left once it has
+  taken the rest, and where it is full the ink stays on the paper (one
+  that holds 1e-6 drawn through firm hatching took the ink of every pixel
+  it cut, 167 to 351 times what it holds). No preset ever reaches the
+  limit: every drawing of
   `tools/fingerprint.py --thorough` is as it was, to the bit.
 
 - A smudge or an erase is as strong where it lands and lifts as in its

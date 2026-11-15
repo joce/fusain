@@ -1772,14 +1772,18 @@ def bare_tooth(flat, held, cover, iy, ix, waxed, cut):
 
 
 @_inlined
-def scrape_ink(ink, inked, load, iy, ix, cut):
+def scrape_ink(ink, inked, load, iy, ix, cut, room):
     """Cut the share ``cut`` of the surface of the paper at a pixel off
     onto a tool (``load``), with the ink stained into it: that share of the
-    ink, which the tool carries as it carries pigment. (The colour it
-    bronzes is the ink's on the paper, and goes with it.) ``ink`` has no
-    rows if no pen has drawn on the sheet."""
+    ink, which the tool carries as it carries pigment, as far as it has
+    room for it (``room``, the volume it can still take: where it is full,
+    the ink stays on the paper). (The colour it bronzes is the ink's on the
+    paper, and goes with what is taken.) ``ink`` has no rows if no pen has
+    drawn on the sheet."""
     if cut <= 0.0 or ink.shape[0] == 0 or ink[iy, ix, IV] <= 0.0:
         return
+    if ink[iy, ix, IV] * cut > room:  # (a tool that holds only so much)
+        cut = max(room, 0.0) / ink[iy, ix, IV]
     for part in range(LOOSE):
         taken = ink[iy, ix, part] * cut
         ink[iy, ix, part] -= taken
@@ -1994,7 +1998,7 @@ def rub_under(
             # ink stained into it)
             cut = scrape * min(lifts[1] * share, 1.0)
             bare_tooth(flat, held, cover, iy, ix, waxed, cut)
-            scrape_ink(ink, inked, load, iy, ix, cut)
+            scrape_ink(ink, inked, load, iy, ix, cut, tool[8] - load[IV])
             pushed = push_along(
                 held,
                 loose,
