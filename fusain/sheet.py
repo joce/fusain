@@ -377,11 +377,13 @@ class Sheet:
         else, which no rubber eraser takes off (a knife or a sand eraser
         cuts it out with the paper). Its ball gathers ink as it rolls and
         leaves a blob where the line turns sharply and, now and then, where
-        it starts, the lighter the lighter the line (as much as the pen's
-        ``blots`` says); and it presses a groove into the paper (``dent``),
-        as :meth:`indent` does, the deeper the firmer the pen. A bare pen is
-        picked up afresh for each line; a :class:`fusain.HeldPen`, a pen in
-        the hand, lands with the ink its ball gathered on the line before.
+        it starts, the lighter and the narrower the lighter the line (as
+        much as the pen's ``blots`` says); and it presses a groove into the
+        paper (``dent``), as :meth:`indent` does, the deeper the firmer the
+        pen. A bare pen is picked up afresh for each line; a
+        :class:`fusain.HeldPen`, a pen in the hand, lands with the ink its
+        ball gathered on the line before (its ball holds a drop at most, and
+        gathers no more).
 
         A dry tip pressed firmly (harder than about 0.6, setting in by
         degrees from 0.4) flattens the tooth (``press``), the more the

@@ -306,20 +306,21 @@ BALL_UNEVEN = 0.2
 BALL_SURGE = 12.0
 #: The ball gathers ink: this share of what it lays stays on its rim as it
 #: rolls, up to a drop BALL_BLOB firm passes thick over the square of its
-#: radius (both times how much the pen blots: :attr:`fusain.Pen.blots`). A
-#: turn brings it round onto the paper, all of it when the line turns by
-#: BALL_TURN radians, so a sharp turn leaves a blob and a gentle curve
-#: nothing to see. The paper takes of what comes round as much as the ball
-#: bears on it, the share of a firm pass that the line lays there (from
-#: BALL_LIGHT at the lightest touch to all of it at full pressure), and the
-#: rest stays on the rim: a light line blots as lightly as it is drawn. A
-#: pen put to the paper has some on it already. A pen in the hand lands
-#: with what it gathered before, and where it lands at most the share
-#: BALL_START of that comes round, mostly next to none (a number drawn
-#: between 0 and 1, to the power BALL_SELDOM, of it), so that one line in
-#: four or so starts with a dot that shows; the rest comes round at the
-#: next turn. A pen just picked up lands with that share of the most the
-#: ball holds, all of which comes round.
+#: radius (both times how much the pen blots: :attr:`fusain.Pen.blots`);
+#: what it would gather beyond that it does not, and that ink is nowhere
+#: (where it would go is not modelled). A turn brings it round onto the
+#: paper, all of it when the line turns by BALL_TURN radians, so a sharp
+#: turn leaves a blob and a gentle curve nothing to see. The paper takes of
+#: what comes round as much as the ball bears on it, the share of a firm
+#: pass that the line lays there (from BALL_LIGHT at the lightest touch to
+#: all of it at full pressure), and the rest stays on the rim: a light line
+#: blots as lightly as it is drawn. A pen put to the paper has some on it
+#: already. A pen in the hand lands with what it gathered before, and where
+#: it lands at most the share BALL_START of that comes round, mostly next to
+#: none (a number drawn between 0 and 1, to the power BALL_SELDOM, of it),
+#: so that one line in four or so starts with a dot that shows; the rest
+#: comes round at the next turn. A pen just picked up lands with that share
+#: of the most the ball holds, all of which comes round.
 BALL_GATHER = 0.05
 BALL_BLOB = 4.0
 BALL_TURN = 2.0
@@ -331,8 +332,11 @@ BALL_SELDOM = 6.0
 #: of them), which lies at the middle of its dot about 2% as thick as the
 #: line it is left on.
 BALL_SHOWS = 0.05
-#: A drop of ink is left as a round dot BLOB_WIDE times as wide as the ball,
-#: thickest at its middle: a little wider than the line, and darker.
+#: A drop of ink is left as a round dot BLOB_WIDE times as wide as the ball
+#: is where it meets the paper (where its surface comes down to the peaks of
+#: the tooth: all of it pressed firmly, a narrower disc pressed lightly, as
+#: the line is narrower), thickest at its middle: a little wider than the
+#: line, and darker.
 BLOB_WIDE = 1.2
 #: The ball skids on a film of pigment: it lays less from the first of these
 #: thicknesses (per covered area) and nothing from the second. On wax it
@@ -2546,9 +2550,12 @@ def stain(ink, iy, ix, dv, k, pen):
 def blot(cover, held, under, loose, ink, inked, x, y, volume, radius, full, k, pen):
     """Leave a drop of ink of this ``volume`` at (``x``, ``y``): a round dot
     of this ``radius``, thickest at its middle. It lies in the valleys of
-    the tooth as on its peaks: the ink of a pixel is then on all of it if
-    there is enough to cover it ``full`` thick, and on a share of it if
-    not. It takes on a film of pigment or of wax as badly as the line does
+    the tooth as on its peaks, ``full`` thick at least: what of it a pixel
+    gets is on as much of the pixel as it would cover so (all of it, if
+    there is that much), wherever the line's ink is, so it falls on the
+    pixel's bare paper in proportion. A drop inks as much more of a pixel
+    as there is of it, and a tiny one next to nothing. It takes on a film
+    of pigment or of wax as badly as the line does
     (:func:`ball_grip`). ``pen`` is as for :func:`roll_stroke`. Returns the
     volume laid: less than the drop where it skids or lies off the sheet."""
     height, width = inked.shape
@@ -2571,9 +2578,9 @@ def blot(cover, held, under, loose, ink, inked, x, y, volume, radius, full, k, p
             if dv <= 0.0:
                 continue
             stain(ink, iy, ix, dv, k, pen)
-            # (the ink there is on at least as much of the pixel as it
-            # covers ``full`` thick)
-            inked[iy, ix] = max(inked[iy, ix], min(ink[iy, ix, IV] / full, 1.0))
+            # (the drop's share of the pixel, of which the share that is
+            # bare is newly inked)
+            inked[iy, ix] += (1.0 - inked[iy, ix]) * min(dv / full, 1.0)
             laid += dv
     return laid
 
@@ -2684,11 +2691,16 @@ def roll_stroke(
     harder it bears, and goes down into one that is there: it is as small as
     what made it. And it gathers ink on its rim as it rolls, which it leaves
     as a drop (:func:`blot`) where it lands and where the line turns, as
-    much of it as it bears on the paper there. ``rim`` holds the ink on the
-    rim of the ball: what it lands with, of which a share drawn at random
-    comes round where it lands (NaN for a pen just picked up, which lands
-    with a drop drawn so and leaves it there), updated in place to what it
-    lifts with.
+    much of it as it bears on the paper there, on a dot as much narrower as
+    the paper it meets there is. ``rim`` holds the ink on the rim of the
+    ball: what it lands with, of which a share drawn at random comes round
+    where it lands (NaN for a pen just picked up, which lands with a drop
+    drawn so and leaves it there), updated in place to what it lifts with.
+    The rim holds at most the drop BALL_BLOB says: what the ball would
+    gather beyond that is not gathered, and goes nowhere (it is neither on
+    the paper nor on the rim). So the ink laid in drops and the ink on the
+    rim are BALL_GATHER times (and ``blots`` times) the ink of the lines
+    while the rim is below its most, and less once it has held its most.
 
     Returns the volume of ink laid, drops included: what the pen has lost,
     but for what it has gathered on its rim.
@@ -2741,9 +2753,15 @@ def roll_stroke(
         else:
             comes, turned = gathered * coming, 0.0
         wx, wy, down = tx, ty, True
+        low = 1.0 - reach * pressure**BALL_POWER
         if comes >= least:
-            # it leaves as much of it as it bears on the paper
+            # it leaves as much of it as it bears on the paper, on a dot as
+            # much wider than the paper the ball meets as BLOB_WIDE says
+            # (``meets`` is the square of the share of its radius that comes
+            # down to the peaks of the tooth, as where it is put: see
+            # :func:`roll_over`)
             drop = comes * firm
+            meets = min((1.0 + MICRO - low) / rise, 1.0) if rise > 0.0 else 1.0
             left = blot(
                 cover,
                 held,
@@ -2754,7 +2772,7 @@ def roll_stroke(
                 x,
                 y,
                 drop,
-                BLOB_WIDE * bound,
+                BLOB_WIDE * bound * math.sqrt(meets),
                 BALL_INK * flow,
                 k,
                 pen,
@@ -2769,7 +2787,7 @@ def roll_stroke(
             step += 0.5 * landing
         rate = BALL_INK * flow * firm
         surge = surge_at(travel, salt) * per_pass
-        ball[0], ball[1], ball[3] = x, y, 1.0 - reach * pressure**BALL_POWER
+        ball[0], ball[1], ball[3] = x, y, low
         ball[5], ball[6] = BALL_DENT * yields * pressure, rate * (surge * step)
         ball[7], ball[8] = math.nan, math.nan
         rolled = roll_over(

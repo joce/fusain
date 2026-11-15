@@ -828,22 +828,39 @@ kernel and its own layer:
   had blobs as big and as dark as a firm line's. So a sharp turn leaves a
   blob, the bigger the longer the line before it (after 140 pixels at a
   pressure of 0.5, a third as much ink again at a square corner as on the
-  line beyond it). A blob is a round dot a little wider than the line,
-  thickest at its middle, and it is ink the pen lost like the rest:
-  `stroke` returns it with the line. How much a pen gathers is its own
-  (`Pen.blots`: 0 for one that never blots, more than 1 for a leaky one),
-  apart from how freely its ink flows (`Pen.flow`, which darkens the line
-  too).
+  line beyond it). A blob is a round dot a little wider than the line
+  (`BLOB_WIDE` times the disc of the ball that meets the paper there, which
+  is all of it pressed firmly and narrower pressed lightly, as the line
+  is: on cartridge paper a pen six pixels wide leaves a blob of radius 3.1
+  at a pressure of 0.05 and 4.2 from 0.5 up, where it was 4.2 at any
+  pressure), thickest at its middle, and it is ink the pen lost like the
+  rest: `stroke` returns it with the line. A drop lies in the valleys of
+  the tooth as on its peaks, a firm pass thick at least, wherever the line
+  laid its ink: it inks as much of a pixel's bare paper as it would cover
+  of the pixel so, and a tiny drop next to nothing. (It inked all of a
+  pixel that held a firm pass of ink, however small: a billionth of a firm
+  pass, left every four pixels along a heavy line, darkened it by a
+  seventh.) How much a pen gathers is its own (`Pen.blots`: 0 for one that
+  never blots, more than 1 for a leaky one), apart from how freely its ink
+  flows (`Pen.flow`, which darkens the line too).
 - **A pen put to the paper has ink on its ball already.** A pen in the
   hand (`HeldPen`) lands with what its last line gathered and did not
   leave: of that, where it lands, a share drawn at random comes round,
   mostly next to none, so that one line in four or so starts with a dot
   that would show on a firm line, and a few with a blob; the rest comes
   round at the first sharp turn. It keeps the ink on its ball until it is
-  wiped; what it gathered is on the paper or on its ball. A bare `Pen` is
-  picked up afresh for every line: it lands with as much as such a share
-  of the most its ball holds, which it leaves where it lands, and takes
-  away what it gathers.
+  wiped; what it gathered is on the paper or on its ball. Its ball holds a
+  drop at most (`BALL_BLOB`), and what it would gather beyond that is not
+  gathered: it goes nowhere, neither onto the paper nor onto the ball. So
+  the identity (the ink of its drops and the ink on its ball are
+  `BALL_GATHER` times that of its lines) holds only while the rim has never
+  been full; long lines with no sharp turn, a hatching's, fill it (a pen
+  three pixels wide: a straight line 130 pixels long at full pressure, 240
+  at 0.5, 360 at 0.3) and keep it full. Where that ink would go (a smear
+  along the line, onto the hand) is not modelled. A bare `Pen` is picked
+  up afresh for every line: it lands with as much as such a share of the
+  most its ball holds, which it leaves where it lands, and takes away what
+  it gathers.
 - **Heavy ink bronzes** under a lamp: see Rendering.
 
 ## Sketch of the API

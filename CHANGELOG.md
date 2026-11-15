@@ -31,6 +31,44 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   six that rub (`dust/charcoal paper/4`, `dust/rough/5`, `pastel/sanded
   card/6`, `wax/cartridge/7`, `wax/cold-pressed/8`, `drawing/toned grey/13`)
   have new hashes, the seven that do not are as they were.
+
+- A drop of ballpoint ink inks a pixel as far as it is ink (fusain-9dg).
+  A drop inked a pixel as far as all the ink there would cover a firm pass
+  thick, its own and the line's: any drop, however small, inked all of a
+  pixel that held a firm pass, and closed the white of a heavy line. Along
+  a line drawn three times at 0.8 between two rows of pixels, whose edge
+  pixels are half bare (0.50), a drop of a billionth of a firm pass every
+  four pixels left them a third bare (0.34) and darkened the line by a
+  seventh (its luminance 0.355 to 0.303; on rough paper 0.50 to 0.38 bare,
+  0.346 to 0.309). A drop now lies on as much of the pixel as it would
+  cover a firm pass thick on its own, and on the pixel's bare paper in
+  proportion, wherever the line's ink is (the share of the bare paper it
+  inks is the share of the pixel it covers): it lies in the valleys of the
+  tooth as on its peaks, so it does not go where the line's ink is any
+  more than where it is not. The tiny drops change nothing to the third
+  decimal (0.503 bare, 0.3546); a drop of 0.006, the least the rim of a
+  pen three pixels wide lets go of, 0.503 to 0.499 and 0.3546 to 0.3532 (was to 0.329 and 0.300); one of 0.1, a
+  large blob, to 0.437 and 0.331 (was 0.204 and 0.258). Four layers of firm
+  black hatching from a pen in the hand: what the pen blots darkens them by
+  0.4%, where it darkened them by 0.9%; one and two layers as before (0.1%
+  and 0.2%). The ink is what it was: only how much of each pixel it lies
+  on changes.
+- A light ballpoint line leaves a narrower blob (fusain-js5). A blob was
+  as wide at any pressure (`BLOB_WIDE` times the ball), while a light line
+  is narrower than the ball. It is now `BLOB_WIDE` times as wide as the
+  disc of the ball that meets the paper where it is left: the disc a ball
+  meets the paper with where it lands and lifts, by the rule that makes a
+  light line narrower (where its round surface comes down to the peaks of
+  the tooth: all of the ball from about 0.4 on cartridge paper, a narrower
+  disc below; on a paper that gives less, up to a firmer touch, 0.87 on
+  printer paper). A pen six pixels wide on cartridge paper, where it
+  lands with a drop: the blob's radius (from the spread of its ink) was
+  4.18 at any pressure; now 3.12 at 0.05, 3.67 at 0.15, 3.99 at 0.3 and
+  4.18 from 0.5 up, where the line is 3.57, 4.39, 4.66, 5.02 and 5.31 wide
+  (from the spread of its ink): the blob at 0.05 is 0.75 of its width at
+  0.9, the line 0.67. The same ink lies on the narrower dot, thicker: at
+  its middle 0.011 at 0.05, where it was 0.006.
+
 - A pencil drawn over pastel shows on it (fusain-wo4). What the paper holds
   of a dry medium went in the tooth, under whatever dust lay there, and all
   that lay there was counted in the tip's way: over two layers of a pale
@@ -452,6 +490,15 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- What a ballpoint's ball gathers beyond the most it holds is documented
+  (fusain-45t; `HeldPen`, `fusain._engine.roll_stroke` and
+  `docs/design.md`). The rim holds a drop at most (`BALL_BLOB`: 0.48 for a
+  pen three pixels wide), and what the ball would gather beyond that is
+  not gathered: it is on neither the paper nor the ball. So the ink of its
+  drops and the ink on its ball are `BALL_GATHER` times that of its lines
+  only while the rim has never been full; a straight line fills it, from a
+  clean pen three pixels wide, in 130 pixels at full pressure, 240 at 0.5
+  and 360 at 0.3. Nothing changes; a test pins it.
 - Strokes take half the time, rubs with a finger or a stump four tenths of
   it and rubs with an eraser a fifth, and no picture changes: every array
   of a sheet after any sequence of calls, every number returned and every
