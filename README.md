@@ -279,6 +279,7 @@ from fusain import pens
 
 sheet.stroke([(100, 300), (400, 320)], pens.BLUE, pressure=0.6)
 sheet.shade((100, 60, 300, 200), pens.BLACK, pressure=0.4, angle=35)   # hatching
+sheet.stroke(path, pens.BLUE.with_(blots=0))                           # a pen that never blots
 ```
 
 ![Ballpoint pens](examples/output/ballpoint.png)

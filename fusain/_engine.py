@@ -226,13 +226,17 @@ BALL_UNEVEN = 0.2
 BALL_SURGE = 12.0
 #: The ball gathers ink: this share of what it lays stays on its rim as it
 #: rolls, up to a drop BALL_BLOB firm passes thick over the square of its
-#: radius. A turn brings it round onto the paper, all of it when the line
-#: turns by BALL_TURN radians, so a sharp turn leaves a blob and a gentle
-#: curve nothing to see. A pen put to the paper has some on it already,
-#: which it leaves where it lands: at most the share BALL_START of that,
-#: and mostly next to none (a number drawn between 0 and 1, to the power
-#: BALL_SELDOM, of it), so that one line in four or so starts with a dot
-#: that shows.
+#: radius (both times how much the pen blots: :attr:`fusain.Pen.blots`). A
+#: turn brings it round onto the paper, all of it when the line turns by
+#: BALL_TURN radians, so a sharp turn leaves a blob and a gentle curve
+#: nothing to see. The paper takes of what comes round as much as the ball
+#: bears on it, the share of a firm pass that the line lays there (from
+#: BALL_LIGHT at the lightest touch to all of it at full pressure), and the
+#: rest stays on the rim: a light line blots as lightly as it is drawn. A
+#: pen put to the paper has some on it already, which it leaves where it
+#: lands: at most the share BALL_START of that, and mostly next to none (a
+#: number drawn between 0 and 1, to the power BALL_SELDOM, of it), so that
+#: one line in four or so starts with a dot that shows.
 BALL_GATHER = 0.05
 BALL_BLOB = 4.0
 BALL_TURN = 2.0
@@ -1515,10 +1519,10 @@ def roll_stroke(
     and moving ``steps`` pixels at each.
 
     ``pen`` is [the scattering of its ink per unit volume, how freely it
-    flows] (the ink's absorption per band is ``k``) and ``paper`` is [depth,
-    bite, give, hold]. The ball lays ink at a steady rate wherever it touches
-    the
-    paper: how much does not depend on the tooth, as it does for a stick,
+    flows, how much it blots] (the ink's absorption per band is ``k``) and
+    ``paper`` is [depth, bite, give, hold]. The ball lays ink at a steady
+    rate wherever it touches the paper: how much does not depend on the
+    tooth, as it does for a stick,
     and only a little on the pressure, which sets how much of the tooth the
     ball reaches. The ink is a stain in the paper (``ink``, packed as dust
     is, on the share ``inked`` of each pixel), under whatever the paper
@@ -1527,13 +1531,14 @@ def roll_stroke(
     The ball presses a groove into the paper (``dent``), the deeper the
     harder it bears, and goes down into one that is there: it is as small as
     what made it. And it gathers ink on its rim as it rolls, which it leaves
-    as a drop (:func:`blot`) where it lands and where the line turns.
+    as a drop (:func:`blot`) where it lands and where the line turns, as
+    much of it as it bears on the paper there.
 
     Returns the volume of ink laid, drops included: what the pen has lost,
     but for what is still on its rim.
     """
     height, width = tooth.shape
-    s, flow = pen[0], pen[1]
+    s, flow, blots = pen[0], pen[1], pen[2]
     depth, give = paper[0], paper[2]
     yields = GIVE_NONE + GIVE_FULL * give
     reach = BALL_REACH * yields
@@ -1543,7 +1548,7 @@ def roll_stroke(
     per_pass = 1.0 / (2.0 * bound - 1.0)
     # the drop of ink on the rim of the ball: what it holds at most, and
     # what the pen lands with
-    most = BALL_BLOB * BALL_INK * flow * bound * bound
+    most = BALL_BLOB * BALL_INK * flow * blots * bound * bound
     gathered = most * BALL_START * unit_noise(0, 2, salt + 3) ** BALL_SELDOM
     wx, wy = 1.0, 0.0  # the way it was last going
     down = False  # whether it was on the paper at the last point
@@ -1558,9 +1563,12 @@ def roll_stroke(
             continue
         x, y = xs[i], ys[i]
         tx, ty = heading(xs, ys, i)
-        # where it lands it leaves all it had gathered; where the line
-        # turns, as much of it as the turn brings round
-        drop = gathered
+        # (the share of a firm pass it lays here)
+        firm = BALL_LIGHT + (1.0 - BALL_LIGHT) * pressure
+        # where it lands it leaves what it had gathered; where the line
+        # turns, as much of it as the turn brings round; and of that, as
+        # much as it bears on the paper
+        drop = gathered * firm
         if down:
             drop *= min(turn_of(tx, ty, wx, wy) / BALL_TURN, 1.0)
         wx, wy, down = tx, ty, True
@@ -1582,7 +1590,7 @@ def roll_stroke(
             )
             gathered = max(gathered - left, 0.0)
             total += left
-        rate = BALL_INK * flow * (BALL_LIGHT + (1.0 - BALL_LIGHT) * pressure)
+        rate = BALL_INK * flow * firm
         rate *= surge_at(travel, salt) * per_pass * step
         sink = BALL_DENT * yields * pressure
         x0 = max(int(math.floor(x - bound)), 0)
@@ -1616,7 +1624,7 @@ def roll_stroke(
                 ink[iy, ix, IV] += dv
                 rolled += dv
         total += rolled
-        gathered = min(gathered + BALL_GATHER * rolled, most)
+        gathered = min(gathered + BALL_GATHER * blots * rolled, most)
     return total
 
 

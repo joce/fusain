@@ -492,14 +492,21 @@ kernel and its own layer:
   its rim as it rolls, up to a drop (`BALL_BLOB`), and a turn brings it
   round onto the paper: nearly all of it when the line turns back on itself,
   about two thirds at a square corner, a little at a time on a gentle curve, where
-  it does not show. So a sharp turn leaves a blob, the bigger the longer the
-  line before it (after 140 pixels, half as much ink again at a square
-  corner as on the line beyond it). A pen put to the paper has some on it
-  already and leaves it where it lands: mostly next to none, so that one
-  line in four or so starts with a dot that shows and a few with a blob. A
-  blob is a round dot a little wider than the line, thickest at its middle,
-  and it is ink the pen lost like the rest: `stroke` returns it with the
-  line.
+  it does not show. The paper takes of what comes round as much as the ball
+  bears on it (the share of a firm pass the line lays there, from
+  `BALL_LIGHT` to all of it), and the rest stays on the rim for the next
+  turn: a light line blots as lightly as it is drawn, where it had blobs as
+  big and as dark as a firm line's. So a sharp turn leaves a blob, the
+  bigger the longer the line before it (after 140 pixels at a pressure of
+  0.5, a third as much ink again at a square corner as on the line beyond
+  it). A pen put to the paper has some on it already and leaves it where it
+  lands: mostly next to none, so that one line in four or so lands with a
+  drop that would show on a firm line, and a few with a blob. A blob is a
+  round dot a little wider than the line, thickest at its middle, and it is
+  ink the pen lost like the rest: `stroke` returns it with the line. How
+  much a pen gathers is its own (`Pen.blots`: 0 for one that never blots,
+  more than 1 for a leaky one), apart from how freely its ink flows
+  (`Pen.flow`, which darkens the line too).
 - **Heavy ink bronzes** under a lamp: see Rendering.
 
 ## Sketch of the API

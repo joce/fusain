@@ -7,7 +7,8 @@ wide as the ball and nearly as dark at a light touch as at a firm one; the
 ink is clear, so lines that cross and layers of hatching darken; and it
 soaks into the paper, where no eraser reaches it. The ball gathers ink as it
 rolls and leaves a blob where the line turns sharply and, now and then,
-where it starts. Pressed firmly it leaves a groove, which a pencil shaded
+where it starts, the lighter the lighter the line (``blots=0`` for a pen
+that never blots). Pressed firmly it leaves a groove, which a pencil shaded
 over it skips. And ink in heavy layers bronzes under a lamp.
 """
 
@@ -37,7 +38,13 @@ class Pen:
         pressure. A light line is narrower.
     flow:
         How freely the ink comes: 1 for a good pen, less for one running
-        dry, more for one that blots (its blobs are as much bigger).
+        dry, more for one that floods (its line is as much darker, and its
+        blobs as much bigger).
+    blots:
+        How much ink its ball gathers, to leave as a blob where the line
+        turns sharply and, now and then, where it lands: 1 for a usual pen,
+        0 for one that never blots, more for a leaky one. Its line is the
+        same either way.
     name:
         Optional label.
     """
@@ -45,6 +52,7 @@ class Pen:
     ink: Pigment
     width: float = 3.0
     flow: float = 1.0
+    blots: float = 1.0
     name: str = ""
 
     def __post_init__(self):
@@ -54,6 +62,8 @@ class Pen:
             value = getattr(self, field)
             if not (math.isfinite(value) and value > 0):
                 raise ValueError(f"{field} must be a number above 0, got {value!r}")
+        if not (math.isfinite(self.blots) and self.blots >= 0):
+            raise ValueError(f"blots must be a number, 0 or above, got {self.blots!r}")
 
     def with_(self, **changes) -> Pen:
         """A copy with some fields changed."""

@@ -44,6 +44,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `Pen.blots`: how much ink a ballpoint's ball gathers, to leave as a blob
+  where the line turns sharply and, now and then, where it lands. 1 for a
+  usual pen (the presets), 0 for one that never blots, more for a leaky
+  one. It scales the drop the ball can hold and what it gathers, and leaves
+  the line as it is: `Pen.flow` was the only control, and it darkens the
+  line with the blobs.
 - `tools/fingerprint.py`: whether a change has altered the picture. It
   draws a suite of small drawings (every family of medium, sticks and tilt,
   width profiles and flat ends, shading, tools bare and in the hand, a
@@ -75,6 +81,22 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A light ballpoint line blots as lightly as it is drawn. The ball left all
+  the ink it had gathered where it landed and where the line turned, so a
+  faint line had blobs as big and as dark as a firm one's, and they showed
+  on the light side of a hatching. The paper now takes of that drop as much
+  as the ball bears on it, the share of a firm pass the line lays there
+  (`BALL_LIGHT`, 0.15, at the lightest touch, all of it at full pressure);
+  the rest stays on the rim, for the next turn. Measured on a pen that
+  lands with a drop, the ink within five pixels of where the line lands,
+  more than at its end: 3.5 times as much again at a pressure of 0.15, 1.4
+  times at 0.5 and 0.86 at 0.9; now 0.98, 0.82 and 0.79. Over eighty lines,
+  the darkest start is 1.87 times as dark as its line at 0.15 (2.60
+  before), 1.49 at 0.5 (1.63) and 1.36 at 0.9 (1.38), and a fifth of the
+  starts of the faintest lines are a third darker than their line (a third
+  of them before; at 0.9 hardly any, as before). A square corner after 140
+  pixels at 0.5 has 1.38 times the ink of the line beyond it, from 1.58; at
+  full pressure blobs are as they were.
 - The blender shows. `pencils.BLENDER` was a coloured pencil without
   colour, and pressed hard it made little difference: one firm layer of it
   over three layers of red at 0.5 on cartridge paper left two fifths of the

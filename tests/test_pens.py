@@ -66,6 +66,10 @@ def test_a_pen_checks_what_it_is_given():
             Pen(Pigment("#22357e"), width=bad)
         with pytest.raises(ValueError, match="flow"):
             Pen(Pigment("#22357e"), flow=bad)
+    for bad in (-0.5, float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="blots"):
+            Pen(Pigment("#22357e"), blots=bad)
+    assert Pen(Pigment("#22357e"), blots=0.0).blots == 0.0
 
 
 def test_a_pen_has_its_own_width_and_no_side():
@@ -153,6 +157,12 @@ def test_the_ink_does_not_come_quite_evenly():
 MOST = eng.BALL_BLOB * eng.BALL_INK * (0.5 * 3 + 0.5) ** 2
 
 
+def _firm(pressure: float) -> float:
+    """The share of a firm pass a pen lays at this pressure: also the share
+    of the ink that comes round off its rim that the paper takes."""
+    return eng.BALL_LIGHT + (1.0 - eng.BALL_LIGHT) * pressure
+
+
 def _near(sheet, x, y, radius=4.0) -> float:
     """The ink within ``radius`` of a point."""
     assert sheet.ink is not None
@@ -208,10 +218,11 @@ def test_a_line_starts_with_a_dot_of_ink_now_and_then():
     assert np.median(share) < 0.05
     assert 0.15 < (share > 0.1).mean() < 0.4
     assert 0.3 < share.max() <= eng.BALL_START
-    # and that is the ink on the paper (the line itself is not quite even)
-    assert np.abs(np.array(extra) - share).max() < 0.15
+    # and as much of that as the pen bears on the paper is the ink on the
+    # paper (the line itself is not quite even)
+    assert np.abs(np.array(extra) - _firm(0.5) * share).max() < 0.15
     assert ratio[share < 0.01].min() > 0.7 and ratio[share < 0.01].max() < 1.3
-    assert ratio[share > 0.3].min() > 1.6
+    assert ratio[share > 0.3].min() > 1.4
 
 
 def test_a_blob_is_a_dot_a_little_wider_than_the_line_and_thickest_in_the_middle():
@@ -221,7 +232,7 @@ def test_a_blob_is_a_dot_a_little_wider_than_the_line_and_thickest_in_the_middle
     ink, inked = sheet.ink[..., IV], sheet.inked
     # across the line, at its start and half way along
     start, run = ink[:, 20], ink[:, 100]
-    assert start.max() > 2.5 * run.max()
+    assert start.max() > 1.5 * run.max()
     assert np.argmax(start) == 20
     assert np.count_nonzero(start) > np.count_nonzero(run)
     assert np.count_nonzero(start) <= 2 * eng.BLOB_WIDE * (0.5 * 3 + 0.5) + 1
@@ -249,10 +260,11 @@ def test_a_sharp_turn_leaves_a_blob_the_bigger_the_longer_the_line_before_it():
         extra.append(float(np.mean([at - beyond for at, beyond in corners])))
     assert blobs[0] < 1.25  # (nothing gathered yet: the line, no more)
     assert blobs[0] < blobs[1] < blobs[2]
-    assert blobs[2] > 1.4
+    assert blobs[2] > 1.3
     # what gathers over a run is the share BALL_GATHER of what the run lays
-    # (about 0.045 a pixel), and a square turn brings most of it round
-    gathered = eng.BALL_GATHER * 140 * 0.045
+    # (about 0.045 a pixel), and a square turn brings most of it round, of
+    # which the paper takes as much as the pen bears on it
+    gathered = eng.BALL_GATHER * 140 * 0.045 * _firm(0.5)
     assert 0.4 * gathered < extra[2] < 0.9 * gathered
 
 
@@ -261,7 +273,7 @@ def test_a_line_that_turns_back_leaves_all_it_gathered():
     back = [_corner(140, seed, (20.5, 50.5)) for seed in (1, 20, 40, 60)]
     extra = [float(np.mean([at - beyond for at, beyond in c])) for c in (square, back)]
     assert extra[1] > 1.2 * extra[0]
-    assert extra[1] < eng.BALL_GATHER * 140 * 0.045 * 1.15
+    assert extra[1] < eng.BALL_GATHER * 140 * 0.045 * _firm(0.5) * 1.15
 
 
 def test_a_gentle_curve_leaves_no_blob():
@@ -273,8 +285,9 @@ def test_a_gentle_curve_leaves_no_blob():
         bent = curved.stroke(arc, pens.BLUE, 0.5)
         ruled = straight.stroke([(10, 50.5), (190, 50.5)], pens.BLUE, 0.5)
         assert _thickest(curved) < 1.1 * _thickest(straight)
-        # what gathered is in the line: a little more ink than a straight one
-        assert 1.0 < bent / ruled < 1.0 + eng.BALL_GATHER
+        # what gathered and came round is in the line: hardly more ink than
+        # in a straight one (the rest is still on the rim)
+        assert 0.99 < bent / ruled < 1.0 + eng.BALL_GATHER
 
 
 def test_a_freer_pen_and_a_bigger_ball_gather_more():
@@ -286,10 +299,53 @@ def test_a_freer_pen_and_a_bigger_ball_gather_more():
         return _near(sheet, 20, 20.5, 10) - _near(sheet, 180, 20.5, 10)
 
     usual = blob(pens.BLUE)
-    assert usual > 0.4 * MOST
+    assert usual > 0.4 * MOST * _firm(0.5)
     assert blob(pens.BLUE.with_(flow=0.5)) == pytest.approx(0.5 * usual, rel=1e-4)
     # (as the square of its radius, half a pixel more than half its width)
     assert 2.0 * usual < blob(pens.BLUE.with_(width=6.0)) < 4.0 * usual
+
+
+def _start_blob(pen, pressure: float, seed: int) -> tuple[float, float]:
+    """The ink where a line lands, more than at its end, as a share of that
+    at its end; and the volume laid."""
+    sheet = Sheet(200, 40, seed=seed)
+    laid = sheet.stroke([(20, 20.5), (180, 20.5)], pen, pressure)
+    start, end = _near(sheet, 20, 20.5, 5), _near(sheet, 180, 20.5, 5)
+    return start / end - 1.0, laid
+
+
+def test_a_light_line_blots_as_lightly_as_it_is_drawn():
+    """A blob is as much darker than its line at a light touch as at a firm
+    one: the paper takes of the drop as much as the ball bears on it. (It
+    took all of it, so a faint line had blobs as big and as dark as a firm
+    line's: 3.5 times as much ink again as its line at 0.15, 0.86 at 0.9.)"""
+    seed = _loaded()
+    light, _ = _start_blob(pens.BLUE, 0.15, seed)
+    firm, _ = _start_blob(pens.BLUE, 0.9, seed)
+    assert firm > 0.5
+    assert 0.8 * firm < light < 1.4 * firm
+
+
+def test_a_pen_that_never_blots_and_a_leaky_one():
+    seed = _loaded()
+    usual, laid = _start_blob(pens.BLUE, 0.5, seed)
+    never, dry = _start_blob(pens.BLUE.with_(blots=0.0), 0.5, seed)
+    leaky, wet = _start_blob(pens.BLUE.with_(blots=2.0), 0.5, seed)
+    assert usual > 0.5
+    assert abs(never) < 0.05
+    # the same line, and twice the blob
+    assert wet - dry == pytest.approx(2.0 * (laid - dry), rel=1e-4)
+    assert leaky > 1.8 * usual
+    # and none where it turns either
+    zigzag = Polyline([(20.5 + 20 * k, 20.5 + 40 * (k % 2)) for k in range(9)])
+    sheets = []
+    for blots in (0.0, 1.0):
+        sheet = _clean(200, 80, 1)
+        sheet.stroke(zigzag, pens.BLUE.with_(blots=blots), 0.6)
+        assert sheet.ink is not None
+        sheets.append(sheet.ink[..., IV])
+    corner = (slice(15, 26), slice(95, 106))  # (a turn, at (100.5, 20.5))
+    assert sheets[1][corner].sum() > 1.1 * sheets[0][corner].sum()
 
 
 def test_a_blob_off_the_edge_of_the_sheet_or_on_wax_is_not_counted_as_laid():

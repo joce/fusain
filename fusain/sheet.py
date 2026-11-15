@@ -352,9 +352,10 @@ class Sheet:
         at a light touch as at a firm one, and its ink is a stain in the
         paper (:attr:`ink`), under everything else, which no tool takes off.
         Its ball gathers ink as it rolls and leaves a blob where the line
-        turns sharply and, now and then, where it starts; and it presses a
-        groove into the paper (``dent``), as :meth:`indent` does, the
-        deeper the firmer the pen.
+        turns sharply and, now and then, where it starts, the lighter the
+        lighter the line (as much as the pen's ``blots`` says); and it
+        presses a groove into the paper (``dent``), as :meth:`indent` does,
+        the deeper the firmer the pen.
 
         A dry tip pressed firmly (harder than about 0.6) flattens the tooth
         (``press``), the more the harder the tip: a hard pencil does, a
@@ -481,7 +482,7 @@ class Sheet:
                 steps,
                 0.5 * float(pen.width),
                 np.ascontiguousarray(pen.ink.K, dtype=np.float64),
-                np.array([pen.ink.S, pen.flow], dtype=np.float64),
+                np.array([pen.ink.S, pen.flow, pen.blots], dtype=np.float64),
                 np.array(
                     [paper.depth, paper.bite, paper.give, paper.hold], dtype=np.float64
                 ),
