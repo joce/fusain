@@ -241,7 +241,8 @@ before the red was laid, a vinyl eraser rubbed to and fro (it slides on the
 burnished half) and two lines scratched with a knife. Bottom, soft pastels
 on grey laid paper.
 Left: light colours over a dark blue ground, which they cover. Middle: orange
-and blue side by side, and the same with the join rubbed with a finger. Right:
+and blue side by side, and the same with the join rubbed with a finger, into
+a passage from the one to the other. Right:
 white pastel over black, and lines drawn with a hard pastel.
 
 ```python

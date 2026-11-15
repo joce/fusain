@@ -116,6 +116,51 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   shaded over the smear took a third of what bare paper takes (the tooth
   was full) and takes a thirtieth (it is slick).
 
+### Examples
+
+- Every image is regenerated with the changes above. Seven are unchanged to
+  the byte (`farm`, `papers`, `pencils`, `shine`, `stilllife`, `strokes`,
+  `tips`: nothing in them is rubbed or erased), and `macaw.png` and
+  `ballpoint.png` but for the ends of their eraser's and knife's passes.
+- `colour.png`, `fixative.png` and `crayons.png`: the join of orange and
+  blue rubbed with a finger is a passage from the one to the other, where
+  it was one olive. As colour differences (CIE 1976, of which 2 can just
+  be seen), two widths of the finger left of the join the patch of
+  `fixative.png` was 65 from the orange and 78 from the blue and is 41 and
+  87; two widths right of it, 72 and 72, now 86 and 49 (the two colours
+  are 108 apart, and the middle of the passage, their mix, is about 70
+  from both). `examples/colour.py` rubs each row of its join both
+  ways, as the other two do: rubbed one way by turns, the rows showed as
+  stripes, now that a pass carries a colour less than a width.
+- `charcoal.png`: the stump's trail out of each tone is shorter (vine
+  charcoal: 0.50 of the paper's tone 16 pixels past the edge of the tone,
+  now 0.83, and 0.69 at 50 pixels, now 0.93), and the tone a loaded stump
+  draws down the bare paper is paler (compressed charcoal: 0.43 to 0.91 of
+  the paper's along it, now 0.75 to 0.92; vine: 0.78 to 0.98, now 0.94 to
+  0.98).
+- `crayons.png`, third row: where the stump crosses the crayon lines over
+  rubbed charcoal it lays less dust on them, and they still grey (see
+  Fixed); the finger's rub of the charcoal ends in the outline of the
+  finger at the edges of the patch.
+- `deco.png` is darker where it is rubbed: it rubs with a clean stump or
+  finger at every stroke, which used to carry off much of the charcoal and
+  now carries off little. The clear sky goes from 201 to 192 (of 255), the
+  heavy cloud from 38 to 35 and smoother, the faces turned from the sun
+  from 69 to 62, the cast shadows from 103 to 93, the lit faces from 175 to
+  171: light still stands against dark all the way up.
+- `lake.png`: four fifths of its pixels change, a fifth of them by over 8
+  levels, and it is a little nearer the values it is drawn to: its mean
+  distance from them goes from 9.7 levels to 9.1 (seen through a blur, from
+  6.7 to 6.2), and the share of the sheet over 20 levels too dark from 2.7%
+  to 1.6% (too light: 5.4%, as before). The lights its erasers lift are
+  full to their ends.
+- `broadway.png`: a fifth of its pixels change, few by much (1.6% by over 8
+  levels): the sky and the far end of the street, which are rubbed. Its
+  finger is still pulled down from the sky over the far fronts and wiped
+  before each pull: rubbed to and fro over both, it now takes the open sky
+  a tenth of the way to the colour of the fronts where it took it four
+  tenths, and the pulls three hundredths.
+
 ### Added
 
 - `Smudger.wax`: the volume of wax in what a tool in the hand carries.

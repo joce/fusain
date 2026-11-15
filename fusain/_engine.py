@@ -1936,8 +1936,8 @@ def rub_stroke(
     over the pixel; and over each of its own widths the tool lays the share
     ``lay`` of what it carries back down, as dust on top: where it would
     lay as much as it lifts, it does neither, and where not, only the
-    difference (:func:`give_or_take`), so a loaded tool leaves a tone as
-    thick as its own load alone and brings none of its colour onto it. As
+    difference (:func:`give_or_take`), so a tool that carries as much as a
+    tone gives it leaves the tone as it is, whatever colour it carries. As
     strongly as it smears, it also spreads the dust on top over the pixels
     around (:data:`SPREAD`: this, the dust on its face, is most of what it
     moves, and it goes a fraction of the tool's width), and slides the
@@ -1968,9 +1968,9 @@ def rub_stroke(
     it is in: a tool that takes what the paper holds, a film or paste takes
     as much of the wax, and lays it back where it lays its paste, so the
     smear of an oil pastel is as waxy as the pastel and the place it left
-    less so. The tool lands with it and it is
-    updated in place, so a tool that is not cleaned between two passes gives
-    back as it takes.
+    less so. The tool lands with what it carries, which is updated in
+    place, so a tool that is not cleaned between two passes takes no more
+    than it gives.
 
     Where it lands and where it lifts, all the paper under the tool is
     rubbed as under the middle of a pass (:func:`put_tool`), at the pace

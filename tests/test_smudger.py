@@ -126,6 +126,13 @@ ORANGE, BLUE = "#e67e22", "#2e6fb7"
 JOIN, FINGER = 200, 22  # where the two colours meet, and the width of a finger
 
 
+def _of_each(first, second, absorption: np.ndarray) -> np.ndarray:
+    """How much there is of each of two media in what absorbs light so
+    (K per band, in rows): the mix of the two that comes nearest to it."""
+    both = np.stack([first.pigment.K, second.pigment.K], axis=1)
+    return np.linalg.solve(both.T @ both, both.T @ absorption)
+
+
 def _rubbed_join(make, pressure: float, passes: int) -> np.ndarray:
     """The share of the blue in what lies on top, column by column, once a
     finger has been rubbed to and fro across the join of an orange and a
@@ -141,8 +148,7 @@ def _rubbed_join(make, pressure: float, passes: int) -> np.ndarray:
         ends = [(JOIN - 55, y), (JOIN + 55, y + 2)]
         sheet.smudge(ends if k % 2 else ends[::-1], finger, pressure)
     top = sheet.loose[70:130, :, :N].astype(np.float64).sum(axis=0)
-    both = np.stack([orange.pigment.K, blue.pigment.K], axis=1)
-    orange_there, blue_there = np.linalg.lstsq(both, top.T, rcond=None)[0]
+    orange_there, blue_there = _of_each(orange, blue, top.T)
     share = blue_there / np.maximum(orange_there + blue_there, 1e-9)
     return np.convolve(share, np.ones(5) / 5, mode="same")
 
@@ -197,8 +203,7 @@ def test_a_loaded_finger_brings_little_onto_a_tone_of_another_colour():
     assert finger.load > 0
     sheet.rub((230, 30, 370, 170), finger, 0.6)
     top = sheet.loose[60:140, 260:340, :N].astype(np.float64).sum(axis=(0, 1))
-    both = np.stack([orange.pigment.K, blue.pigment.K], axis=1)
-    orange_there, blue_there = np.linalg.lstsq(both, top, rcond=None)[0]
+    orange_there, blue_there = _of_each(orange, blue, top)
     assert orange_there < 0.03 * blue_there
 
 
