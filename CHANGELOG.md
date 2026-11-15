@@ -8,6 +8,33 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Where burnished wax is erased or scraped off, the tooth is there again
+  for what is drawn next (fusain-6k1). Polishing wax raised the `press` of
+  the sheet, as a hard tip that crushes the tooth does, and it stayed when
+  the wax that levelled the tooth was taken off, so a tip touched all of
+  the pixel there. Polished, it is the wax that is level: where a pixel
+  holds wax, its `press` is now taken to be the wax's polish, which keeps
+  the tooth level as far as the wax fills it (`WAX_FAST` thick); as a tool
+  thins the wax below that, the polish goes, and with all of it the tooth
+  is as the paper's own, but for what a dry tip crushed beyond what the
+  wax held up. A sand eraser or a knife also cuts the surface of the paper
+  as far as it scrapes, which takes even that (a tooth three firm layers
+  of 4H crushed by 0.91 comes back to 0.15 under a sand eraser, and stays
+  at 0.91 under a vinyl one). The sheet keeps one `press` for both: a waxy
+  tip does not crush the tooth, and storing the crush apart would cost a
+  float a pixel and an argument through every stroke kernel, for a crush
+  under or over wax that is then taken off, which goes with it. Four firm
+  layers of a dark coloured pencil burnished, then scraped back: a light
+  layer of HB shaded over them touched 0.998 of the pixels where a knife
+  had been and 0.96 where a sand eraser had, and now 0.64 and 0.73, where
+  it touches 0.68 of fresh paper; its grain (the spread of what it laid
+  from pixel to pixel, over its mean) was 0.35 and 0.44 and is 1.34 and
+  1.24 (fresh paper: 1.27). The relief there was a twenty-eighth of the
+  paper's and is as the paper's, `press` was 0.996 and is 0.000 and 0.097,
+  and the gloss of the wax 0.000 and 0.082, now 0.000 and 0.019. A vinyl
+  eraser rubbed three times over the burnished dark leaves most of its wax,
+  and the tooth there as level as it was (`press` 0.996, now 0.991).
+
 - A tool never takes more than it has room for. `Tool.holds` made a tool
   lift the less the fuller it was, but what it picked up off one pixel was
   not held to the room it had left, so a tool that holds less than one

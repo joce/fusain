@@ -749,6 +749,10 @@ class Sheet:
         of a knife (``tools.KNIFE``, a fine line back to the paper), rub it
         out with a sand eraser (``tools.SAND_ERASER``), or keep it from the
         start by leaving the paper or by indenting it (:meth:`indent`).
+        Burnished wax levels the tooth: where the wax is taken off, the
+        tooth is there again for what is drawn next (but for what a hard
+        tip crushed, which a sand eraser or a knife cuts away with the
+        surface of the paper).
 
         ``path`` and ``pressure`` are as for :meth:`stroke`; ``width`` is the
         width of the eraser in pixels (by default the tool's own; a

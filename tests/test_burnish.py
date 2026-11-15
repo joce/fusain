@@ -493,6 +493,71 @@ def test_a_sand_eraser_takes_what_a_vinyl_one_slides_on():
         assert took == pytest.approx(_total(before) - _total(sand), rel=1e-5)
 
 
+def _over(sheet) -> np.ndarray:
+    """A light layer of HB shaded over the sheet: what it laid at each pixel."""
+    before = sheet.pigment().copy()
+    sheet.shade(BOX, pencils.HB, 0.3, 6.0, angle=-20)
+    return sheet.pigment() - before
+
+
+def _touched(new: np.ndarray, where=RUBBED) -> float:
+    """The share of the pixels of an area that a layer touched."""
+    return float((new[where] > 0.02 * new[where].mean()).mean())
+
+
+def _grain(new: np.ndarray, where=RUBBED) -> float:
+    return float(new[where].std() / new[where].mean())
+
+
+def _relief(sheet, where=RUBBED) -> float:
+    return float(sheet.surface_height()[where].std())
+
+
+@pytest.mark.parametrize(
+    "tool, spacing", [(tools.KNIFE, 1.0), (tools.SAND_ERASER, None)]
+)
+def test_the_tooth_comes_back_where_burnished_wax_is_scraped_off(tool, spacing):
+    # (fusain-6k1) the polish of wax is the wax's: it levels the tooth as
+    # far as it fills it, and what is drawn where it has been scraped off
+    # meets the tooth again, as on fresh paper. (It stayed level: a light
+    # layer of HB touched 0.96 to 0.998 of the pixels there, where it
+    # touches 0.68 of fresh paper, and lay three or four times as evenly)
+    sheet, fresh = _dense(True), _sheet()
+    sheet.rub(AREA, tool, 0.9, 10, spacing=spacing)
+    assert sheet.press[RUBBED].mean() < 0.15  # (0.996)
+    assert _gloss(sheet, RUBBED) < 0.025  # (none and 0.08)
+    assert _relief(sheet) > 0.9 * _relief(fresh)  # (a twenty-eighth)
+    new, bare = _over(sheet), _over(fresh)
+    assert _touched(new) < _touched(bare) + 0.1
+    assert _grain(new) > 0.85 * _grain(bare)
+
+
+def test_where_burnished_wax_holds_against_an_eraser_it_stays_level():
+    # a vinyl eraser leaves most of the wax, which keeps the tooth level
+    sheet = _dense(True)
+    pressed = sheet.press[RUBBED].mean()
+    for _ in range(3):
+        sheet.rub(AREA, tools.ERASER, 0.9)
+    assert sheet.press[RUBBED].mean() > 0.95 * pressed
+    assert _touched(_over(sheet)) > 0.9
+
+
+def test_a_tooth_a_hard_lead_crushed_stays_crushed_unless_it_is_cut():
+    # an eraser takes the graphite and leaves the tooth as the lead left it;
+    # a sand eraser or a knife takes the surface of the paper with it
+    sheet = _sheet()
+    _layers(sheet, pencils.H4, 3, 1.0)
+    crushed = sheet.press[RUBBED].mean()
+    assert crushed > 0.5
+    erased, sanded = sheet.copy(), sheet.copy()
+    for _ in range(3):
+        erased.rub(AREA, tools.ERASER, 0.9)
+    assert erased.pigment()[RUBBED].mean() < 0.1 * sheet.pigment()[RUBBED].mean()
+    assert erased.press[RUBBED].mean() == pytest.approx(crushed)
+    sanded.rub(AREA, tools.SAND_ERASER, 0.9, 10)
+    assert sanded.press[RUBBED].mean() < 0.2 * crushed
+
+
 @pytest.mark.parametrize("scrape", [-0.1, 1.5, float("nan")])
 def test_a_tool_scrapes_by_a_share(scrape):
     with pytest.raises(ValueError, match="scrape must be between 0 and 1"):

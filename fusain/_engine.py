@@ -304,7 +304,9 @@ UNDER_LIFT = 0.7
 #: it has been polished flat: a light layer of coloured pencil comes off
 #: fairly well, a dense one badly, a burnished one hardly. A blade or grit
 #: does not slide: as far as a tool scrapes, it takes what it would take of
-#: a medium without wax.
+#: a medium without wax. Polished wax keeps the tooth level as far as it is
+#: WAX_FAST thick, and as a tool takes it off the tooth comes back
+#: (:func:`bare_tooth`).
 WAX_FAST = 0.1
 WAX_HOLDS = 0.6
 POLISH_HOLDS = 0.9
@@ -1671,6 +1673,29 @@ def lift(held, under, loose, bonded, load, iy, ix, lifts, share):
 
 
 @_inlined
+def bare_tooth(flat, held, cover, iy, ix, waxed, cut):
+    """Give a pixel back the tooth that a tool has bared there, now that its
+    wax has gone from ``waxed`` to what it holds. ``flat`` is the ``press``
+    of the sheet, which counts both what polished wax levels and what a
+    dry tip crushed of the tooth itself. Polished wax keeps the tooth level
+    as far as it is thick enough to fill it, WAX_FAST thick (the press it
+    holds up is at most its thickness over that): as it thins below that,
+    the polish it held up goes, and with all the wax gone, all of it. What
+    a dry tip crushed stays, as far as it is more than the wax held up. And
+    where a tool cuts the surface of the paper itself (``cut``, the share
+    of it: a blade or grit), it takes the paper's flattening with it."""
+    pressed = flat[iy, ix]
+    if pressed <= 0.0:
+        return
+    covered = max(cover[iy, ix], 1e-6)
+    if waxed > held[iy, ix, IW]:
+        before = min(waxed / covered / WAX_FAST, 1.0)
+        after = min(held[iy, ix, IW] / covered / WAX_FAST, 1.0)
+        pressed -= max(min(pressed, before) - after, 0.0)
+    flat[iy, ix] = pressed * (1.0 - cut)
+
+
+@_inlined
 def spread_top(held, loose, bonded, near, giving, iy, ix, rate, back, pasted):
     """Spread what lies on top at a pixel from grain to grain: take the share
     ``rate`` of what can be moved of it onto the face of the tool (``near``),
@@ -1860,7 +1885,13 @@ def rub_under(
             lifts[4] = reach
             lifts[3] = wax_grip(held, cover, flat, iy, ix, scrape)
             lifts[5] = tool[8] - load[IV]  # (the room it has left)
+            waxed = held[iy, ix, IW]
             lift(held, under, loose, bonded, load, iy, ix, lifts, share)
+            # (the tooth comes back as the wax that levelled it goes, and
+            # as far as a blade or grit cuts the paper, all of it)
+            bare_tooth(
+                flat, held, cover, iy, ix, waxed, scrape * min(lifts[1] * share, 1.0)
+            )
             pushed = slide_graphite(
                 held,
                 loose,

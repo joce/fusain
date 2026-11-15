@@ -48,7 +48,7 @@ Per pixel, all `float32`:
 | Field | What it holds |
 | --- | --- |
 | `tooth` | Height of the paper surface, 0 (valley) to 1 (peak). Set once from the paper's texture. |
-| `press` | How far the tooth has been flattened or polished here (0 to 1): by a hard tip pressed firmly, and by burnishing wax. A tooth pressed flat is level: a tip touches all of it, as it would its peaks, and in the relief its peaks have come down to its valleys. |
+| `press` | How far the tooth has been flattened or polished here (0 to 1): by a hard tip pressed firmly, and by burnishing wax. A tooth pressed flat is level: a tip touches all of it, as it would its peaks, and in the relief its peaks have come down to its valleys. Polished, it is the wax that is level, and the tooth comes back as the wax that filled it is taken off; what a hard tip crushed stays, unless a blade or grit cuts it away. |
 | `dent` | How far the paper has been indented here: the depth of a groove below the peaks of the tooth, in depths of the tooth of a paper of depth 1. By a stylus, and by the ball of a pen. |
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
 | `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. The wax counts all the wax at the pixel, wherever it lies: in what the paper holds, in a film or in paste. |
@@ -251,7 +251,23 @@ A tool is a tip plus, usually, a medium.
   on its line, and the wax with it, so the line takes pencil again). What
   they take off is on the tool, as for any eraser. The lights of a coloured
   pencil drawing are therefore kept (bare paper, or a line indented first)
-  or scratched out, as they are in life.
+  or scratched out, as they are in life. Where wax has been polished it is
+  the wax that is level, not the paper: the sheet keeps one `press`, and
+  where a pixel holds wax that press is taken to be its polish (a waxy tip
+  does not crush the tooth, a dry one does). Polished wax keeps the tooth
+  level as far as it fills it, `WAX_FAST` thick: as a tool thins it below
+  that, the polish goes, and with the wax all gone the tooth is as the
+  paper's own, but for what a dry tip crushed beyond what the wax held up
+  (that stays, as it does under an eraser on graphite). A sand eraser or a
+  knife cuts the surface of the paper as far as it scrapes, and takes the
+  crush with it. Storing the two apart would cost a float a pixel and an
+  argument through every stroke kernel, for a crush under or over wax that
+  is then taken off. So a light layer of HB shaded over a burnished dark
+  scraped back with a sand eraser or a knife touches 0.73 and 0.64 of the
+  pixels there, where it touches 0.68 of fresh paper, and is as grainy;
+  it touched 0.96 and 0.998 of them, and lay three or four times as
+  evenly, the tooth having stayed level. A vinyl eraser leaves most of the
+  wax of a burnished dark, which stays level.
 - **A tool in the hand** (built). A `Smudger` is to a `Tool` what a `Stick`
   is to a medium: the tool as it is held, with what it carries, which it
   keeps from one pass to the next until `clean()`. It lands with its load,
