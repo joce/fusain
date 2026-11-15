@@ -197,9 +197,9 @@ most of what it drags within its own width of the edge, then a faint trail.
 
 Vine charcoal, compressed charcoal and a 4B pencil on Ingres paper. Across all
 three, from the top: untouched; a stump dragged through and out onto the bare
-paper, then loaded in the tone once more and drawn down the bare paper beside
-it; a finger rubbed to and fro; a kneaded eraser pulled through three times;
-a vinyl eraser pulled through once.
+paper, then loaded on a scrap of the same medium and drawn down the bare paper
+beside it; a finger rubbed to and fro; a kneaded eraser pulled through three
+times; a vinyl eraser pulled through once.
 
 ```python
 from fusain import pastels

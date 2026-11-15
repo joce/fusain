@@ -4,9 +4,10 @@ Run from the repository root: ``python examples/charcoal.py``. Writes
 ``examples/output/charcoal.png``. Three columns: vine charcoal, compressed
 charcoal and a 4B pencil, each shaded lighter towards the bottom. Across all
 three, from the top: untouched; a stump dragged through from left to right
-and out onto the bare paper, then rubbed in the tone once more and, loaded,
-drawn down the bare paper beside it; a finger rubbed over; a kneaded eraser
-pulled through three times; a vinyl eraser pulled through once.
+and out onto the bare paper, where it leaves little, then loaded on a scrap
+of the same medium and drawn down the bare paper beside it, which takes the
+dust off it; a finger rubbed over; a kneaded eraser pulled through three
+times; a vinyl eraser pulled through once.
 """
 
 from __future__ import annotations
@@ -34,8 +35,12 @@ def main() -> None:
             sheet.smudge(
                 [(left + 20, 175 + 9 * k), (left + 262, 180 + 9 * k)], stump, 0.7
             )
-        # loaded in the tone once more, it draws on the bare paper beside it
-        sheet.smudge([(left + 180, 186), (left + 30, 184)], stump, 0.7)
+        # a stump fills slowly: rubbed all over a scrap of the same medium,
+        # it is loaded, and draws on the bare paper beside the tone
+        scrap = Sheet(160, 120, paper=papers.INGRES, seed=22 + i)
+        for angle in (35, -30):
+            scrap.shade((10, 10, 150, 110), medium, 0.7, width, angle)
+        scrap.rub((16, 16, 144, 104), stump, 0.7)
         sheet.smudge(
             [(left + 236, 222), (left + 246, 300), (left + 232, 380)], stump, 0.6
         )
