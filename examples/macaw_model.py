@@ -35,7 +35,11 @@ The model: the feathered head and body are ellipsoids melted together (a
 smooth maximum of their depths); each mandible is a surface inflated from
 its measured outline, full width along its base and thin at its cutting
 edge; the folded wing is a shell lying on the body, its lower edge standing
-proud; the tail is six stacked blades; toes and claws wrap a branch. Every
+proud; the tail is six stacked blades. The branch crosses under the bird
+at a slant, and each foot closes round it as a parrot's does (two toes
+forward, two back): a short scaly leg from the thigh's feathers onto its
+top, two toes over it and down its far side, two back down its near side,
+each tapering, swollen a little at its joints, into a curved claw. Every
 pixel seen knows where it lies on the bird, so the face, the brow, the eye,
 the face's feather rows and the bill's lines are laid on the surface and
 turn with it. The feathers are relief on the model (covert rows growing in
@@ -421,11 +425,16 @@ SHOULDER, WING_TIP = (-1.5, -0.86), (-4.42, -6.85)
 #: to show its upper side to the viewer: it hangs steeper than the wing,
 #: so that the wing's tips lie on it.
 TAIL_ROOT, TAIL_HANG, TAIL_LENGTH, TAIL_ROLL = (-3.5, -4.75), 17.0, 7.6, 62.0
-#: The branch: a point on its axis under the feet, its direction (it runs
-#: along the bird, as macaws often stand), its radius; where along it from
-#: that point each foot grips.
-BRANCH_AT, BRANCH_DIR, BRANCH_R = (-1.65, -4.32, 0.0), (0.97, -0.2, 0.06), 0.34
-FEET = (-0.42, 0.34)
+#: The branch: a point on its axis between the feet, its direction and its
+#: radius. It crosses under the bird at a slant, 45 degrees from the line
+#: of its body (a parrot perches square to a branch or, as often, turned
+#: across it), its front end toward the viewer, so that the near side of
+#: the branch is the side the bird's back is to; and it is as thick as the
+#: toes can close round, so that they wrap about two thirds of the way.
+BRANCH_AT, BRANCH_DIR, BRANCH_R = (-1.69, -4.74, 0.0), (0.71, -0.11, 0.7), 0.42
+#: Where along the branch from that point each foot grips: the near (right)
+#: one ahead, the far (left) one behind, a body's width at the legs apart.
+FEET = (0.42, -0.42)
 
 #: The feathered body: centre (x, y), radii (along, across, sideways) and
 #: the direction (degrees) its long axis runs, down from the neck: the
@@ -438,10 +447,11 @@ TORSO = [
     ((-3.2, -4.35), (1.0, 0.65, 0.68), -130.0),
     ((-2.6, -2.4), (1.9, 0.62, 0.8), -130.0),
 ]
-#: The feathered thighs, one over each foot, coming down over its top.
+#: The feathered thighs, one over each foot, coming down over its top: the
+#: far one behind, the near one ahead.
 THIGHS = [
-    ((-2.0, -3.78, 0.16), (0.5, 0.46, 0.4)),
-    ((-1.38, -3.7, -0.04), (0.46, 0.44, 0.38)),
+    ((-2.0, -3.78, -0.16), (0.5, 0.46, 0.4)),
+    ((-1.38, -3.7, 0.1), (0.46, 0.44, 0.38)),
 ]
 
 
@@ -641,45 +651,81 @@ def branch_blobs() -> list[Blob]:
     return chain(spine, r, r, "branch", side=side, overlap=6.0)
 
 
-def toe(centre, turn, along, thick, part="toes"):
-    """A toe round the branch: ``turn`` (from, to) in degrees round its
-    section (90 is the top, 0 the side toward the viewer), ``along`` (from,
-    to) the branch's axis, ``thick`` (from, to) its radius."""
+#: The toes of the near (right) foot, closed round the branch: from where
+#: each leaves the ball of the foot to its tip, how far round the branch's
+#: section it runs (degrees: 90 is the top, 0 the side toward the viewer,
+#: 180 the far side, where the bird's front is), how far along the branch
+#: its tip lies (toward the foot's outer side), how thick it is at its root,
+#: how many joints it bends at, and how far round its claw reaches. Two
+#: forward over the top and down the far side (the outer, 3, longest), two
+#: back down the near side (the outer, 4, long, the hind toe short); the
+#: left foot is their mirror image along the branch.
+TOES = ((110, 226, 0.08, 0.1, 3, 42), (110, 208, -0.22, 0.095, 2, 40),
+        (82, -30, 0.3, 0.1, 4, 48), (82, 18, -0.2, 0.092, 1, 42))  # fmt: skip
+#: The leg of the near foot: where its heel lies from the ball of the foot
+#: (behind it, above it and in toward the body's middle, hidden in the
+#: thigh's feathers), and how thick the scaly tarsus is.
+HEEL, TARSUS = (-0.12, 0.42, -0.14), 0.135
+
+
+def foot(f: float):
+    """The foot gripping ``f`` along the branch: its point on the branch's
+    axis, which way along the branch its outer side lies (+1 or -1), the
+    ball of the foot on top of the branch and the heel above it."""
+    b, up, _ = branch_frame()
+    centre = np.asarray(BRANCH_AT) + b * f
+    outward = 1.0 if f > 0 else -1.0
+    ball = centre + up * (BRANCH_R + 0.05)
+    heel = ball + np.array([HEEL[0], HEEL[1], HEEL[2] * outward])
+    return centre, outward, ball, heel
+
+
+def toe_path(centre, toe_of, outward: float, claw: bool = False, n: int = 16):
+    """A toe of the foot at ``centre`` (on the branch's axis), as it lies
+    round the branch: points along its middle (n, 3), its radius at each,
+    and the direction out from the branch there. ``outward`` is +1 or -1:
+    which way along the branch is the foot's outer side. With ``claw``, the
+    toe's claw instead, from its tip, its point dug into the bark."""
     b, up, side = branch_frame()
-    a = np.radians(np.linspace(turn[0], turn[1], 16))
-    r = BRANCH_R + np.linspace(thick[0], thick[1], 16) * 0.8
-    spine = (
-        centre
-        + np.outer(np.cos(a) * r, side)
-        + np.outer(np.sin(a) * r, up)
-        + np.outer(np.linspace(along[0], along[1], 16), b)
-    )
-    radius = np.linspace(thick[0], thick[1], 16)
-    return chain(spine, radius, radius, part, side=b, overlap=3.0)
-
-
-#: The toes of a foot: round the branch from the top (degrees), sideways
-#: along it, thickness: two over the near side, two over the far side.
-TOES = ((100, 5, 0.1, 0.14), (100, 12, -0.09, 0.14), (95, 215, 0.14, 0.125),
-        (95, 205, -0.16, 0.1))  # fmt: skip
+    start, stop, splay, thick, joints, reach = toe_of
+    t = np.linspace(0.0, 1.0, n)
+    if claw:
+        turn = stop + np.sign(stop - start) * reach * t
+        along = splay * (1.0 + 0.1 * t)
+        radius = thick * (0.64 - 0.56 * t**1.2)
+        lift = 0.55 * radius - 0.03 * t**2
+    else:
+        turn = start + (stop - start) * t
+        along = splay * t**1.3
+        # (thick at its root, thinner to its tip, a little swollen at each
+        # joint)
+        knuckle = 0.07 * np.cos(np.pi * (joints + 1) * t) ** 8 * (t > 0.15)
+        radius = thick * (1.0 - 0.25 * t) * (1.0 + knuckle)
+        lift = 0.55 * radius
+    a = np.radians(turn)
+    out = np.outer(np.cos(a), side) + np.outer(np.sin(a), up)
+    r = (BRANCH_R + lift)[:, None]
+    return centre + out * r + np.outer(along * outward, b), radius, out
 
 
 def feet_blobs() -> list[Blob]:
-    """The two feet gripping the branch, two toes on either side of it, each
-    with its claw, and the short scaly leg from the thigh."""
-    b, up, side = branch_frame()
+    """The two feet gripping the branch: each a short scaly leg from under
+    the thigh's feathers down onto the top of the branch, two toes forward
+    over the far side and two back down the near side, each toe with its
+    claw."""
+    b, _, _ = branch_frame()
     out = []
     for f in FEET:
-        c = np.asarray(BRANCH_AT) + b * f
-        top = c + up * (BRANCH_R + 0.08)
-        leg = np.linspace(top + up * 0.22 + side * 0.04, top, 6)
-        out += chain(leg, [0.15] * 6, [0.14] * 6, "toes", side=b, overlap=3.0)
-        for start, stop, along, th in TOES:
-            out += toe(c, (start, stop), (0.0, along), (th, th * 0.7))
-            end = stop + (-58 if stop < 90 else 58)
-            out += toe(
-                c, (stop, end), (along, along * 1.12), (th * 0.62, 0.018), "claws"
-            )
+        c, outward, ball, heel = foot(f)
+        leg = np.linspace(heel, ball, 7)
+        thick = np.linspace(TARSUS, 0.9 * TARSUS, 7)
+        out += chain(leg, thick, thick, "toes", side=b, overlap=2.0)
+        out.append(blob(ball, (0.14, 0.085, 0.14), "toes", along=b))
+        for toe_of in TOES:
+            spine, radius, _ = toe_path(c, toe_of, outward)
+            out += chain(spine, radius, radius, "toes", side=b, overlap=2.4)
+            spine, radius, _ = toe_path(c, toe_of, outward, claw=True)
+            out += chain(spine, radius, radius, "claws", side=b, overlap=2.4)
     return out
 
 
@@ -1676,28 +1722,32 @@ def draw_tail(model: Model, ink: Marks, rng) -> None:
 
 
 def draw_feet(model: Model, ink: Marks) -> None:
-    """The scales across the toes, as rings; the claws, dark."""
-    b, up, side = branch_frame()
+    """The scales: rings across the toes, close set, and round the leg."""
+    arc = np.radians(np.linspace(-75.0, 75.0, 7))
+    toward = np.linalg.inv(model.pose.view)[:, 2]  # (toward the viewer)
     for f in FEET:
-        c = np.asarray(BRANCH_AT) + b * f
-        for start, stop, along, th in TOES:
-            for a in np.linspace(start, stop, 8)[1:-1]:
-                ang = math.radians(a)
-                frac = (a - start) / (stop - start)
-                r = BRANCH_R + th * (1 - 0.35 * frac) * 0.8
-                centre = (
-                    c
-                    + side * r * math.cos(ang)
-                    + up * r * math.sin(ang)
-                    + b * along * frac
+        c, outward, ball, heel = foot(f)
+        for toe_of in TOES:
+            spine, radius, out = toe_path(c, toe_of, outward, n=14)
+            for k in range(1, 13):
+                across = np.cross(spine[k + 1] - spine[k - 1], out[k])
+                across /= np.linalg.norm(across)
+                ring = spine[k] + 1.04 * radius[k] * (
+                    np.outer(np.cos(arc), out[k]) + np.outer(np.sin(arc), across)
                 )
-                radial = side * math.cos(ang) + up * math.sin(ang)
-                ring = [
-                    centre + radial * th * (1 - 0.35 * frac) * q + b * th * 0.9 * w
-                    for q, w in ((1.0, -1.0), (1.25, 0.0), (1.0, 1.0))
-                ]
-                pts = model.pose.to_sheet(np.array(ring))
-                draw3d(ink, model, pts, 1.3, [0.1, 0.5, 0.1], 4.0, ("toes",))
+                pts = model.pose.to_sheet(ring)
+                draw3d(ink, model, pts, 1.2, 0.45, 3.0, ("toes",))
+        across = np.cross(heel - ball, toward)
+        across /= np.linalg.norm(across)
+        for s in np.linspace(0.15, 0.9, 6):
+            ring = (
+                ball
+                + (heel - ball) * s
+                + TARSUS
+                * (np.outer(np.sin(arc), across) + np.outer(np.cos(arc), toward))
+            )
+            pts = model.pose.to_sheet(ring)
+            draw3d(ink, model, pts, 1.2, 0.4, 3.0, ("toes",))
 
 
 # ----------------------------------------------------------------------
