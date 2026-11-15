@@ -1546,18 +1546,29 @@ def scatter(
     where: np.ndarray, spacing: np.ndarray, rng: np.random.Generator
 ) -> np.ndarray:
     """Points (N, 2) over ``where``, about ``spacing`` (pixels, a map) apart:
-    none closer than that, none of the region far from one."""
+    none closer than that, none of the region far from one.
+
+    Each pixel of the sheet has a rank and a jitter of its own, drawn whether
+    it lies in ``where`` or not, and the first points taken are those of the
+    lowest rank: a pixel added to or taken from the region adds or takes
+    away its own point, and no other pixel's point moves."""
     ys, xs = np.nonzero(where)
+    rank = rng.random(where.shape)
+    jitter = rng.random((*where.shape, 2))
     if not len(xs):
         return np.zeros((0, 2))
     r = spacing[ys, xs]
     count = int(np.sum(1.0 / r**2) * 2.2)
-    pick = rng.choice(len(xs), size=min(count, len(xs)), replace=False)
+    pick = np.argsort(rank[ys, xs])[: min(count, len(xs))]
     cell = float(r.min()) / 1.5
     grid: dict[tuple[int, int], list[int]] = {}
     pts = []
     for i in pick:
-        x, y, ri = xs[i] + rng.random(), ys[i] + rng.random(), r[i]
+        x, y, ri = (
+            xs[i] + jitter[ys[i], xs[i], 0],
+            ys[i] + jitter[ys[i], xs[i], 1],
+            r[i],
+        )
         cx, cy = int(x / cell), int(y / cell)
         reach = int(math.ceil(ri / cell))
         if any(
@@ -1591,6 +1602,13 @@ def lay_tiles(model: Model, where: np.ndarray, size_px: np.ndarray, rng) -> Tile
     direction, short = flow2d(model)
     seeds = scatter(where, np.maximum(0.62 * size_px * np.sqrt(short), 2.5), rng)
     h, w = where.shape
+    # (what each feather draws is its seed's pixel's, drawn for every pixel
+    # of the sheet: no feather's shape moves another's)
+    stretch, broad, luck = (
+        rng.uniform(0.85, 1.15, (h, w)),
+        rng.uniform(0.75, 0.95, (h, w)),
+        rng.random((h, w)),
+    )
     best = np.full((h, w), -9.0)
     which = np.full((h, w), -1)
     along = np.zeros((h, w))
@@ -1598,8 +1616,8 @@ def lay_tiles(model: Model, where: np.ndarray, size_px: np.ndarray, rng) -> Tile
     for k, (x, y) in enumerate(seeds):
         ix, iy = int(x), int(y)
         d = direction[iy, ix]
-        length = size_px[iy, ix] * short[iy, ix] * rng.uniform(0.85, 1.15)
-        width = size_px[iy, ix] * rng.uniform(0.75, 0.95)
+        length = size_px[iy, ix] * short[iy, ix] * stretch[iy, ix]
+        width = size_px[iy, ix] * broad[iy, ix]
         r = int(length + width) + 2
         x0, x1, y0, y1 = (
             max(ix - r, 0),
@@ -1612,7 +1630,7 @@ def lay_tiles(model: Model, where: np.ndarray, size_px: np.ndarray, rng) -> Tile
         ta = ((gx - x) * -d[1] + (gy - y) * d[0]) / (0.5 * width)
         tip = 0.5 * np.sqrt(np.clip(1 - ta**2, 0, 1))
         cover = (sa >= -1.0) & (sa <= tip) & (np.abs(ta) <= 1) & where[y0:y1, x0:x1]
-        prio = sa + 0.02 * rng.random()
+        prio = sa + 0.02 * luck[iy, ix]
         take = cover & (prio > best[y0:y1, x0:x1])
         best[y0:y1, x0:x1] = np.where(take, prio, best[y0:y1, x0:x1])
         which[y0:y1, x0:x1] = np.where(take, k, which[y0:y1, x0:x1])
