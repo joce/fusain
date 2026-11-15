@@ -660,8 +660,15 @@ kernel and its own layer:
   seventh of the firmest) and on a slow unevenness along the line. It is a
   clear dye: lines that cross and layers of hatching darken towards black.
 - **It is a stain** in the paper, rendered under whatever the paper carries,
-  and no tool touches it: an eraser takes the pencil sketch and leaves the
-  ink. A pencil draws over it as on bare paper.
+  and no rubber eraser touches it: an eraser takes the pencil sketch and
+  leaves the ink. A pencil draws over it as on bare paper. What cuts the
+  surface of the paper takes the ink stained into it: a knife or a sand
+  eraser, by the share it scrapes of what it lifts of what the paper holds
+  (`scrape_ink`), and the ink is then on the tool, counted with what it
+  took. Two layers of firm black hatching (a fifth of the paper's tone): a
+  knife drawn across them at 0.9 scratches a line back to 0.98 of the
+  paper's tone, leaving half a hundredth of the ink, and one rub of a sand
+  eraser takes nine tenths of it, to 0.79. (No tool touched the ink.)
 - **The ball skids** on a thick film of pigment and on wax, and lays little
   there; over a light pencil sketch it writes as on bare paper.
 - **The ball presses a groove** (`dent`), as a stylus does but less deep

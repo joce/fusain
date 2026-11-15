@@ -1696,6 +1696,25 @@ def bare_tooth(flat, held, cover, iy, ix, waxed, cut):
 
 
 @_inlined
+def scrape_ink(ink, inked, load, iy, ix, cut):
+    """Cut the share ``cut`` of the surface of the paper at a pixel off
+    onto a tool (``load``), with the ink stained into it: that share of the
+    ink, which the tool carries as it carries pigment. (The colour it
+    bronzes is the ink's on the paper, and goes with it.) ``ink`` has no
+    rows if no pen has drawn on the sheet."""
+    if cut <= 0.0 or ink.shape[0] == 0 or ink[iy, ix, IV] <= 0.0:
+        return
+    for part in range(LOOSE):
+        taken = ink[iy, ix, part] * cut
+        ink[iy, ix, part] -= taken
+        load[part] += taken
+    for part in range(IB, INK):
+        ink[iy, ix, part] -= ink[iy, ix, part] * cut
+    if ink[iy, ix, IV] <= 0.0:  # (scraped clean)
+        inked[iy, ix] = 0.0
+
+
+@_inlined
 def spread_top(held, loose, bonded, near, giving, iy, ix, rate, back, pasted):
     """Spread what lies on top at a pixel from grain to grain: take the share
     ``rate`` of what can be moved of it onto the face of the tool (``near``),
@@ -1797,6 +1816,8 @@ def rub_under(
     under,
     loose,
     bonded,
+    ink,
+    inked,
     carried,
     giving,
     tool,
@@ -1814,9 +1835,9 @@ def rub_under(
     when it is full]; ``now`` is [x, y,
     heading (x, y), its pressure, and, for a tool landing or lifting, the x
     and y of where it does so (else NaN): it rubs then only the paper it
-    covers there]. ``carried``, ``flat`` and ``streaks`` are as for
-    :func:`rub_stroke`, and ``giving`` is room to work in: two rows as long
-    as those of ``carried``.
+    covers there]. ``carried``, ``flat``, ``ink``, ``inked`` and
+    ``streaks`` are as for :func:`rub_stroke`, and ``giving`` is room to
+    work in: two rows as long as those of ``carried``.
 
     To what it has lifted (its load) the tool adds the less the fuller it
     is, and it gives the dust of it to bare tooth only (:func:`hunger`).
@@ -1888,10 +1909,11 @@ def rub_under(
             waxed = held[iy, ix, IW]
             lift(held, under, loose, bonded, load, iy, ix, lifts, share)
             # (the tooth comes back as the wax that levelled it goes, and
-            # as far as a blade or grit cuts the paper, all of it)
-            bare_tooth(
-                flat, held, cover, iy, ix, waxed, scrape * min(lifts[1] * share, 1.0)
-            )
+            # as far as a blade or grit cuts the paper, all of it, with the
+            # ink stained into it)
+            cut = scrape * min(lifts[1] * share, 1.0)
+            bare_tooth(flat, held, cover, iy, ix, waxed, cut)
+            scrape_ink(ink, inked, load, iy, ix, cut)
             pushed = slide_graphite(
                 held,
                 loose,
@@ -1950,6 +1972,8 @@ def put_tool(
     under,
     loose,
     bonded,
+    ink,
+    inked,
     carried,
     giving,
     tool,
@@ -1977,6 +2001,8 @@ def put_tool(
             under,
             loose,
             bonded,
+            ink,
+            inked,
             carried,
             giving,
             tool,
@@ -1996,6 +2022,8 @@ def rub_stroke(
     under,
     loose,
     bonded,
+    ink,
+    inked,
     xs,
     ys,
     pressures,
@@ -2044,6 +2072,13 @@ def rub_stroke(
     on a film that lies over dust,
     and on dust that is set: what is loose in the layer underneath it
     reaches only as far as those do not cover it (:func:`reach_under`).
+
+    As far as a tool scrapes, it cuts the surface of the paper too (the
+    share ``scrape`` of its lift of what the paper holds): the tooth it
+    bares is the paper's own again (:func:`bare_tooth`), and the ink of pens
+    stained into it (``ink``, packed as the ink of a sheet is, and
+    ``inked``; arrays with no rows if no pen has drawn) comes off with it,
+    onto the tool (:func:`scrape_ink`). No other tool touches the ink.
 
     ``carried`` is what the tool carries, three rows packed as dust is with
     the volume of paste and the volume of wax after ([K (N bands), S,
@@ -2096,6 +2131,8 @@ def rub_stroke(
                     under,
                     loose,
                     bonded,
+                    ink,
+                    inked,
                     carried,
                     giving,
                     gear,
@@ -2112,6 +2149,8 @@ def rub_stroke(
                     under,
                     loose,
                     bonded,
+                    ink,
+                    inked,
                     carried,
                     giving,
                     gear,

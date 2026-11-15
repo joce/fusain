@@ -8,6 +8,18 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A knife or a sand eraser takes the ink of a ballpoint with the surface
+  of the paper (fusain-d6p). The ink is a stain in the paper, and no tool
+  touched it: a knife drawn through ink left it as it was. What cuts the
+  surface of the paper (as far as a tool scrapes, by that share of its lift
+  of what the paper holds) now takes the ink stained into it, onto the
+  tool, which counts it with what it took (`Sheet.erase` returns it). Two
+  layers of firm black hatching, at a fifth of the paper's tone: a knife
+  at 0.9 scratches a line through them back to 0.98 of the paper's tone,
+  leaving a two-hundredth of the ink on it, and one rub of a sand eraser
+  takes nine tenths of the ink of a patch, which goes to 0.79 of the
+  paper's tone. No rubber eraser and no stump touches the ink, as before.
+
 - Where burnished wax is erased or scraped off, the tooth is there again
   for what is drawn next (fusain-6k1). Polishing wax raised the `press` of
   the sheet, as a hard tip that crushes the tooth does, and it stayed when

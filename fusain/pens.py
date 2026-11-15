@@ -6,7 +6,8 @@ A ballpoint is not a stick that the paper wears down: its ball rolls a
 paste of dye onto the paper at a steady rate. Its line is even, about as
 wide as the ball and nearly as dark at a light touch as at a firm one; the
 ink is clear, so lines that cross and layers of hatching darken; and it
-soaks into the paper, where no eraser reaches it. The ball gathers ink as it
+soaks into the paper, where no rubber eraser reaches it (a knife or a sand
+eraser takes it with the surface of the paper). The ball gathers ink as it
 rolls and leaves a blob where the line turns sharply and, now and then,
 where it starts, the lighter the lighter the line (``blots=0`` for a pen
 that never blots). Pressed firmly it leaves a groove, which a pencil shaded
