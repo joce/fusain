@@ -173,20 +173,77 @@ def test_a_flat_end_is_cut_square_where_the_path_curves_sharply_into_it():
         assert drawn[ys[last], xs[last]].mean() == pytest.approx(full, rel=0.12)
 
 
-@pytest.mark.xfail(
-    reason="a flat end on a hook shorter than half the tip cuts into the stroke"
-)
 @pytest.mark.parametrize("leg", [2.0, 4.0, 6.0])
 def test_a_flat_end_on_a_short_hook_leaves_the_stroke_before_it_whole(leg):
     # the path ends a few pixels after a square corner: the cut is taken
-    # across those few pixels, and the tip is cut by it for a whole tip's
-    # length before the end, so the stroke before the corner loses part of
-    # the half of it that lies past that line (it should be as strong as
-    # the other half, or stronger, being on the inside of the bend)
+    # across those few pixels, and the tip was cut by it for a whole tip's
+    # length before the end, so the stroke before the corner lost part of
+    # the half of it that lies past that line (0.53 to 0.87 of the other
+    # half; it is as strong, or stronger, being on the inside of the bend)
     drawn, _ = _hooked(leg)
     before = slice(188, 196)  # 4 to 12 pixels before the corner
     inside, outside = drawn[70:78, before].mean(), drawn[82:90, before].mean()
     assert inside > 0.95 * outside
+
+
+def _hook(leg, width, up, at_end, ends) -> tuple[np.ndarray, float]:
+    """What a stroke along y = 80 leaves that turns square up (or down) at
+    x = 200 for ``leg`` pixels and ends there, or starts there and is drawn
+    the other way; seen as if it had turned up. And what it laid."""
+    points = [(60.0, 80.0), (200.0, 80.0), (200.0, 80.0 - leg if up else 80.0 + leg)]
+    points = points if leg > 0 else points[:2]
+    sheet = _sheet()
+    path = Polyline(np.array(points if at_end else points[::-1]))
+    laid = sheet.stroke(path, PASTEL, 0.6, width, ends=ends)
+    _laid_is_on_the_sheet(sheet, laid)
+    drawn = sheet.pigment().astype(np.float64)
+    return (drawn if up else drawn[::-1]), laid
+
+
+@pytest.mark.parametrize("width", [12.0, 24.0])
+@pytest.mark.parametrize("twelfths", [1.0, 2.0, 3.0, 4.5])
+@pytest.mark.parametrize("up", [True, False], ids=["up", "down"])
+@pytest.mark.parametrize("at_end", [True, False], ids=["end", "start"])
+def test_a_flat_end_on_a_short_hook_cuts_only_what_is_past_the_stroke(
+    width, twelfths, up, at_end
+):
+    # a hook of a twelfth of the tip to three eighths of it, where the
+    # stroke ends or where it starts, turning either way
+    leg = width * twelfths / 12.0
+    flat, _ = _hook(leg, width, up, at_end, "flat")
+    round_, _ = _hook(leg, width, up, at_end, "round")
+    ys, xs = np.mgrid[0:160, 0:320] + 0.5
+    # the band of the long leg, from a tip before the corner to a spacing
+    # before it (the tip goes round the corner from a sample to the next),
+    # short of its rim: all that the stroke has there with round ends (it
+    # had 0.85 to 0.99 of it, and at its worst pixel as little as nothing)
+    band = (xs > 200 - width) & (xs < 199 - width / 8) & (abs(ys - 80) < width / 2 - 1)
+    assert flat[band] == pytest.approx(round_[band], rel=1e-6)
+    # past the line across the end of the hook there is that band, and
+    # nothing else: nothing beyond the corner, and nothing beside the band
+    past = ys < 80 - leg - 0.5
+    assert not flat[past & (xs > 200.5)].any()
+    assert not flat[past & (abs(ys - 80) > width / 2 + 0.5)].any()
+    # and before that line the hook is as it is with round ends (a hook of
+    # two samples or more: the line is across the last two)
+    if leg >= width / 4:
+        hook = (ys > 80 - leg + 0.5) & (ys < 80) & (abs(xs - 200) < width / 2 - 1)
+        assert flat[hook] == pytest.approx(round_[hook], rel=1e-6)
+
+
+def test_a_flat_end_changes_by_degrees_as_a_hook_grows():
+    # from no hook, where the cut is across the long leg, to one of half a
+    # tip, where it is across the hook and clear of the long leg: what the
+    # stroke lays grows with the hook, a little at a time (a quarter of the
+    # tip's disc is 113 pixels, and the half of the band the old cut took
+    # at the worst was 100)
+    full = _hooked(40.0)[1]  # (what a pass lays on a pixel)
+    legs = np.arange(0.0, 14.01, 0.25)
+    laid = [_hook(leg, 24.0, True, True, "flat")[1] / full for leg in legs]
+    assert np.abs(np.diff(laid)).max() < 30
+    assert laid[-1] > laid[0]
+    # the least of hooks is nearly a straight stroke
+    assert laid[1] == pytest.approx(laid[0], abs=5)
 
 
 @pytest.mark.parametrize("length", [1e-3, 1e-6])

@@ -422,7 +422,9 @@ class Sheet:
         outline of the tip, which reaches half its length past the ends of
         the path; or ``"flat"``, cut square across at the ends of the path,
         as the end or the side of a stick drawn and lifted cleanly leaves
-        it: a flat stroke is as long as its path. A pair, such as
+        it: a flat stroke is as long as its path (the cut takes what lies
+        beyond the stroke, so where the path turns just before it ends, the
+        stroke before the turn stays whole). A pair, such as
         ``("flat", "round")``, says it for the start and for the end. Either
         way the tip lays as much where it lands and where it lifts as
         anywhere along the stroke, so a stroke is as strong at its ends as
