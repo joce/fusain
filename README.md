@@ -134,7 +134,7 @@ scribbled over them, the paper left for every white.*
 
 Top: 4H, 2H, HB, 2B, 4B, 6B and 8B, each shaded with the pressure rising from
 left to right. Middle left: HB at a light pressure in 1, 2, 4 and 8 layers.
-Middle: a 4B held on its side (`tilt=1`), which marks a broad, soft,
+Middle: a 4B held on its side (`tilt=1`), which marks a broad, soft-edged,
 grainy band. Middle right: 2B lines drawn lightly, firmly and hard, and
 cross-hatching. Bottom, what the pencil does to the paper. Left: five lines
 indented with a stylus, lightest to firmest, under a 2B shaded lightly (left
@@ -151,10 +151,11 @@ sheet.indent([(100, 300), (400, 320)], pressure=0.7)   # a stylus: it lays nothi
 sheet.shade((80, 260, 420, 360), pencils.B2, pressure=0.5)   # the groove stays the white of the paper
 ```
 
-A tip rides on the paper either side of a groove and marks only what it
-reaches down to: indent whiskers, grass or a highlight firmly before shading
-and they stay white; a groove indented lightly fills in under a soft pencil
-pressed hard. A firm ballpoint line is such a groove too. And a hard pencil
+A tip wider than a groove rides on the paper either side and marks only
+what it reaches down to: indent whiskers, grass or a highlight firmly before
+shading and they stay white; a groove indented lightly fills in under a soft
+pencil pressed hard. A point narrower than the groove follows it down and
+marks its floor. A firm ballpoint line is such a groove too. And a hard pencil
 pressed firmly flattens the tooth (`Sheet.press`): what is shaded over it
 afterwards lies evenly, without the grain, and the paper bites it less.
 
@@ -207,8 +208,10 @@ flecks of the paper close and the colour is deeper, more saturated, smoother
 and a little glossy. One firm layer of it leaves a fifth of the flecks, two
 next to none; pressed lightly it does nothing. It stirs what it goes over,
 so two colours laid over each other become one, and an edge it is drawn
-across is dragged out by a tip's width or so. (A white or a light pencil
-pressed hard burnishes too, less thoroughly, and adds its colour.)
+across is dragged out by a tip's width or so. Coloured pencil or crayon laid
+over pastel or charcoal lies on the dust as a film, and the blender works
+that into the tooth as well. (A white or a light pencil pressed hard
+burnishes too, less thoroughly, and adds its colour.)
 
 Wax holds against an eraser. A light layer of coloured pencil comes off a
 vinyl eraser fairly well; a dense one comes off by degrees, a burnished one
@@ -309,8 +312,13 @@ print(pencil.width)                       # wider than 2 now
 pencil.sharpen()
 
 vine = Stick(charcoal.VINE, width=6, lead=6, side=90)   # a piece of charcoal 90 pixels long
-sheet.stroke([(100, 500), (700, 500)], vine, tilt=1)    # laid flat: a band 90 pixels wide
+sheet.stroke([(100, 500), (700, 500)], vine, tilt=1)    # laid flat: an even band 90 pixels wide
 ```
+
+The side of a stick of charcoal, pastel or crayon lies flat along its length
+(`Medium.flat_side`), so its band is even across and ends where the stick
+does; the side of a pencil is the cone its sharpening bared, and its band is
+soft at the edges.
 
 ![A point that wears](examples/output/tips.png)
 
@@ -335,7 +343,7 @@ sheet.stroke(path, Stick(charcoal.VINE, 6, 6, side=110), tilt=lambda u: u)  # tu
 Top: round and flat ends between the same two ticks, and short dabs of a
 broad soft pastel beside a long stroke of it. Middle: strokes that narrow as
 they recede, a fence going away, and a 6B stroke that tapers. Bottom: a
-piece of vine charcoal laid flat, a band as wide as it is long; the same
+piece of vine charcoal laid flat, an even band as wide as it is long; the same
 turned from its end onto its side as it goes; and a soft pastel laid flat in
 flat-ended blocks.
 

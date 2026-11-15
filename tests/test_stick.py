@@ -1,11 +1,23 @@
 """A stick: a medium with a tip that wears (behaviour 6 of docs/design.md)."""
 
+import math
 from typing import Any
 
 import numpy as np
 import pytest
 
-from fusain import Medium, Paper, Sheet, Stick, charcoal, pastels, pencils
+from fusain import (
+    Medium,
+    Paper,
+    Sheet,
+    Stick,
+    charcoal,
+    crayons,
+    papers,
+    pastels,
+    pencils,
+)
+from fusain import _engine as eng
 
 LEVEL = Paper(depth=0)  # the width of a line shows exactly
 
@@ -172,3 +184,200 @@ def test_a_stick_checks_what_it_is_given():
             draw()
     assert not sheet.pigment().any() and stick.worn == 0
     assert repr(stick) == "Stick(HB pencil, width=2.00, lead=12, side=10)"
+
+
+# --------------------------------------------------------------------------
+# the side of a stick laid flat (fusain-bqe)
+
+
+def _across(sheet, columns=slice(120, 280)) -> np.ndarray:
+    """What lies across a band drawn along y = 100, per row, smoothed over
+    five rows (the streaks of a lead run along it), as a share of its
+    middle."""
+    raw = sheet.pigment()[:, columns].astype(np.float64).mean(axis=1)
+    smooth = np.convolve(raw, np.ones(5) / 5, "same")
+    return smooth / smooth[82:118].mean()
+
+
+def _flat_and_edge(across: np.ndarray, side=90) -> tuple[float, float]:
+    """The share of the band (``side`` rows about row 100) that has 0.9 of
+    its middle or more, and over how many rows it falls from there to 0.1,
+    either side on average."""
+    rows = np.arange(across.size) - 100
+    edges = []
+    for way in (-1, 1):
+        out = rows * way > 0
+        full = (rows * way)[out & (across >= 0.9)].max()
+        edges.append((rows * way)[out & (across >= 0.1)].max() - full)
+    return float((across >= 0.9).sum() / side), float(np.mean(edges))
+
+
+@pytest.mark.parametrize(
+    "medium", [charcoal.VINE, charcoal.COMPRESSED, pastels.soft("#203050")]
+)
+def test_the_side_of_a_stick_laid_flat_lays_an_even_band(medium):
+    # (its footprint was an ellipse: the band fell off from its middle, 0.43
+    # of it at 0.9 of the middle or more, and over 23.5 rows to 0.1 at
+    # either edge)
+    assert medium.flat_side
+    sheet = Sheet(400, 200, paper=LEVEL, seed=3)
+    stick = Stick(medium, width=6, lead=6, side=90)
+    laid = sheet.stroke([(60, 100), (340, 100)], stick, 0.6, tilt=1.0)
+    flat, edge = _flat_and_edge(_across(sheet))
+    assert flat > 0.85 and edge < 6.0
+    assert laid == pytest.approx(sheet.pigment().sum(dtype=np.float64), rel=1e-5)
+    # on a paper with a tooth too (0.28 to 0.31 before)
+    rough = Sheet(400, 200, paper=papers.CARTRIDGE, seed=3)
+    rough.stroke([(60, 100), (340, 100)], Stick(medium, 6, 6, 90), 0.6, tilt=1.0)
+    assert _flat_and_edge(_across(rough))[0] > 0.6
+
+
+def test_the_side_of_a_pencil_is_a_cone_and_its_band_fades():
+    assert not pencils.B2.flat_side and not charcoal.PENCIL.flat_side
+    assert pastels.hard("#203050").flat_side and crayons.wax("#c0392b").flat_side
+    sheet = Sheet(400, 200, paper=LEVEL, seed=3)
+    sheet.stroke([(60, 100), (340, 100)], pencils.B2, 0.6, 18.0, 1.0)
+    flat, edge = _flat_and_edge(_across(sheet))
+    assert flat < 0.5 and edge > 15.0
+    # the same lead as a stick laid flat would lay an even band
+    stick = pencils.B2.with_(flat_side=True)
+    even = Sheet(400, 200, paper=LEVEL, seed=3)
+    even.stroke([(60, 100), (340, 100)], stick, 0.6, 18.0, 1.0)
+    assert _flat_and_edge(_across(even))[0] > 0.85
+    with pytest.raises(TypeError, match="flat_side must be True or False"):
+        pencils.B2.with_(flat_side=1)
+
+
+def test_a_band_laid_flat_starts_and_stops_square():
+    """The side of a stick lands and lifts all along its length at once."""
+    sheet = Sheet(400, 200, paper=LEVEL, seed=3)
+    sheet.stroke([(100, 100), (300, 100)], Stick(charcoal.VINE, 6, 6, 90), 0.6, tilt=1)
+    marked = sheet.pigment() > 0
+    starts = [int(np.argmax(marked[y])) for y in range(58, 142)]
+    stops = [int(marked.shape[1] - np.argmax(marked[y, ::-1])) for y in range(58, 142)]
+    # (straight across, within a pixel, but within its thickness of the ends
+    # of the band, where it is rounded)
+    assert max(starts) - min(starts) <= 1 and max(stops) - min(stops) <= 1
+    assert min(starts) >= 95 and max(stops) <= 305
+
+
+def test_a_band_laid_flat_is_as_even_where_the_stroke_turns():
+    """Where the stroke turns, the side of the stick on the outside of the
+    turn slides further than its middle, and lays as far as it slides."""
+    sheet = Sheet(400, 400, paper=LEVEL, seed=3)
+    stick = Stick(charcoal.VINE, width=6, lead=6, side=90)
+    angles = np.linspace(0.0, 0.5 * np.pi, 40)
+    path = [(100 + 150 * np.cos(a), 100 + 150 * np.sin(a)) for a in angles]
+    laid = sheet.stroke(path, stick, 0.6, tilt=1.0)
+    yy, xx = np.mgrid[0:400, 0:400]
+    radius = np.hypot(xx + 0.5 - 100, yy + 0.5 - 100)
+    angle = np.arctan2(yy + 0.5 - 100, xx + 0.5 - 100)
+    away = (angle > 0.35) & (angle < 1.2)  # (from its ends)
+    pigment = sheet.pigment().astype(np.float64)
+
+    def within(low, high) -> float:
+        return float(pigment[away & (radius >= low) & (radius < high)].mean())
+
+    middle = within(140, 160)
+    # (were each part to lay as far as the middle went, the inside would
+    # have 1.10 of the middle and the outside 0.84; now 0.95 and 0.96)
+    assert within(110, 130) == pytest.approx(middle, rel=0.1)
+    assert within(170, 190) == pytest.approx(middle, rel=0.1)
+    assert laid == pytest.approx(pigment.sum(), rel=1e-5)
+
+
+#: Paths that turn as sharply as a path can: doubling back a little off the
+#: line, exactly on it, with a needle-sharp hairpin, and in a zigzag.
+SHARP = {
+    "cusp": [(100, 150), (200, 150), (100, 150.5)],
+    "reversal": [(100, 150), (200, 150), (100, 150)],
+    "needle": [(100, 150), (200, 150), (200.2, 150.2), (100, 150.4)],
+    "zigzag": [(60, 100), (110, 200), (160, 100), (210, 200), (260, 100), (310, 200)],
+}
+
+
+@pytest.mark.parametrize("film", [False, True], ids=["over dust", "over a film"])
+@pytest.mark.parametrize("path", SHARP.values(), ids=SHARP.keys())
+@pytest.mark.parametrize(
+    "medium, width",
+    [
+        (charcoal.COMPRESSED, 6.0),
+        (pencils.B2, 6.0),
+        (Stick(pastels.soft("#203050"), 8, 8, 60), None),
+    ],
+    ids=["compressed charcoal", "a pencil", "a pastel"],
+)
+def test_the_side_of_a_tip_turned_sharply_leaves_nothing_below_nothing(
+    medium, width, path, film
+):
+    # (a part of the tip was laid as far as it slid in a step, which at a
+    # cusp is tens of times a pass: it pressed in more dust than there was,
+    # and left the dust as low as -10)
+    sheet = Sheet(400, 300, seed=1)
+    sheet.shade((20, 20, 380, 280), pastels.soft("#e0c080"), 0.7, width=12)
+    if film:
+        sheet.shade((20, 20, 380, 280), crayons.wax("#2456a6"), 0.8, width=10)
+    before = sheet.pigment().sum(dtype=np.float64)
+    laid = sheet.stroke(path, medium, 1.0, width, tilt=1.0)
+    for name in ("held", "under", "loose", "bonded", "cover", "press"):
+        assert getattr(sheet, name).min() > -1e-6, name
+    assert sheet.pigment().sum(dtype=np.float64) == pytest.approx(before + laid)
+
+
+def test_a_stick_drawn_to_and_fro_does_not_turn_round():
+    """A tip is the same turned half round: where a stroke doubles back, the
+    hand draws it back, and its band is even up to where it turns."""
+    assert eng.turning(np.array([0.0, 5.0, 0.0]), np.zeros(3), 1) == 0.0
+    sheet = Sheet(400, 300, paper=LEVEL, seed=1)
+    stick = Stick(charcoal.VINE, 6, 6, 60)
+    laid = sheet.stroke([(100, 150), (250, 150), (100, 150)], stick, 0.6, tilt=1.0)
+    along = sheet.pigment()[125:175].astype(np.float64).mean(axis=0)
+    # (it piled up where it turned: 0.71 at most, against 0.51 out and back)
+    assert along[150:240].min() > 0.95 * along[150:240].max()
+    assert sheet.pigment().max() < 1.2 * along[150:240].max()
+    assert not along[254:].any()  # and it ends within its thickness
+    assert laid == pytest.approx(sheet.pigment().sum(dtype=np.float64), rel=1e-5)
+
+
+def test_a_shading_lays_the_bands_of_a_stick_laid_flat_side_by_side(monkeypatch):
+    def gaps(medium) -> list[float]:
+        sheet, centres = Sheet(300, 300, seed=2), []
+        draw = sheet.stroke
+
+        def recording(path, medium, pressure, width, tilt, ends):
+            centres.append(float(np.mean([p[1] for p in path])))
+            return draw(path, medium, pressure, width, tilt, ends)
+
+        monkeypatch.setattr(sheet, "stroke", recording)
+        sheet.shade((20, 20, 280, 280), medium, 0.6, 6.0, 0.0, hand=0.0, tilt=1.0)
+        return list(np.diff(centres))
+
+    # its bands abut, and only their rounded ends overlap, as a point's
+    # strokes do: 30 - 6 + 0.55 * 6 apart; a pencil's soft bands half
+    assert np.allclose(gaps(pastels.soft("#203050")), 27.3)
+    assert np.allclose(gaps(pencils.B2), 0.55 * 30)
+
+
+@pytest.mark.parametrize("seed", range(3))
+def test_the_span_of_a_row_misses_no_pixel_under_the_side_of_a_stick(seed):
+    rng = np.random.default_rng(seed)
+    now = np.zeros(15)
+    now[13] = 1.0
+    covered, spanned, square = 0, 0, 0
+    for _ in range(100):
+        long = rng.choice([0.6, 1.5, 3.5, 6.0]) * rng.uniform(0.9, 1.1)
+        wide = long + rng.choice([0.0, 2.0, 20.0, 60.0]) * rng.uniform(0.9, 1.1)
+        turn = rng.choice([0.0, 0.5 * math.pi, rng.uniform(0.0, 2.0 * math.pi)])
+        x, y = rng.uniform(-3.0, 3.0, 2)
+        now[:7] = [x, y, math.cos(turn), math.sin(turn), wide, long, 0.35]
+        x0, x1 = math.floor(x - wide), math.ceil(x + wide)
+        for iy in range(math.floor(y - wide), math.ceil(y + wide)):
+            dy = iy + 0.5 - y
+            xa, xb = eng.span_of(now, dy, 0.0, 1.0, 1.0, x0, x1)
+            assert (x0 <= xa and xb <= x1) or xa == xb  # (or none)
+            spanned, square = spanned + max(xb - xa, 0), square + x1 - x0
+            for ix in range(x0, x1):
+                if eng.bearing_at(ix + 0.5 - x, dy, now)[1] > 0.0:
+                    assert xa <= ix < xb, (wide, long, turn, ix, iy)
+                    covered += 1
+    assert 5000 < covered <= spanned < 0.6 * square

@@ -38,7 +38,8 @@ class Stick:
         as many times its point as its medium says
         (:attr:`fusain.Medium.side`): five for a pencil, whose side is the
         lead its sharpening bared; for a piece of charcoal or pastel laid
-        flat, give its length::
+        flat, which lays a band even across (:attr:`fusain.Medium.flat_side`),
+        give its length::
 
             stick = Stick(charcoal.VINE, width=6, lead=6, side=90)
             sheet.stroke(path, stick, tilt=1)   # a band 90 pixels wide

@@ -106,11 +106,18 @@ each is not. The rule is that a medium lies on what it meets:
 The surface has two fields because a tip meets it in two ways. Where a
 whole area has been pressed flat, the tip that comes next rides on it: what
 matters is that it is level, so to a tip `press` raises the low ground to
-the peaks, and the tip touches all of it. A groove is narrower than the tip, which rides
-on the paper either side of it: what matters there is how far below that the
-floor is, so `dent` is a depth, and nothing in a groove stands higher than
-`1 - dent / depth` (the peaks of this paper's tooth being at 1). A light dent only takes the
-peaks off; a deep one is a level floor below the valleys. Both show in the
+the peaks, and the tip touches all of it. A groove is often narrower than
+the tip, which then rides on the paper either side of it: what matters
+there is how far below that the floor is, so `dent` is a depth, and
+nothing in a groove stands higher than `1 - dent / depth` (the peaks of
+this paper's tooth being at 1). A light dent only takes the peaks off; a
+deep one is a level floor below the valleys. A tip rests on the highest of
+the paper it covers, so one narrower than the groove under it goes down
+into it, as far as all it covers is indented; the sheet keeps no width of
+a groove, since the dent around the tip says it, for grooves of any width,
+crossed or pressed over each other. Where the point that pressed it took
+the peaks off, the floor is flat, as a tooth pressed flat is, and bites a
+dry medium as little. Both show in the
 relief the lamp lights. There a flattened patch has been pressed down: its
 peaks come down towards its valleys, by `press` of their height, so that
 pressed flat it is level with them, a little below the paper around it,
@@ -169,15 +176,29 @@ spectra.
 A tool is a tip plus, usually, a medium.
 
 - **Tilt** (built). A stick held on its side marks with the side of its lead:
-  an ellipse across the stroke, as wide as the length of the side that lies
+  a band across the stroke, as wide as the length of the side that lies
   on the paper, whose weight is spread over more paper, so the mark is
-  lighter, grainier and soft at the edges. How long the side is depends on
+  lighter and grainier. How long the side is depends on
   the stick: the lead a pencil's sharpening bared is about five times its
   point, a piece of vine charcoal laid flat eight times its end. A medium
   says it as a multiple of the point (`Medium.side`), and a `Stick` can give
   it in pixels (`Stick(charcoal.VINE, width=6, lead=6, side=90)`), for a
   band as wide as the stick is long. Part way over, the mark is the point
-  and that share of what the side adds.
+  and that share of what the side adds. What the side is decides how it
+  bears (`Medium.flat_side`). The side of a pencil is the cone of lead its
+  sharpening bared, which bears hardest along its middle: an ellipse across
+  the stroke, its band darkest down the middle and soft at the edges. A
+  stick of charcoal, pastel or crayon laid flat bears alike all along its
+  length: its band is even across and ends where the stick does, rounded
+  within the stick's thickness. The side of a stick of vine charcoal 90
+  pixels long and 6 thick, on a level paper, lays 0.92 of its band at 0.9
+  of its middle or more, and falls from there to a tenth in 3.5 pixels;
+  as an ellipse it laid 0.43, and fell over 23.5 (on cartridge paper 0.70,
+  from 0.28 to 0.31, for charcoal and pastel alike). Where the band is
+  put down and lifted it is cut straight across, as the side of a stick
+  lands and lifts all along its length at once, and a shading lays such
+  bands side by side, overlapping only by their rounded ends. (It was an
+  ellipse for every medium.)
 - **Wear** (built). A `Stick` is a medium in the hand, with the state of its
   tip. A point is a cone, which loses volume as the cube of where it is cut:
   the cube of the flat's width grows with the volume the tip has laid, up to
@@ -191,15 +212,20 @@ A tool is a tip plus, usually, a medium.
   it is pressed hard and as the paper gives (two depths of a tooth at full
   pressure on a paper of middling give), shallower towards its rim; the
   deepest pass is what stays. A pencil, a crayon or charcoal shaded over it
-  rides on the paper either side and marks only what it reaches down to: on
-  cartridge paper a 2B at any pressure lays nothing in a groove indented at
-  0.7, and a 6B pressed hard an eighth of what it lays beside it; in one
-  indented at 0.3 a 2B shaded lightly lays a third and a 6B pressed hard
-  all but all; a hard lead reaches less far down than a soft one. That
-  is how whiskers and fine highlights are kept in a pencil drawing. What was
-  drawn there before goes down with the paper, and no eraser takes a groove
-  out. (A tip narrower than a groove would follow it down; the model does
-  not know how wide the groove is, so such a tip skips it too.)
+  rides on the paper either side and marks only what it reaches down to,
+  and the floor, pressed flat, bites it less: on cartridge paper a 2B at
+  any pressure lays nothing in a groove indented at 0.7, and a 6B pressed
+  hard a fiftieth of what it lays beside it; in one indented at 0.3 a 2B
+  shaded lightly lays an eighth and a 6B pressed hard two thirds; a hard
+  lead reaches less far down than a soft one. That
+  is how whiskers and fine highlights are kept in a pencil drawing. A tip
+  narrower than the groove follows it down: an HB point a pixel wide drawn
+  along a groove indented at 0.7 by a stylus 3 wide lays on its floor 0.75
+  of what it lays on the paper left alone, and touches all of it; a 2B
+  point 3 wide 0.49, and one 4 wide, which rides on the paper either side,
+  nothing. (Every tip rode over a groove, and laid nothing in that one.)
+  What was drawn there before goes down with the paper, and no eraser takes
+  a groove out.
 - **Tools that lay nothing** use the same stroke runner: stump and finger
   (carry `loose` along and press part of it in, and slide held graphite),
   kneaded eraser (lifts loose dust), hard eraser (also abrades `held`, and
@@ -268,6 +294,23 @@ the tip. The first build left this out: the ends of a stroke faded out over
 a whole width of the tip, and a short stroke of a broad tip reached a third
 of the tone of a long one.
 
+Where a stroke turns, the tip turns with it, and the part of it on the
+outside of the turn slides further over the paper than its middle, the
+inside less: each part lays as far as it slides. That matters for a broad
+tip: a band 90 pixels wide laid by the side of a stick round a quarter
+circle of radius 150 would have 1.10 of its middle's tone on the inside
+and 0.84 on the outside, had each part laid as far as the middle went; it
+has 0.95 and 0.96. No part of a tip lays more than a pass's worth on a
+pixel in a step, though: where the stroke turns so sharply that its far
+end would sweep further than that (under a sixth or so of the half-width
+of the mark: 7.5 pixels for that band, under half a pixel for a point 4
+wide), the step is laid in parts, the tip turned bit by bit across the
+angle, so that what it sweeps is spread along the arc. And a tip is the
+same turned half round, so where a stroke doubles back on itself the hand
+draws it back without turning it. (A part was laid as far as it slid,
+however far: at a cusp tens of passes in a step, which pressed in more
+dust than there was.)
+
 A stroke ends round, in the outline of its tip, which reaches half the tip
 past the ends of its path; or flat, cut square across at the ends of its
 path, as the end or the side of a stick drawn and lifted cleanly leaves it,
@@ -279,7 +322,9 @@ At each step, for each pixel under the tip:
 1. **Reach.** Pressure, the softness of the medium and the give of the paper
    set how far down the tooth the tip gets: to the ground of a pixel, which is
    its tooth, raised towards the peaks as far as it has been pressed flat, and
-   no higher than the floor of a groove. A tip is flat across with a
+   no higher than the floor of a groove; and from where the tip rests, on
+   the highest of the paper it covers, down into a groove that all it
+   covers is in. A tip is flat across with a
    rounded rim. A light touch reaches further than in proportion, and only the
    softest leads pressed hard reach every valley: a firm HB line still has
    white specks in it. No two passes meet the paper alike: each pass shifts
@@ -318,7 +363,17 @@ At each step, for each pixel under the tip:
    that thick, so charcoal shaded over it skips it: wax resist. Pressed hard, the tip polishes the film: it raises `press`,
    which levels the tooth so that every part of the pixel is touched, and it
    drags some of the waxy layer along and lays it back down, valleys
-   included. That closes the white specks (burnishing). It sets in by
+   included. That closes the white specks (burnishing). A film that lies
+   on dust is wax as well, and the tip drags it as much as it drags what
+   the paper holds and presses it down into the tooth: one firm layer of
+   the blender over three of a dark coloured pencil laid on near-white
+   pastel works a fifth of the dark that lay on the dust into the tooth,
+   and drawn from such a patch out over the paper it smears 0.13 of the
+   dark next to the edge, as it smears 0.12 out of the tooth. (It took
+   only what the paper held, and the film's wax, which is counted with
+   that, without its pigment: a hundredth of the dark, and 0.08 next to
+   the edge.) It closes the white flecks as it does over the paper, by
+   polishing. It sets in by
    degrees, between `BURNISH_SOFT` below `BURNISH_FROM` and as far above
    it (from 0.4 to 0.8), since the wax does not give way at one pressure
    everywhere: in there a tip polishes as the square of how far it bears
@@ -367,6 +422,8 @@ At each step, for each pixel under the tip:
    what scrapes it off its stick). So a light layer of a soft pencil over a
    patch a hard one flattened lies on four fifths of it where it marks half
    of a tooth left alone, and far more evenly, for about as much graphite.
+   The floor of a groove, where the point that pressed it took the peaks
+   off, is as flat, and bites as little.
 
 A stump, a finger or an eraser runs the same way but lays nothing of its own.
 Where it bears, it lifts a share of the `loose` pigment (and, for an eraser,
@@ -522,8 +579,11 @@ kernel and its own layer:
   there; over a light pencil sketch it writes as on bare paper.
 - **The ball presses a groove** (`dent`), as a stylus does but less deep
   (`BALL_DENT`), in proportion to the pressure. A soft pencil shaded lightly
-  over a pen line fills it as the paper beside it if the pen was light (a
-  pressure of 0.2), half-way at 0.6 and hardly at all at full pressure. The
+  over a pen line fills it nearly as the paper beside it if the pen was
+  light (a pressure of 0.2), a quarter at 0.6 and hardly at all at full
+  pressure; over three layers of light hatching, which pressed the paper
+  down all over, it goes down with the paper and lays a tenth more than on
+  paper left alone, and over firm hatching three fifths of that. The
   ball itself goes down into a groove: it is as small as what made it, so
   one pen line crosses another as if the paper were flat.
 - **The ball gathers ink.** The share `BALL_GATHER` of what it lays stays on

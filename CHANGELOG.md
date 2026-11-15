@@ -8,6 +8,75 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The side of a stick laid flat bears evenly across its length
+  (fusain-bqe). Every tip held on its side marked an ellipse across the
+  stroke, so the band of a stick of charcoal or pastel fell off from its
+  middle to its edges. That is the side of a pencil, the cone of lead its
+  sharpening bared, which bears hardest along its middle; a stick of
+  charcoal, pastel or crayon laid flat bears alike all along its length.
+  Which it is is the medium's (`Medium.flat_side`): a band laid by the side
+  of a stick is now even across, rounded only within the stick's thickness
+  at its ends, and cut straight across where it lands and lifts. A piece of
+  vine charcoal (or compressed charcoal, or soft or hard pastel) 90 pixels
+  long and 6 thick at 0.6: of the band, the share at 0.9 of its middle or
+  more was 0.43, now 0.92 on a level paper (0.28 to 0.31, now 0.70, on
+  cartridge paper, its streaks and its grain aside), and from there it
+  falls to a tenth in 3.5 pixels, from 23.5. A pencil on its side is as
+  it was. Where a stroke turns, each part of a tip now lays as far as it
+  slides, so the outside of the turn lays as much as the inside: round a
+  quarter circle of radius 150, a band 90 wide has 0.95 of its middle's
+  tone on the inside and 0.96 on the outside, where it would have 1.10 and
+  0.84 had each part laid as far as the middle went. (Every stroke that
+  curves changes by that, a little at its rims.) No part of a tip lays more
+  than a pass's worth on a pixel in a step: where a stroke turns so sharply
+  that its far end would sweep further (under about a sixth of the
+  half-width of the mark), the step is laid in parts turned bit by bit
+  across the angle, and where it doubles back the tip is drawn back
+  without turning round. A shading lays the bands
+  of a stick laid flat side by side, overlapping only by their rounded
+  ends, as its point's strokes overlap; they were half a band apart. Two
+  crossed layers of the side of vine charcoal on Ingres paper at 0.8 are
+  darker for it (0.47 of pigment per pixel, from 0.32), and leave 0.054 of
+  the paper bare, from 0.10.
+- A point narrower than a groove follows it down (fusain-d7v). Every tip
+  rode on the paper either side of a groove, so a fine point drawn along
+  an indented line skipped it. A tip now rests on the highest of the paper
+  it covers: the sheet keeps no width of a groove, since the dent around
+  the tip says it, for grooves of any width, crossed or pressed over each
+  other. A tip wider than the groove still rides over it, and one
+  narrower goes down into it. Along a groove indented at 0.7 by a stylus 3
+  wide, on cartridge paper, an HB point a pixel wide lays on its floor
+  0.75 of what it lays on the paper left alone (nothing before), a 2B
+  point 3 wide 0.49 (nothing), and one 4 wide nothing, as before; in a
+  groove 6 wide a 2B point 4 wide lays 0.41. A 2B 2 wide shaded across a
+  groove lays in it 0.39 of what it lays beside it (nothing); broader
+  tips still skip it. The floor of a groove is flat where the point that
+  pressed it took the peaks off, as a flattened tooth is, and now bites a
+  dry medium as little (`FLAT_BITE`): a fine point touches all of the
+  floor and lays half as much on what it touches. So a groove fills less
+  under a broad soft pencil that reaches down to it: indented at 0.3, a
+  6B pressed hard lays 0.67 of what it lays beside it (0.96 before) and
+  shaded lightly 0.24 (0.43), a 2B shaded lightly 0.13 (0.22); a 2B over
+  a pen line laid at 0.2, 0.6 and 1.0, 0.89, 0.26 and 0.002 (0.91, 0.42
+  and 0.005). Over three layers of light pen hatching, which pressed the
+  paper down all over, an HB goes down with it and lays 1.10 of what it
+  lays on paper left alone (0.98), and over firm hatching 0.65 (0.39).
+- Burnishing drags a film that lies over dust (fusain-pv2). A firm pass
+  polished and smeared only what the paper held; a film of wax laid over
+  dust stayed where it was, though its wax, which is counted with what the
+  paper holds, went with the tip. A firm tip now drags a film as it drags
+  what the paper holds, by the same share (wax is wax wherever it lies,
+  and it is the tip's polish that shears it), and lays it down in the
+  tooth, through the dust, which it then presses in more readily. One
+  firm layer of the blender over three layers of a dark coloured pencil
+  on near-white soft pastel works 0.21 of the dark that lay on the dust
+  into the tooth, from 0.01; drawn from such a patch out over bare paper,
+  it smears 0.13 of the dark next to the edge, from 0.08, as it smears
+  0.12 out of the tooth. It closes the white flecks as it did: over a
+  blue pastel a quarter of them are left (0.071 to 0.018), over the paper
+  a fifth (0.107 to 0.021). What the tip drags is the film's share of the
+  layer it lies in, which is one mixture, as an eraser takes it. The
+  medium and the wax are conserved.
 - Burnishing and flattening set in by degrees (fusain-bre). A tip polished
   wax, or flattened the tooth, only where it bore harder than 0.6, and from
   nothing there: so of the strokes of a shading near that pressure, each a
@@ -127,12 +196,21 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - `roll_stroke` (in `fusain._engine`) takes, in `pen`, how much the pen
   blots and the colour its ink bronzes, and the ink on the rim of its ball
   (`rim`, NaN for a pen just picked up); `blot` takes the pen.
+- `lay_stroke` (in `fusain._engine`) takes in `medium` whether its side
+  lies flat; the `now` of `bear` goes on with whether the tip is the side
+  of a stick laid flat and how fast the stroke turns, its `row` has a
+  fourth row, `set_down` takes `now`, `tip_at` whether the side lies flat,
+  and `burnish` the two layers and `bonded`.
 - `lay_stroke` and `rub_stroke` (in `fusain._engine`) take what they took;
   `bear`, `put_down` and `streak_at` take the streaks of the pass
   (`streaks_of`), and the first two the row they work in.
 
 ### Added
 
+- `Medium.flat_side`: whether the side of a stick of the medium lies flat
+  along its length, so that its band is even across (charcoal, pastels and
+  crayons), or is the cone of lead a sharpening bared, whose band is soft
+  at its edges (pencils, and the default).
 - `HeldPen(pen)`: a ballpoint in the hand, as a `Stick` is a medium and a
   `Smudger` a tool in the hand. It keeps the ink its ball gathers from one
   line to the next until `wipe()` (which returns it); `load` is how much

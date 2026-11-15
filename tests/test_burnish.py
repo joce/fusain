@@ -179,6 +179,94 @@ def test_the_blender_drags_colour_across_an_edge_but_not_far():
     np.testing.assert_allclose(_total(sheet), before + lost, rtol=1e-5)
 
 
+# --------------------------------------------------------------------------
+# a film that lies over dust (fusain-pv2)
+
+WHITE = "#f4f1ea"
+
+
+def _over_dust(box=BOX) -> Sheet:
+    """Three layers of a dark coloured pencil over a near-white soft pastel:
+    most of the dark lies on the dust, a film."""
+    sheet = _sheet()
+    sheet.shade(box, pastels.soft(WHITE), 0.4, 9.0)
+    for layer in range(3):
+        sheet.shade(box, pencils.coloured(DARK), 0.5, 6.0, angle=30 - 55 * layer)
+    return sheet
+
+
+def _absorption(layer) -> float:
+    return float(layer[..., :10].sum(dtype=np.float64))
+
+
+def test_a_firm_pass_works_a_film_that_lies_over_dust_into_the_tooth():
+    sheet = _over_dust()
+    lying = _absorption(sheet.under) + _absorption(sheet.loose)
+    held = _absorption(sheet.held)
+    assert lying > 3.0 * held  # (the dark is on the dust)
+    pigment, wax = _total(sheet), float(sheet.held[..., IW].sum(dtype=np.float64))
+    lost = sheet.shade(BOX, pencils.BLENDER, 1.0, angle=20)
+    # it drags the film along as it drags what the paper holds, and lays it
+    # down in the tooth: a fifth of the dark that lay on the dust (before,
+    # a hundredth: only the wax of the film, which is counted with what
+    # the paper holds, went with it)
+    after = _absorption(sheet.under) + _absorption(sheet.loose)
+    assert after < 0.85 * lying
+    assert _absorption(sheet.held) > held + 0.9 * (lying - after)
+    # nothing is lost: the medium, and the wax, which the blender adds to
+    np.testing.assert_allclose(_total(sheet), pigment + lost, rtol=1e-5)
+    np.testing.assert_allclose(
+        float(sheet.held[..., IW].sum(dtype=np.float64)),
+        wax + lost * pencils.BLENDER.wax,
+        rtol=1e-5,
+    )
+    assert sheet.bonded.min() >= 0.0
+
+
+def test_the_blender_closes_the_flecks_of_a_film_over_dust_as_of_one_in_the_tooth():
+    flecks = []
+    for dust in (pastels.soft(BLUE), None):
+        sheet = _sheet()
+        if dust is not None:
+            sheet.shade(BOX, dust, 0.3, 9.0)
+        _layers(sheet, pencils.coloured(RED), 3, 0.5)
+        before = _flecks(sheet)
+        sheet.shade(BOX, pencils.BLENDER, 1.0, angle=20)
+        flecks.append(_flecks(sheet) / before)
+    # (a quarter of them left over the dust, a fifth over the paper)
+    assert flecks[0] < 0.3 and flecks[1] < 0.25
+
+
+def test_the_blender_drags_a_film_over_dust_across_an_edge_as_wax_in_the_tooth():
+    def smeared(over_dust: bool) -> float:
+        """What lies just past the edge after the blender is drawn out
+        across it, as a share of the dark."""
+        box = (20, 20, 100, 130)
+        if over_dust:
+            sheet = _over_dust(box)
+        else:
+            sheet = _sheet()
+            for layer in range(3):
+                sheet.shade(
+                    box, pencils.coloured(DARK), 0.5, 6.0, angle=30 - 55 * layer
+                )
+        rows = slice(45, 105)
+
+        def dark(columns) -> float:
+            layers = (sheet.held, sheet.under, sheet.loose)
+            return sum(
+                float(a[rows, columns, :10].mean(dtype=np.float64)) for a in layers
+            )
+
+        full = dark(slice(50, 85))
+        for y in range(40, 112, 3):
+            sheet.stroke([(60, y), (160, y)], pencils.BLENDER, 1.0, 6)
+        return dark(slice(104, 108)) / full
+
+    # (over the dust, half of what it smeared out of the tooth)
+    assert smeared(True) > 0.75 * smeared(False) > 0.0
+
+
 def test_a_white_pencil_pressed_hard_burnishes_too_but_less_than_the_blender():
     base = _sheet()
     _layers(base, pencils.coloured(RED), 3, 0.5)

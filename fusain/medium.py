@@ -54,6 +54,14 @@ class Medium:
         times its point (the default); a piece of charcoal or a pastel laid
         flat marks a band as wide as the piece is long. A
         :class:`fusain.Stick` can give the length in pixels instead.
+    flat_side:
+        Whether its side lies flat on the paper all along its length. The
+        side of a pencil (the default, False) is the cone of lead its
+        sharpening bared: it bears hardest along its middle, so the band it
+        marks is darkest down the middle of the stroke and fades to its
+        edges. A stick of charcoal, pastel or crayon laid on its side
+        (True) bears alike all along its length: its band is even across
+        and ends where the stick does, within the thickness of the stick.
     name:
         Optional label.
     """
@@ -66,6 +74,7 @@ class Medium:
     side: float = SIDE
     name: str = ""
     melts: float = 0.0
+    flat_side: bool = False
 
     def __post_init__(self):
         if not isinstance(self.pigment, Pigment):
@@ -75,6 +84,8 @@ class Medium:
                 raise ValueError(
                     f"{field} must be between 0 and 1, got {getattr(self, field)!r}"
                 )
+        if not isinstance(self.flat_side, bool):
+            raise TypeError(f"flat_side must be True or False, got {self.flat_side!r}")
         if not (math.isfinite(self.side) and self.side >= 1.0):
             raise ValueError(
                 f"side must be at least 1 (as wide as the point), got {self.side!r}"

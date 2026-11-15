@@ -18,11 +18,10 @@ from .medium import Medium
 def soft(color: ColorLike, name: str | None = None) -> Medium:
     """A soft pastel of that colour: crumbly, it fills the tooth fast and
     leaves almost nothing but dust. Laid flat, a half stick marks a band
-    five times as wide as its end."""
+    five times as wide as its end, even all across."""
     pigment = Pigment(color, name=name)
-    return Medium(
-        pigment, softness=0.95, binding=0.15, name=name or f"{pigment.hex} pastel"
-    )
+    label = name or f"{pigment.hex} pastel"
+    return Medium(pigment, softness=0.95, binding=0.15, flat_side=True, name=label)
 
 
 def hard(color: ColorLike, name: str | None = None) -> Medium:
@@ -32,7 +31,9 @@ def hard(color: ColorLike, name: str | None = None) -> Medium:
     end."""
     pigment = Pigment(color, name=name)
     label = name or f"{pigment.hex} hard pastel"
-    return Medium(pigment, softness=0.6, binding=0.35, side=6.0, name=label)
+    return Medium(
+        pigment, softness=0.6, binding=0.35, side=6.0, flat_side=True, name=label
+    )
 
 
 def oil(color: ColorLike, name: str | None = None) -> Medium:
@@ -40,7 +41,9 @@ def oil(color: ColorLike, name: str | None = None) -> Medium:
     held at once; the rest is a paste that a finger smears and a later layer
     half covers, and that comes off only as what the paper holds does: on a
     hard eraser, not on a kneaded one. Its wax makes dry media take badly
-    over it."""
+    over it. Laid flat, a stick marks an even band."""
     pigment = Pigment(color, opacity=0.9, name=name)
     label = name or f"{pigment.hex} oil pastel"
-    return Medium(pigment, softness=0.85, binding=0.4, wax=0.3, name=label)
+    return Medium(
+        pigment, softness=0.85, binding=0.4, wax=0.3, flat_side=True, name=label
+    )
