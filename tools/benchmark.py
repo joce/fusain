@@ -7,6 +7,9 @@ rendering a sheet of 1120 by 820 pixels, the best of several runs each::
 Run it before and after a change meant to make drawing faster (the first run
 after a change to ``fusain/_engine.py`` compiles the kernels, which is not
 timed), and ``tools/fingerprint.py`` to see that the picture has not changed.
+Where a stroke or a rub has become much slower for no change to what it
+works out, ``tools/refcounts.py`` tells whether a kernel has started to
+count references to its arrays.
 """
 
 from __future__ import annotations

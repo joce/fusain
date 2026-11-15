@@ -290,16 +290,19 @@ class Sheet:
         marked = layers[0][..., IV] > 0
         for layer in layers[1:]:
             marked |= layer[..., IV] > 0
-        if marked.any():
+        count = int(np.count_nonzero(marked))
+        if count:
             # the pigment lies on the covered share of the pixel, that much
             # thicker; the rest of the pixel is bare paper (inked or not)
             share = np.clip(self.cover[rows][marked].astype(np.float64), 1e-6, 1.0)
             bare = out[marked] if stained else self.ground
-            seen = bare
+            kappa, sigma = np.empty((count, N)), np.empty(count)
+            seen = np.empty((count, N))
             for layer in layers:  # from the paper up
-                packed = layer[marked].astype(np.float64) / share[:, None]
-                seen = sp.km_layer(packed[:, :N], packed[:, IS], seen)
-            out[marked] = share[:, None] * seen + (1.0 - share[:, None]) * bare
+                eng.thicken(layer, marked, share, kappa, sigma)
+                sp.km_layer(kappa, sigma, bare, out=seen)
+                bare = seen  # (the next layer lies on what is seen so far)
+            eng.show_through(out, marked, share, seen)
         return out
 
     def _stain(self, out: np.ndarray, rows: slice) -> bool:
@@ -308,12 +311,14 @@ class Sheet:
         if self.ink is None or self.inked is None:
             return False
         inked = self.inked[rows] > 0
-        if not inked.any():
+        count = int(np.count_nonzero(inked))
+        if not count:
             return False
         share = np.clip(self.inked[rows][inked].astype(np.float64), 1e-6, 1.0)
-        packed = self.ink[rows][inked].astype(np.float64) / share[:, None]
-        seen = sp.km_layer(packed[:, :N], packed[:, IS], self.ground)
-        out[inked] = share[:, None] * seen + (1.0 - share[:, None]) * self.ground
+        kappa, sigma = np.empty((count, N)), np.empty(count)
+        eng.thicken(self.ink[rows], inked, share, kappa, sigma)
+        seen = sp.km_layer(kappa, sigma, self.ground)
+        eng.show_through(out, inked, share, seen)
         return True
 
     # ------------------------------------------------------------------
