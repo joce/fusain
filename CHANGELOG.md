@@ -8,6 +8,31 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The side of a stick laid flat bears evenly across its length
+  (fusain-bqe). Every tip held on its side marked an ellipse across the
+  stroke, so the band of a stick of charcoal or pastel fell off from its
+  middle to its edges. That is the side of a pencil, the cone of lead its
+  sharpening bared, which bears hardest along its middle; a stick of
+  charcoal, pastel or crayon laid flat bears alike all along its length.
+  Which it is is the medium's (`Medium.flat_side`): a band laid by the side
+  of a stick is now even across, rounded only within the stick's thickness
+  at its ends, and cut straight across where it lands and lifts. A piece of
+  vine charcoal (or compressed charcoal, or soft or hard pastel) 90 pixels
+  long and 6 thick at 0.6: of the band, the share at 0.9 of its middle or
+  more was 0.43, now 0.92 on a level paper (0.28 to 0.31, now 0.70, on
+  cartridge paper, its streaks and its grain aside), and from there it
+  falls to a tenth in 3.5 pixels, from 23.5. A pencil on its side is as
+  it was. Where a stroke turns, each part of a tip now lays as far as it
+  slides, so the outside of the turn lays as much as the inside: round a
+  quarter circle of radius 150, a band 90 wide has 0.95 of its middle's
+  tone on the inside and 0.96 on the outside, where it would have 1.10 and
+  0.84 had each part laid as far as the middle went. (Every stroke that
+  curves changes by that, a little at its rims.) A shading lays the bands
+  of a stick laid flat side by side, overlapping only by their rounded
+  ends, as its point's strokes overlap; they were half a band apart. Two
+  crossed layers of the side of vine charcoal on Ingres paper at 0.8 are
+  darker for it (0.47 of pigment per pixel, from 0.32), and leave 0.054 of
+  the paper bare, from 0.10.
 - Burnishing and flattening set in by degrees (fusain-bre). A tip polished
   wax, or flattened the tooth, only where it bore harder than 0.6, and from
   nothing there: so of the strokes of a shading near that pressure, each a
@@ -127,12 +152,21 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - `roll_stroke` (in `fusain._engine`) takes, in `pen`, how much the pen
   blots and the colour its ink bronzes, and the ink on the rim of its ball
   (`rim`, NaN for a pen just picked up); `blot` takes the pen.
+- `lay_stroke` (in `fusain._engine`) takes in `medium` whether its side
+  lies flat; the `now` of `bear` goes on with whether the tip is the side
+  of a stick laid flat and how fast the stroke turns, its `row` has a
+  fourth row, `set_down` takes `now` and `tip_at` whether the side lies
+  flat.
 - `lay_stroke` and `rub_stroke` (in `fusain._engine`) take what they took;
   `bear`, `put_down` and `streak_at` take the streaks of the pass
   (`streaks_of`), and the first two the row they work in.
 
 ### Added
 
+- `Medium.flat_side`: whether the side of a stick of the medium lies flat
+  along its length, so that its band is even across (charcoal, pastels and
+  crayons), or is the cone of lead a sharpening bared, whose band is soft
+  at its edges (pencils, and the default).
 - `HeldPen(pen)`: a ballpoint in the hand, as a `Stick` is a medium and a
   `Smudger` a tool in the hand. It keeps the ink its ball gathers from one
   line to the next until `wipe()` (which returns it); `load` is how much

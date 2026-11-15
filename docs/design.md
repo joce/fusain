@@ -169,15 +169,29 @@ spectra.
 A tool is a tip plus, usually, a medium.
 
 - **Tilt** (built). A stick held on its side marks with the side of its lead:
-  an ellipse across the stroke, as wide as the length of the side that lies
+  a band across the stroke, as wide as the length of the side that lies
   on the paper, whose weight is spread over more paper, so the mark is
-  lighter, grainier and soft at the edges. How long the side is depends on
+  lighter and grainier. How long the side is depends on
   the stick: the lead a pencil's sharpening bared is about five times its
   point, a piece of vine charcoal laid flat eight times its end. A medium
   says it as a multiple of the point (`Medium.side`), and a `Stick` can give
   it in pixels (`Stick(charcoal.VINE, width=6, lead=6, side=90)`), for a
   band as wide as the stick is long. Part way over, the mark is the point
-  and that share of what the side adds.
+  and that share of what the side adds. What the side is decides how it
+  bears (`Medium.flat_side`). The side of a pencil is the cone of lead its
+  sharpening bared, which bears hardest along its middle: an ellipse across
+  the stroke, its band darkest down the middle and soft at the edges. A
+  stick of charcoal, pastel or crayon laid flat bears alike all along its
+  length: its band is even across and ends where the stick does, rounded
+  within the stick's thickness. The side of a stick of vine charcoal 90
+  pixels long and 6 thick, on a level paper, lays 0.92 of its band at 0.9
+  of its middle or more, and falls from there to a tenth in 3.5 pixels;
+  as an ellipse it laid 0.43, and fell over 23.5 (on cartridge paper 0.70,
+  from 0.28 to 0.31, for charcoal and pastel alike). Where the band is
+  put down and lifted it is cut straight across, as the side of a stick
+  lands and lifts all along its length at once, and a shading lays such
+  bands side by side, overlapping only by their rounded ends. (It was an
+  ellipse for every medium.)
 - **Wear** (built). A `Stick` is a medium in the hand, with the state of its
   tip. A point is a cone, which loses volume as the cube of where it is cut:
   the cube of the flat's width grows with the volume the tip has laid, up to
@@ -267,6 +281,14 @@ middle, a short one (a head, a hand) as a long one, and a dot is one pass of
 the tip. The first build left this out: the ends of a stroke faded out over
 a whole width of the tip, and a short stroke of a broad tip reached a third
 of the tone of a long one.
+
+Where a stroke turns, the tip turns with it, and the part of it on the
+outside of the turn slides further over the paper than its middle, the
+inside less: each part lays as far as it slides. That matters for a broad
+tip: a band 90 pixels wide laid by the side of a stick round a quarter
+circle of radius 150 would have 1.10 of its middle's tone on the inside
+and 0.84 on the outside, had each part laid as far as the middle went; it
+has 0.95 and 0.96.
 
 A stroke ends round, in the outline of its tip, which reaches half the tip
 past the ends of its path; or flat, cut square across at the ends of its

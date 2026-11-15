@@ -89,6 +89,12 @@ SIDE = 5.0
 #: Its weight is then spread over more paper: the share of its reach into
 #: the tooth it loses at full tilt, and how much more of the tip (the share
 #: of what is not rim already) is rounded off, which softens its edges.
+#: That is the cone of lead a pencil's sharpening bares, which bears hardest
+#: along its middle, so its band fades to its edges. A stick of charcoal,
+#: pastel or crayon laid flat (:attr:`fusain.Medium.flat_side`) bears
+#: evenly all along its length instead, and its band is even across and
+#: ends where the stick does, as sharply as the rim of its point
+#: (:func:`side_bearing`).
 TILT_REACH = 0.25
 TILT_RIM = 0.7
 #: A point wears to a flat as it draws, and its line widens: the cube of the
@@ -375,6 +381,53 @@ def tip_bearing(dx, dy, tx, ty, wide, long, rounded):
 
 
 @_inlined
+def side_bearing(dx, dy, tx, ty, wide, long, rounded):
+    """As :func:`tip_bearing`, for the side of a stick laid flat: it bears
+    alike all along its length, ``wide`` across the stroke (a half-width,
+    to the tip of its end), and is ``long`` along it (half its thickness)
+    with its ends rounded: it covers what lies within ``long`` of the line
+    across the stroke through its middle, short of ``long`` from its ends.
+    So the band it lays is even across, and ends within its thickness."""
+    forward, sideways = dx * tx + dy * ty, dy * tx - dx * ty
+    beyond = max(abs(sideways) - max(wide - long, 0.0), 0.0)
+    inside = long - math.sqrt(forward * forward + beyond * beyond)
+    if inside <= 0.0:
+        return 0.0, 0.0
+    return min(inside / (rounded * long + 0.5), 1.0), min(inside, 1.0)
+
+
+@_inlined
+def bearing_at(dx, dy, now):
+    """How the tip at ``now`` (see :func:`bear`) bears on the pixel ``dx``,
+    ``dy`` from its centre: :func:`side_bearing` for the side of a stick
+    laid flat, else :func:`tip_bearing`."""
+    tx, ty, wide, long, rounded = now[2], now[3], now[4], now[5], now[6]
+    if now[13] > 0.0:
+        return side_bearing(dx, dy, tx, ty, wide, long, rounded)
+    return tip_bearing(dx, dy, tx, ty, wide, long, rounded)
+
+
+@_inlined
+def side_span(x, dy, tx, ty, wide, long, x0, x1):
+    """As :func:`row_span`, for the side of a stick laid flat
+    (:func:`side_bearing`): the pixels within ``long`` of the line across
+    the stroke through its middle, on the row ``dy`` below it."""
+    core = max(wide - long, 0.0)
+    near, far = -core, core  # (the part of that line near enough the row)
+    if abs(tx) > 1e-9:
+        low, high = (dy - long - 1.0) / tx, (dy + long + 1.0) / tx
+        near, far = max(min(low, high), -core), min(max(low, high), core)
+    elif abs(dy) > long + 1.0:
+        near, far = 0.0, -1.0
+    if near > far:
+        return x0, x0
+    a, b = x - ty * near, x - ty * far
+    return max(int(math.floor(min(a, b) - long - 1.0)), x0), min(
+        int(math.ceil(max(a, b) + long + 1.0)), x1
+    )
+
+
+@_inlined
 def tip_extent(tx, ty, wide, long):
     """Where the tip of :func:`tip_bearing` lies, row by row: on the row
     ``dy`` below its centre it covers the pixels within ``half`` times the
@@ -484,15 +537,16 @@ def burnish(held, press, drag, iy, ix, polish, lift, lay):
 
 
 @njit(cache=True, error_model="numpy")
-def set_down(held, cover, drag, x, y, tx, ty, wide, long, rounded):
-    """Where the tip lifts off, at (``x``, ``y``), lay what it still drags
-    (``drag``, packed as the held layer is) on the marked paper under it.
-    Returns the volume it could not lay: all of it, if no marked paper of
-    the sheet is under the tip."""
+def set_down(held, cover, drag, now):
+    """Where the tip lifts off, at ``now`` (see :func:`bear`), lay what it
+    still drags (``drag``, packed as the held layer is) on the marked paper
+    under it. Returns the volume it could not lay: all of it, if no marked
+    paper of the sheet is under the tip."""
     if drag[IV] <= 0.0:
         return 0.0
     height, width = cover.shape
-    bound = max(wide, long)
+    x, y = now[0], now[1]
+    bound = max(now[4], now[5])
     x0 = max(int(math.floor(x - bound)), 0)
     x1 = min(int(math.ceil(x + bound)), width)
     y0 = max(int(math.floor(y - bound)), 0)
@@ -501,17 +555,13 @@ def set_down(held, cover, drag, x, y, tx, ty, wide, long, rounded):
     for iy in range(y0, y1):
         for ix in range(x0, x1):
             if cover[iy, ix] > 0.0:
-                under += tip_bearing(
-                    ix + 0.5 - x, iy + 0.5 - y, tx, ty, wide, long, rounded
-                )[1]
+                under += bearing_at(ix + 0.5 - x, iy + 0.5 - y, now)[1]
     if under <= 0.0:
         return drag[IV]
     for iy in range(y0, y1):
         for ix in range(x0, x1):
             if cover[iy, ix] > 0.0:
-                edge = tip_bearing(
-                    ix + 0.5 - x, iy + 0.5 - y, tx, ty, wide, long, rounded
-                )[1]
+                edge = bearing_at(ix + 0.5 - x, iy + 0.5 - y, now)[1]
                 for part in range(HELD):
                     held[iy, ix, part] += drag[part] * edge / under
     return 0.0
@@ -688,6 +738,17 @@ def deposit(held, fresh, iy, ix, dv, binding, over, k, s, sheen, wax):
 
 
 @_inlined
+def span_of(now, dy, lean, half, top, x0, x1):
+    """The pixels the tip at ``now`` (see :func:`bear`) can cover on the row
+    ``dy`` below its centre, among those from ``x0`` to ``x1``: as
+    :func:`row_span` (``lean``, ``half`` and ``top`` are :func:`tip_extent`),
+    or :func:`side_span` for the side of a stick laid flat."""
+    if now[13] > 0.0:
+        return side_span(now[0], dy, now[2], now[3], now[4], now[5], x0, x1)
+    return row_span(now[0], dy, lean, half, top, x0, x1)
+
+
+@_inlined
 def within_ends(px, py, ends):
     """How much of the pixel centred at (``px``, ``py``) a stroke cut square
     at its ends leaves: 1 but behind the line across its start or beyond the
@@ -708,38 +769,34 @@ def within_ends(px, py, ends):
 def bear_on_row(row, now, iy, xa, xb, ends, streaks, salt):
     """How a tip at ``now`` (see :func:`bear`) bears on the pixels ``xa`` to
     ``xb`` of the row ``iy``, which depends on nothing the sheet holds: for
-    each, in the three rows of ``row`` (counted from ``xa``), how far inside
+    each, in the four rows of ``row`` (counted from ``xa``), how far inside
     the edge of the tip it is (0 if the tip does not mark it), how hard the
-    tip bears on it, and where it does mark it, the level in the tooth it
-    reaches there in this pass.
+    tip bears on it, where it does mark it the level in the tooth it
+    reaches there in this pass, and how far that part of the tip slides
+    over the paper for each pixel its middle goes: 1, but where the stroke
+    turns (``now[14]``, the turn per pixel, which way the tip's left goes).
 
     It is worked out for the whole row before anything is laid, in loops
     that do one thing each: the processor then works on several pixels at
     once, where one loop that also laid the medium went a pixel at a time
     (each has its divisions, its square roots and a power to wait for)."""
-    x, y, tx, ty, wide, long, rounded = (
-        now[0],
-        now[1],
-        now[2],
-        now[3],
-        now[4],
-        now[5],
-        now[6],
-    )
-    reach, pressure, at_x, at_y = now[7], now[8], now[11], now[12]
+    x, y, tx, ty = now[0], now[1], now[2], now[3]
+    reach, pressure, at_x, at_y, turn = now[7], now[8], now[11], now[12], now[14]
     dy = iy + 0.5 - y
     for ix in range(xa, xb):
         dx = ix + 0.5 - x
-        share, edge = tip_bearing(dx, dy, tx, ty, wide, long, rounded)
-        if edge > 0.0 and at_x == at_x:
-            # (landing or lifting: only where it is put)
-            ax, ay = ix + 0.5 - at_x, iy + 0.5 - at_y
-            if tip_bearing(ax, ay, tx, ty, wide, long, rounded)[1] <= 0.0:
-                edge = 0.0
+        share, edge = bearing_at(dx, dy, now)
+        # (landing or lifting: only where it is put)
+        put = edge > 0.0 and at_x == at_x
+        if put and bearing_at(ix + 0.5 - at_x, iy + 0.5 - at_y, now)[1] <= 0.0:
+            edge = 0.0
         if edge > 0.0:
             edge *= within_ends(ix + 0.5, iy + 0.5, ends)
         row[0, ix - xa] = edge
         row[1, ix - xa] = pressure * share * streak_at(dx, dy, tx, ty, streaks, salt)
+        # (where the stroke turns, the side of the tip on the outside of the
+        # turn slides further than its middle, and the inside less)
+        row[3, ix - xa] = abs(1.0 - turn * (dy * tx - dx * ty))
     for ix in range(xa, xb):
         if row[0, ix - xa] > 0.0:
             level = 1.0 - reach * row[1, ix - xa] ** REACH_POWER
@@ -783,8 +840,10 @@ def bear(
     at full pressure flattens the tooth, how much less of it a flattened
     tooth takes, how far it melts into a film of wax it polishes]. ``ends``
     is as for :func:`within_ends` and ``streaks`` as for :func:`streak_at`;
-    ``row`` is room to work in, three rows as wide as the sheet
-    (:func:`bear_on_row`).
+    ``row`` is room to work in, four rows as wide as the sheet
+    (:func:`bear_on_row`). ``now`` goes on with [whether the tip is the side
+    of a stick laid flat (:func:`side_bearing`), how fast the stroke turns
+    (:func:`turning`)].
 
     Returns the volume laid and what of it is left to settle on top."""
     height, width = tooth.shape
@@ -805,7 +864,7 @@ def bear(
     laid = 0.0
     lying = 0.0
     for iy in range(y0, y1):
-        xa, xb = row_span(x, iy + 0.5 - y, lean, half, top, x0, x1)
+        xa, xb = span_of(now, iy + 0.5 - y, lean, half, top, x0, x1)
         # first how the tip bears on each pixel of the row, which is its
         # shape and nothing else; then what that does to the paper
         bear_on_row(row, now, iy, xa, xb, ends, streaks, salt)
@@ -813,8 +872,7 @@ def bear(
             edge = row[0, ix - xa]
             if edge <= 0.0:
                 continue
-            local = row[1, ix - xa]
-            level = row[2, ix - xa]
+            local, level, slide = row[1, ix - xa], row[2, ix - xa], row[3, ix - xa]
             # (to a tip riding on it a tooth pressed flat is level with its
             # peaks, and nothing in a groove stands higher than its floor)
             ground = tooth[iy, ix] + (1.0 - tooth[iy, ix]) * press[iy, ix]
@@ -830,7 +888,7 @@ def bear(
             was_set = bonded[iy, ix, 0, SET] + bonded[iy, ix, 1, SET]
             thick -= (1.0 - FIXED_ROOM) * was_set / covered
             bearing = min(local, 1.0)
-            passing = per_pass * touch
+            passing = per_pass * slide * touch
             waxed = held[iy, ix, IW] / covered
             waxy = min(waxed / WAX_FULL, 1.0)
             firm = firmness(bearing)
@@ -839,7 +897,7 @@ def bear(
                 press[iy, ix] = min(press[iy, ix] + crush * firm * passing, 1.0)
                 # (a blender melts into the film, however thin it is)
                 slick = waxy + (1.0 - waxy) * melts
-                polish, lay_back = firm * slick * passing, dragged * touch
+                polish, lay_back = firm * slick * passing, dragged * slide * touch
                 burnish(held, press, drag, iy, ix, polish, stir, lay_back)
             # the tip presses some of the dust under it into the paper
             pressed = min(PRESS_IN * bearing, 1.0) * passing
@@ -854,7 +912,7 @@ def bear(
             dv *= 1.0 - dry * min(waxed / COVERS, 1.0) - slides * waxy
             # (and a flattened tooth bites it less)
             dv *= 1.0 - smooth * press[iy, ix]
-            dv = min(dv * per_pass, room) * touch
+            dv = min(dv * per_pass * slide, room) * touch
             over = 0.0  # the share of what is held that lies on dust
             if filmy > 0.0:
                 over = filmy * lying_share(under, loose, bonded, covered, iy, ix)
@@ -864,14 +922,35 @@ def bear(
 
 
 @njit(cache=True, error_model="numpy")
-def tip_at(now, shape, flat, reach, i, xs, ys, pressures):
+def turning(xs, ys, i):
+    """How fast the path through the points (``xs``, ``ys``) turns at
+    sample ``i``: in radians per pixel, positive where it turns towards the
+    side of the tip :func:`streak_at` counts as across it the positive way.
+    Nothing at its ends."""
+    if i <= 0 or i >= xs.shape[0] - 1:
+        return 0.0
+    ax, ay = xs[i] - xs[i - 1], ys[i] - ys[i - 1]
+    bx, by = xs[i + 1] - xs[i], ys[i + 1] - ys[i]
+    going = math.sqrt(ax * ax + ay * ay) + math.sqrt(bx * bx + by * by)
+    if going <= 1e-9:
+        return 0.0
+    return 2.0 * math.atan2(ax * by - ay * bx, ax * bx + ay * by) / going
+
+
+@njit(cache=True, error_model="numpy")
+def tip_at(now, shape, flat, reach, i, xs, ys, pressures, even):
     """Fill ``now`` (see :func:`bear`) for a tip ``flat`` wide at sample
-    ``i``, of ``shape`` [its width, tilt, length of its side]. Returns how
-    far from its centre it reaches."""
+    ``i``, of ``shape`` [its width, tilt, length of its side], whose side
+    lies flat along its length (``even`` 1: a stick of charcoal, pastel or
+    crayon) or is the cone of a sharpened lead (0). Returns how far from its
+    centre it reaches."""
     tilt, side = shape[1], shape[2]
     wide = 0.5 * (flat + max(side - flat, 0.0) * tilt) + 0.5
     long = 0.5 * flat + 0.5
-    rounded = RIM + (1.0 - RIM) * TILT_RIM * tilt
+    # (a stick laid flat bears alike to its ends; a cone of lead bears
+    # hardest along its middle, and its band is soft at the edges)
+    laid_flat = even > 0.0 and tilt > 0.0
+    rounded = RIM if laid_flat else RIM + (1.0 - RIM) * TILT_RIM * tilt
     now[0], now[1] = xs[i], ys[i]
     now[2], now[3] = heading(xs, ys, i)
     now[4], now[5], now[6] = wide, long, rounded
@@ -883,6 +962,8 @@ def tip_at(now, shape, flat, reach, i, xs, ys, pressures):
     now[9] = 1.0 / (2.0 * long - (rounded * long + 0.5))
     now[10] = BURNISH_LAY / (2.0 * wide * math.pi * wide * long)
     now[11], now[12] = math.nan, math.nan
+    now[13] = 1.0 if laid_flat else 0.0
+    now[14] = turning(xs, ys, i)
     return max(wide, long)
 
 
@@ -915,9 +996,9 @@ def put_down(
     ahead of the middle of the tip (behind it). It lays it as it lays a
     stroke, ``spacing`` pixels at a time. Returns the volume laid and what of
     it is left to settle."""
-    x, y, tx, ty = now[0], now[1], now[2], now[3]
+    x, y, tx, ty, turn = now[0], now[1], now[2], now[3], now[14]
     count = int(math.ceil(2.0 * now[5] / spacing))
-    now[11], now[12] = x, y
+    now[11], now[12], now[14] = x, y, 0.0  # (it goes straight on)
     laid, lying = 0.0, 0.0
     for j in range(1, count + 1):
         now[0], now[1] = x + way * j * spacing * tx, y + way * j * spacing * ty
@@ -943,7 +1024,7 @@ def put_down(
         )
         laid += dv
         lying += rest
-    now[0], now[1], now[11], now[12] = x, y, math.nan, math.nan
+    now[0], now[1], now[11], now[12], now[14] = x, y, math.nan, math.nan, turn
     return laid, lying
 
 
@@ -1048,13 +1129,17 @@ def lay_stroke(
     lifts it goes at that pace, however short the stroke)]. A square cut
     applies only within the tip's reach of its end. Its mark is an ellipse,
     as long along the stroke as its flat is wide, and across it as wide as
-    the flat, and the share ``tilt`` of what its side adds to that. Where it
-    lands and where it lifts, all the paper under it gets a full pass
-    (:func:`put_down`).
+    the flat, and the share ``tilt`` of what its side adds to that; for a
+    stick whose side lies flat, a band as wide, even across and rounded at
+    its ends (:func:`side_bearing`). Where it lands and where it lifts, all
+    the paper under it gets a full pass (:func:`put_down`); where the
+    stroke turns, each part of the tip lays as far as it slides
+    (:func:`turning`).
 
     ``medium`` is [scattering per unit volume, softness, binding, the share
-    of wax in it, its sheen, how far it melts into a film of wax] (its
-    absorption per band is ``k``) and ``paper`` is
+    of wax in it, its sheen, how far it melts into a film of wax, whether
+    its side lies flat along its length (1) or is the cone of a sharpened
+    lead (0)] (its absorption per band is ``k``) and ``paper`` is
     [depth, bite, give, hold]. The medium is laid where the tip touches the
     tooth.
     What the paper does not hold of it is dust, or paste if the medium is
@@ -1082,7 +1167,7 @@ def lay_stroke(
     ends = ends_of(xs, ys, tip[4], tip[5])
     near = np.empty(10)  # (the cuts that apply where the tip is now)
     streaks = streaks_of(salt)
-    row = np.empty((3, tooth.shape[1]))
+    row = np.empty((4, tooth.shape[1]))
     count = xs.shape[0]
     reached = 0.0  # the furthest the tip has been from its path
     # what a tip that polishes drags along
@@ -1090,8 +1175,9 @@ def lay_stroke(
     total = 0.0
     lying = 0.0  # what the pass leaves lying on the sheet, to settle
     # where the tip last bore, and how
-    now = np.zeros(13)
-    tip_at(now, shapes[0], shapes[0, 0], reach, 0, xs, ys, pressures)
+    now = np.zeros(15)
+    even = medium[6]  # (whether its side lies flat along its length)
+    tip_at(now, shapes[0], shapes[0, 0], reach, 0, xs, ys, pressures, even)
     for i in range(count):
         step = steps[i]
         if pressures[i] <= 0.0 or step <= 0.0:
@@ -1099,7 +1185,7 @@ def lay_stroke(
         flat = shapes[i, 0]
         if wear > 0.0:  # the flat grows with what the tip has laid
             flat = min((flat**3 + wear * max(worn + total, 0.0)) ** (1.0 / 3.0), lead)
-        bound = tip_at(now, shapes[i], flat, reach, i, xs, ys, pressures)
+        bound = tip_at(now, shapes[i], flat, reach, i, xs, ys, pressures, even)
         reached = max(reached, bound)
         ends_near(ends, near, i * spacing, (count - 1 - i) * spacing, bound + spacing)
         lands = i == 0 or pressures[i - 1] <= 0.0
@@ -1175,9 +1261,7 @@ def lay_stroke(
         )
     # what the tip still drags it leaves where it lifts off; only off the
     # sheet does it leave the paper with it
-    return total - set_down(
-        held, cover, drag, now[0], now[1], now[2], now[3], now[4], now[5], now[6]
-    )
+    return total - set_down(held, cover, drag, now)
 
 
 @_inlined

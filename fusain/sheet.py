@@ -341,8 +341,12 @@ class Sheet:
         0 draws with its point, 1 with its side, which marks a band across
         the stroke as wide as the side is long (the medium's ``side`` times
         the width of the tip; a stick's own ``side``): broader, lighter and
-        grainier, with soft edges. A stick turned over as it goes widens its
-        mark from its point to its side.
+        grainier. The side of a pencil is the cone of lead its sharpening
+        bared, and its band is soft at the edges; a stick of charcoal,
+        pastel or crayon laid flat (its medium's ``flat_side``) lays a band
+        even across, which ends where the stick does. A stick turned over as
+        it goes widens its mark from its point to its side. Where the stroke
+        turns, each part of the tip lays as far as it slides.
 
         ``ends`` is how the stroke ends: ``"round"`` (the default), in the
         outline of the tip, which reaches half its length past the ends of
@@ -447,6 +451,7 @@ class Sheet:
                         known.wax,
                         known.sheen,
                         known.melts,
+                        float(known.flat_side),
                     ],
                     dtype=np.float64,
                 ),
@@ -895,7 +900,9 @@ class Sheet:
         default; a :class:`fusain.Stick` has its own, and wears as the
         shading goes) and ``angle`` the direction of the strokes in degrees
         (0 runs across the sheet, 90 up it). ``spacing`` is how far apart they
-        are (by default a little over half a width, so that they overlap).
+        are (by default a little over half a width, so that they overlap; the
+        even bands of a stick laid flat side by side, overlapping only by
+        their rounded ends).
         ``hand`` is how
         unsteady the hand is: 1 for a natural one, 0 for ruler-straight
         strokes, evenly spaced and all alike. ``tilt`` is as for
@@ -931,9 +938,7 @@ class Sheet:
         inset = (0.5 * (1.0 - flat_start), 0.5 * (1.0 - flat_end))
         outline = hatching.as_outline(area)
         broad = _breadth(medium, width, tilt)  # how wide a stroke's mark is
-        pen = isinstance(medium, Pen | HeldPen)
-        apart = PEN_SPACING if pen else hatching.SPACING
-        gap = apart * broad if spacing is None else spacing
+        gap = _apart(medium, width, broad) if spacing is None else spacing
         _check_hatching(width, gap, angle, hand)
         laid = 0.0
         for path, firm, tip in hatching.strokes(
@@ -1035,6 +1040,21 @@ def _breadth(
     else:
         return width  # (a pen has no side)
     return width + max(side - width, 0.0) * float(tilt)
+
+
+def _apart(medium: Medium | Stick | Pen | HeldPen, width: float, broad: float) -> float:
+    """How far apart a hand lays the strokes of a shading whose tip is
+    ``width`` wide and marks ``broad`` across: a little over half the mark,
+    so that the strokes overlap and their soft edges make one tone; the
+    lines of a pen side by side. The band of a stick laid flat is even
+    across and ends within the stick's thickness: the bands are laid side
+    by side, and only their ends overlap, as the strokes of its point do."""
+    if isinstance(medium, Pen | HeldPen):
+        return PEN_SPACING * broad
+    known = medium.medium if isinstance(medium, Stick) else medium
+    if known.flat_side:
+        return broad - width + hatching.SPACING * width
+    return hatching.SPACING * broad
 
 
 def _size(name: str, value) -> int:

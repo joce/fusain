@@ -23,7 +23,9 @@ STRENGTH = 2.5
 
 def wax(color: ColorLike, name: str | None = None) -> Medium:
     """A wax crayon of that colour: how a full layer of it looks on white
-    paper."""
+    paper. Peeled and laid on its side, it marks an even band."""
     pigment = Pigment(color, OPACITY, STRENGTH, name)
     label = name or f"{pigment.hex} crayon"
-    return Medium(pigment, softness=0.6, binding=1.0, wax=0.85, name=label)
+    return Medium(
+        pigment, softness=0.6, binding=1.0, wax=0.85, flat_side=True, name=label
+    )
