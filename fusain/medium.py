@@ -46,7 +46,9 @@ class Medium:
         the film under it, however thin, and stirs it into the valleys of
         the tooth, so that the white flecks of the paper close. A lead or a
         crayon, whose wax binds its own pigment, polishes a film only as far
-        as the film is slick already, and stirs it less.
+        as the film is slick already, and stirs it less; a pale one, mostly
+        wax and white filler, melts the more the paler it is
+        (:func:`fusain.pencils.melts_of`).
     side:
         How many times as wide as its point the side of a stick of it
         marks, held flat (at full tilt): what length of it lies on the

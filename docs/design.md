@@ -159,7 +159,7 @@ code runs all of them; only the numbers change.
 | `wax` | Binder that films over the tooth: resist, burnishing | graphite, charcoal | coloured pencil, crayon, oil pastel |
 | opacity (of the pigment) | How strongly it hides what is underneath | coloured pencil | pastel |
 | `sheen` | How much of it mirrors the light once the paper holds it, as a metal does | everything else | graphite, the more the softer the lead |
-| `melts` | How far it melts into a film of wax it is pressed hard on, and stirs it | everything else | a colourless blender |
+| `melts` | How far it melts into a film of wax it is pressed hard on, and stirs it | everything else | a colourless blender; a white or a pale coloured pencil, nearly |
 
 Presets group by family: `pencils.HB`, `pencils.B6`, `charcoal.VINE`,
 `charcoal.COMPRESSED`, `pastels.soft("#c0392b")`, `pastels.oil(...)`,
@@ -439,7 +439,14 @@ At each step, for each pixel under the tip:
    full pressure leaves a fifth of those (two layers a twenty-fifth), the
    chroma of the patch goes from 34 to 59 (69), its lightness from 67 to 57
    (54), it is half as grainy, and it has 0.48 (0.80) of the gloss of
-   polished wax; at a pressure of 0.7 the blender closes two fifths of the
+   polished wax. A pale coloured pencil is mostly wax and white filler, and
+   melts the more the paler it is (`pencils.melts_of`: a white one 0.75 as
+   far as the blender, a cream 0.54, a pale blue 0.31, a pink or a mid grey
+   hardly, a strong colour not at all; assumed, not measured): one firm
+   layer of white over the red leaves a quarter of the flecks (two fifths
+   before, when it melted no more than the red), 0.29 of gloss (0.17), and
+   a paler tint of the red as light as it was (L* 65.6, chroma 40, where
+   the blender takes it to 57 and 59). At a pressure of 0.7 the blender closes two fifths of the
    flecks, and at 0.5 a twentieth. (In the first build the blender was a
    coloured pencil without colour: one firm layer left two fifths of the
    flecks.) Two colours laid over each other are stirred into one, and

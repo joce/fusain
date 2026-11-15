@@ -8,6 +8,25 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A white or a pale coloured pencil pressed hard burnishes nearly as the
+  blender does (fusain-d6p). `Medium.melts` was 1 for the blender and 0 for
+  every coloured pencil, so a white pencil, with which artists burnish,
+  polished only as a red one does. A pale lead is mostly wax and white
+  filler: `pencils.coloured` now sets `melts` by how pale the colour is
+  (`pencils.melts_of`: 0.75 of the blender's for white, falling as the
+  square of the colour's distance from white to nothing at 40 (CIE 1976):
+  a cream 0.54, a pale blue 0.31, a pink or a mid grey 0.05, any strong
+  colour 0; assumed, not measured). It lays its own colour as it does,
+  which lightens what it burnishes. One firm layer over three layers of
+  red at 0.5 on cartridge paper (a tenth of the pixels showing the paper):
+  white left 0.044 of the pixels showing the paper and now 0.025 (the
+  blender 0.021), with 0.17 of the gloss of polished wax, now 0.29 (0.48),
+  and `press` 0.47, now 0.69 (0.74); the colour is a paler tint of the
+  red, as light as it was (L* 66.9 before the white, 67.0 after it before,
+  65.6 now; chroma 34, 37 and 40), where the blender deepens it to L* 57
+  and chroma 59. A cream does nearly as well (0.027, 0.26 and 0.64); a
+  lemon or the red itself as before.
+
 - A vinyl eraser smears a dense or burnished layer of wax along its way
   (fusain-d6p). It lifted less of what wax held, and left the rest where it
   was: rubbed out of a burnished dark over bare paper, it left the paper

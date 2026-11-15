@@ -267,20 +267,36 @@ def test_the_blender_drags_a_film_over_dust_across_an_edge_as_wax_in_the_tooth()
     assert smeared(True) > 0.75 * smeared(False) > 0.0
 
 
-def test_a_white_pencil_pressed_hard_burnishes_too_but_less_than_the_blender():
+def test_a_white_pencil_pressed_hard_burnishes_nearly_as_the_blender_and_lightens():
+    # (fusain-d6p) a pale lead is mostly wax and white filler: pressed hard
+    # it melts into the film under it as the blender does, the more the
+    # paler it is, and lays its own pale colour as it does. (It burnished
+    # only as a red pencil does: twice the flecks of the blender, a third of
+    # its gloss, 0.47 of polish to the blender's 0.74)
     base = _sheet()
     _layers(base, pencils.coloured(RED), 3, 0.5)
     flecks = _flecks(base)
-    white, blender = base.copy(), base.copy()
-    white.shade(BOX, pencils.coloured("#f4f1ea"), 1.0, angle=20)
+    white, blender, red = base.copy(), base.copy(), base.copy()
+    white.shade(BOX, pencils.coloured("#ffffff"), 1.0, angle=20)
     blender.shade(BOX, pencils.BLENDER, 1.0, angle=20)
-    # (the white pencil lays its own wax and colour in the flecks it
-    # reaches; the blender melts into what is there, and stirs it)
-    assert _flecks(white) < 0.5 * flecks and _gloss(white) > 0.1
-    assert _flecks(blender) < 0.6 * _flecks(white)
-    assert _gloss(blender) > 2.0 * _gloss(white)
-    assert blender.press[INSIDE].mean() > 1.5 * white.press[INSIDE].mean()
-    assert pencils.BLENDER.melts == 1.0 and pencils.coloured(RED).melts == 0.0
+    red.shade(BOX, pencils.coloured(RED), 1.0, angle=20)
+    assert _flecks(white) < 0.3 * flecks
+    assert _flecks(white) < 1.3 * _flecks(blender)
+    assert _gloss(white) > 0.5 * _gloss(blender) > 1.2 * _gloss(red)
+    assert white.press[INSIDE].mean() > 0.9 * blender.press[INSIDE].mean()
+    assert white.press[INSIDE].mean() > 1.3 * red.press[INSIDE].mean()
+    # the blender deepens the colour; the white pencil leaves it a paler
+    # tint of it, as light as it was
+    lightness, chroma = _lab(white)[0], _chroma(white)
+    assert lightness > _lab(blender)[0] + 5.0 and chroma < _chroma(blender) - 10.0
+    assert abs(lightness - _lab(base)[0]) < 3.0
+    # how far a pencil melts goes with how pale it is
+    melts = [pencils.coloured(c).melts for c in ("#ffffff", "#f4f1ea", "#cfe8f5")]
+    assert pencils.BLENDER.melts == 1.0 > melts[0] > melts[1] > melts[2] > 0.25
+    for tint in ("#e8b4b8", "#a9a9ae"):  # (a pink, a mid grey)
+        assert 0.0 < pencils.coloured(tint).melts < 0.1
+    for strong in (RED, YELLOW, BLUE, DARK, "#f2e24a"):
+        assert pencils.coloured(strong).melts == 0.0
     with pytest.raises(ValueError, match="melts must be between 0 and 1"):
         pencils.BLENDER.with_(melts=1.5)
 
