@@ -6,6 +6,23 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- A mark can be given a seed of its own (fusain-ny8): `Sheet.stroke`,
+  `shade`, `smudge`, `erase` and `rub` take an optional keyword-only
+  `seed`, an integer from 0 to 2**31 - 1 (anything else, a `bool` included,
+  raises ValueError before anything is drawn). A seeded mark takes all its
+  random numbers from it and none from the sheet's generator: a stroke, a
+  smudge or an erase gives its kernel the seed itself in place of the
+  integer it would have drawn, and a `shade` or a `rub`, which also draw
+  the places of their passes, the unsteadiness of the hand and the seeds of
+  their strokes, draw them from `np.random.default_rng(seed)`. Its grain
+  does not depend on what was drawn before it, whatever the sheet's
+  generator has been through, and what is drawn after it does not depend on
+  it, so that a drawing in which one part changes keeps the grain of every
+  mark that does not. Without a seed everything is as it was, to the bit
+  (every hash of `tools/fingerprint.py`, the thorough one too).
+
 ### Fixed
 
 - A rub takes the same numbers from the sheet's generator whatever its
@@ -526,6 +543,23 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
     (4.5 s, 33,000 calls, each drawing the generator's numbers for the
     stretch of the ink map that holds the cells that want some) and the rest
     of `Hatcher.lay` (3 s of its own).
+
+- `macaw.png` is drawn with other grain, and a change to one part of the
+  model stays where it is (fusain-ny8). Each part of the drawing (the
+  wing's feathers, the small feathers, the mottle, and each step) draws
+  from a stream of its own, spawned from the one seed; a loop whose draws
+  depend on what is seen has a stream for each item; the places of strokes
+  and of small feathers are chosen pixel by pixel (a pixel that gains or
+  loses weight gains or loses its own point, and no other moves); and every
+  stroke, shade and erase has a seed (`Sheet`'s `seed`) from its part or its
+  item. Hiding 144 pixels of the plumage beside a foot changed 82% of the
+  drawn pixels before, and changes 2.6% now (three quarters of them within
+  150 pixels of the patch). It is the same drawing: against the one before,
+  the mean luminance of the bird goes from 0.2621 to 0.2613 (linear), the
+  pixels drawn from 383,705 to 383,477, and in blocks of 100 pixels the
+  luminance differs by 0.0042 at the median and 0.0248 at most. The number of strokes in a
+  layer is now about what it was, not exactly.
+
 - The four examples that call `Sheet.rub` (`charcoal.py`, `crayons.py`,
   `deco.py` and `lake.py`) draw another grain in every rub, and in all
   they draw after one: `charcoal.png` (the stump is loaded on a scrap of

@@ -693,6 +693,21 @@ does not depend on the pressure, but a rub that skipped a pass for what it
 measures would, with a seed to each pass, shift the rest. A stretch's seed is
 the same wherever the pressure is nothing elsewhere.
 
+A mark can also be given a seed of its own (`seed=`, an integer from 0 to
+2**31 - 1, to `stroke`, `shade`, `smudge`, `erase` and `rub`). The grain of a
+mark is salted with an integer that the sheet draws from its generator, so a
+sheet that has drawn more or fewer marks before gives the next one another
+grain, and a drawing in which one part changes (a few pixels hidden, a stroke
+more) changes in every mark laid after it. With a seed, the integer a stroke,
+a smudge or an erase gives its kernel is the seed itself, and a `shade` or a
+`rub`, which also draw the places and the unsteadiness of their passes and one
+seed or more for their strokes, draw all of those from `default_rng(seed)`:
+none of them touches the sheet's generator, so the grain of a seeded mark is
+the same whatever was drawn before it and what is drawn after it is as if it
+had not been drawn. A caller that wants a drawing to stay as it is where it
+is not changed keys the seed to the mark (its part, its place, its number).
+Without a seed everything is as it was, to the bit.
+
 These are numba kernels under the same rules as oilpaint's (no `fastmath`, no
 `parallel`), so a drawing repeats exactly, and what makes them fast changes
 no result: `tools/fingerprint.py` hashes all that a suite of drawings leaves

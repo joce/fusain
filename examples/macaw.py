@@ -84,6 +84,11 @@ PARTS = (
 )
 
 
+def as_seed(u: float) -> int:
+    """A seed for a mark of the sheet (0 to 2**31 - 1) from a number below 1."""
+    return int(u * (1 << 31))
+
+
 def streams(seed: int = SEED) -> dict[str, np.random.SeedSequence]:
     """The stream of each part of the drawing, by name."""
     seqs = np.random.SeedSequence(seed).spawn(len(PARTS))
@@ -227,8 +232,8 @@ class Hand:
         broad = width * (1.0 + 2.0 * tilt)
         rate = how.get("cover", 1.5) / (broad * length)
         (place,) = self.fork(1)
-        seed, (back, gain), (turn, offset, long) = self.sow(
-            dense, rate, place, uniform=2, normal=3
+        seed, (back, gain, grain), (turn, offset, long) = self.sow(
+            dense, rate, place, uniform=3, normal=3
         )
         if not len(seed):
             return
@@ -245,7 +250,9 @@ class Hand:
         lengths = np.exp(math.log(length) + 0.35 * long)
         gains = 0.8 + 0.35 * gain
         medium = self.pencil(colour)
-        for path, ln, w0, gain in zip(paths, lengths, own, gains, strict=True):
+        for path, ln, w0, gain, g in zip(
+            paths, lengths, own, gains, grain, strict=True
+        ):
             path = inside_run(path[: min(max(int(ln / step), 1), steps) + 1], clip)
             if len(path) < 2:
                 continue
@@ -255,7 +262,9 @@ class Hand:
             u = np.linspace(0.0, 1.0, len(path))
             bear = firm * np.sqrt(0.5 * w0 + 0.5 * local) * flick(u)
             bear *= gain
-            self.sheet.stroke(path.tolist(), medium, bear.tolist(), width, tilt)
+            self.sheet.stroke(
+                path.tolist(), medium, bear.tolist(), width, tilt, seed=as_seed(g)
+            )
 
     def tone(self, colour: str, weight: np.ndarray, firm: float, angles, width=3.0):
         """Even hatching of one pencil over all of ``weight`` > 0, as firm as
@@ -271,8 +280,16 @@ class Hand:
             yi = np.clip(np.asarray(y, dtype=np.float64), 0.0, HEIGHT - 1.001)
             return firm * bilinear(w, yi, xi)
 
+        (rng,) = self.fork(1)
         for angle in angles:
-            self.sheet.shade(box, self.pencil(colour), pressure, width, angle=angle)
+            self.sheet.shade(
+                box,
+                self.pencil(colour),
+                pressure,
+                width,
+                angle=angle,
+                seed=int(rng.integers(1 << 31)),
+            )
 
     def line(self, colour: str, pts, pressure, width=2.5, wobble=0.3, rng=None) -> None:
         """One stroke through ``pts`` (N, 2) of the sheet, as a hand follows
@@ -281,22 +298,33 @@ class Hand:
         pts = np.asarray(pts, dtype=np.float64)
         if len(pts) < 2:
             return
-        pts = pts + (self.rng if rng is None else rng).normal(0.0, wobble, pts.shape)
+        rng = self.rng if rng is None else rng
+        pts = pts + rng.normal(0.0, wobble, pts.shape)
+        # (the grain of the stroke is drawn after its waver, from the same
+        # stream, whether the stroke is laid or not)
+        seed = int(rng.integers(1 << 31))
         bear = np.broadcast_to(np.asarray(pressure, dtype=np.float64), len(pts))
         if float(bear.max()) < 0.01:
             return
-        self.sheet.stroke(pts.tolist(), self.pencil(colour), bear.tolist(), width)
-
-    def erase(self, pts, tool, pressure, width: float) -> None:
-        """One pass of an eraser through ``pts`` (N, 2) of the sheet."""
-        self.sheet.erase(
-            np.asarray(pts, dtype=np.float64).tolist(), tool, pressure, width
+        self.sheet.stroke(
+            pts.tolist(), self.pencil(colour), bear.tolist(), width, seed=seed
         )
 
-    def scratch(self, pts, pressure, width: float = 2.0) -> None:
+    def erase(self, pts, tool, pressure, width: float, seed: int) -> None:
+        """One pass of an eraser through ``pts`` (N, 2) of the sheet, with the
+        grain of ``seed``."""
+        self.sheet.erase(
+            np.asarray(pts, dtype=np.float64).tolist(),
+            tool,
+            pressure,
+            width,
+            seed=seed,
+        )
+
+    def scratch(self, pts, pressure, width: float, rng) -> None:
         """A fine light line scratched out of the wax with the point of a
-        knife, through ``pts`` (N, 2) of the sheet."""
-        self.erase(pts, tools.KNIFE, pressure, width)
+        knife, through ``pts`` (N, 2) of the sheet, its grain from ``rng``."""
+        self.erase(pts, tools.KNIFE, pressure, width, int(rng.integers(1 << 31)))
 
     def burnish(self, weight, angle, firm: float = 1.0, **how) -> None:
         """Burnish where ``weight`` > 0 with the colourless blender: firm
@@ -308,8 +336,8 @@ class Hand:
         clip = how.get("clip", weight > 0.02)
         rate = how.get("cover", 1.5) / (width * length)
         (place,) = self.fork(1)
-        seed, (gain,), (turn, offset) = self.sow(
-            weight, rate, place, uniform=1, normal=2
+        seed, (gain, grain), (turn, offset) = self.sow(
+            weight, rate, place, uniform=2, normal=2
         )
         if not len(seed):
             return
@@ -321,14 +349,16 @@ class Hand:
         spread = how.get("spread", 0.1)
         paths = self.trace(start, angle, steps, 4.0, 0.02 * turn, spread * offset)
         gains = 0.9 + 0.1 * gain
-        for path, w0, gain in zip(paths, own, gains, strict=True):
+        for path, w0, gain, g in zip(paths, own, gains, grain, strict=True):
             path = inside_run(path, clip)
             if len(path) < 2:
                 continue
             u = np.linspace(0.0, 1.0, len(path))
             bear = firm * w0 * (0.8 + 0.2 * np.sin(math.pi * u))
             bear *= gain
-            self.sheet.stroke(path.tolist(), pencils.BLENDER, bear.tolist(), width)
+            self.sheet.stroke(
+                path.tolist(), pencils.BLENDER, bear.tolist(), width, seed=as_seed(g)
+            )
 
 
 @dataclass
@@ -759,8 +789,9 @@ def bill_light(hand: Hand, bird: Bird) -> None:
     point of a knife."""
     tomium = mm.smooth_curve(mm.bill_point(mm.TOMIUM), 50)
     below = mm.on_bill(bird.model, 1, tomium + mm.grain_offset(tomium, -0.03), 1.4)
-    for a, b in spans(mm.visible(bird.model, below, 8.0)):
-        hand.scratch(below[a:b, :2], (0.7 * swell(b - a)).tolist())
+    for n, (a, b) in enumerate(spans(mm.visible(bird.model, below, 8.0))):
+        rng = hand.keyed(61, n)
+        hand.scratch(below[a:b, :2], (0.7 * swell(b - a)).tolist(), 2.0, rng)
 
 
 #: The pencils of the tail, darks first: colour, which of its colours it
@@ -1023,8 +1054,9 @@ def flight_lights(hand: Hand, bird: Bird) -> None:
         pts = mm.on_wing(bird.model, np.stack([u, v], 1))
         seen = mm.visible(bird.model, pts, 4.0, ("wing",))
         firm = 0.3 if j < 4 else 0.2
-        for a, b in spans(seen):
-            hand.scratch(pts[a:b, :2], (firm * swell(b - a)).tolist())
+        for n, (a, b) in enumerate(spans(seen)):
+            rng = hand.keyed(60, j, n)
+            hand.scratch(pts[a:b, :2], (firm * swell(b - a)).tolist(), 2.0, rng)
 
 
 def draw_face(hand: Hand, bird: Bird) -> None:
@@ -1056,8 +1088,8 @@ def draw_fringe(hand: Hand, bird: Bird) -> None:
     eye = soft(eye_masks(bird)[0], 2) > 0.02  # (no feather lies over the eye)
     weight = near * 1.0 + 2.0 * lower
     rate = hand.count(weight, 360)  # (about 360 of them)
-    seeds, (longs,), (turns,) = hand.sow(weight, rate, uniform=1, normal=1)
-    for (x, y), long, turn in zip(seeds, longs, turns, strict=True):
+    seeds, (longs, grains), (turns,) = hand.sow(weight, rate, uniform=2, normal=1)
+    for (x, y), long, grain, turn in zip(seeds, longs, grains, turns, strict=True):
         ix, iy = min(int(x), WIDTH - 1), min(int(y), HEIGHT - 1)
         a = float(bird.angle[iy, ix]) + 0.3 * turn
         size = 5.0 + 7.0 * long
@@ -1068,7 +1100,13 @@ def draw_fringe(hand: Hand, bird: Bird) -> None:
             continue
         shade = float(bird.shade[iy, ix])
         colour = OLIVE if shade < 0.3 else LEAF if shade < 0.6 else PINE
-        hand.sheet.stroke([start, tip], hand.pencil(colour), [0.2, 0.6, 0.15], 2.4)
+        hand.sheet.stroke(
+            [start, tip],
+            hand.pencil(colour),
+            [0.2, 0.6, 0.15],
+            2.4,
+            seed=as_seed(grain),
+        )
 
 
 def draw_ticks(hand: Hand, bird: Bird) -> None:
@@ -1191,7 +1229,7 @@ def draw_eye(hand: Hand, bird: Bird) -> None:
         MAUVE, mm.on_head(model, lower)[:, :2], (0.5 * swell(24)).tolist(), 2.2, 0.1
     )
     centre = mm.on_head(model, [glint])[0, :2]
-    hand.scratch([centre - [0.9, 0.0], centre + [0.9, 0.0]], 1.0, 3.2)
+    hand.scratch([centre - [0.9, 0.0], centre + [0.9, 0.0]], 1.0, 3.2, hand.keyed(70))
 
 
 def draw_eye_skin(hand: Hand, bird: Bird) -> None:
@@ -1234,13 +1272,14 @@ def draw_feet(hand: Hand, bird: Bird) -> None:
     hand.tone(GREY, toes * (1 - band(s, 0.3, 0.6)), 0.45, (110,), 2.4)
     mm.draw_feet(bird.model, Pencil(hand, CHAR, 1.7, rng=hand.keyed(40)))
     lit = toes * (1.0 - band(s, 0.2, 0.55))
-    for x, y in hand.sow(lit, hand.count(lit, 60))[0]:
+    rubs, (grains,), _ = hand.sow(lit, hand.count(lit, 60), uniform=1)
+    for (x, y), grain in zip(rubs, grains, strict=True):
         a = float(bird.angle[int(y), int(x)])
         stroke = [
             (x - 3 * math.cos(a), y - 3 * math.sin(a)),
             (x + 3 * math.cos(a), y + 3 * math.sin(a)),
         ]
-        hand.erase(stroke, tools.ERASER, [0.15, 0.4, 0.15], 3.0)
+        hand.erase(stroke, tools.ERASER, [0.15, 0.4, 0.15], 3.0, as_seed(grain))
     hand.tone(BLACK, claws * 1.0, 0.9, (30, -40, 100), 2.2)
     hand.tone(CHAR, claws * 1.0, 0.8, (75,), 2.2)
 

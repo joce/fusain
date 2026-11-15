@@ -388,6 +388,8 @@ class Sheet:
         width: Profile | None = None,
         tilt: Profile = 0.0,
         ends: Ends = "round",
+        *,
+        seed: int | None = None,
     ) -> float:
         """Draw one pass of ``medium`` along ``path``.
 
@@ -465,15 +467,23 @@ class Sheet:
         nor is what lies under it; but pastel rubbed so far into the paper
         that no dust is left on it fills the tooth, and takes little.
 
+        ``seed`` (an integer from 0 to 2**31 - 1) gives the stroke the grain
+        of its own: it takes every random number it needs from it and none
+        from the sheet's generator, so that its grain does not depend on what
+        was drawn before it, and what is drawn after it does not depend on
+        it. By default the grain is drawn from the sheet's generator.
+
         Returns the volume of medium laid, which is what the tip lost.
 
         Raises ValueError or TypeError, before anything is drawn, unless
         ``width`` is finite and above 0 all along (and not given for a stick
         or a pen), the pressures are finite, ``tilt`` is between 0 and 1 all
-        along and ``ends`` is ``"round"``, ``"flat"`` or a pair of those.
+        along, ``ends`` is ``"round"``, ``"flat"`` or a pair of those and
+        ``seed`` is none or an integer from 0 to 2**31 - 1.
         """
+        _check_seed(seed)
         if isinstance(medium, Pen | HeldPen):
-            return self._roll(path, medium, pressure, width, tilt, ends)
+            return self._roll(path, medium, pressure, width, tilt, ends, seed)
         if isinstance(medium, Stick):
             if width is not None:
                 raise TypeError("a Stick has its own width: give none with it")
@@ -540,7 +550,7 @@ class Sheet:
                 np.array(
                     [paper.depth, paper.bite, paper.give, paper.hold], dtype=np.float64
                 ),
-                int(self._rng.integers(1 << 31)),
+                self._seed(seed),
             )
         )
         if stick is not None:
@@ -548,7 +558,7 @@ class Sheet:
         return laid
 
     def _roll(
-        self, path, pen: Pen | HeldPen, pressure: Profile, width, tilt, ends
+        self, path, pen: Pen | HeldPen, pressure: Profile, width, tilt, ends, seed
     ) -> float:
         """One pass of a ballpoint pen along ``path``; see :meth:`stroke`."""
         if width is not None:
@@ -600,7 +610,7 @@ class Sheet:
                     [paper.depth, paper.bite, paper.give, paper.hold], dtype=np.float64
                 ),
                 rim,
-                int(self._rng.integers(1 << 31)),
+                self._seed(seed),
             )
         )
 
@@ -782,6 +792,8 @@ class Sheet:
         tool: Tool | Smudger = STUMP,
         pressure: Profile = 0.5,
         width: float | None = None,
+        *,
+        seed: int | None = None,
     ) -> float:
         """Rub one pass of a stump, a finger or another :class:`fusain.Tool`
         along ``path``: it drags the dust along, presses some of it into the
@@ -807,11 +819,16 @@ class Sheet:
         stump draws a tone of its own there (and leaves some wherever it
         strays off a tone). It has its own width, so it takes none.
 
+        ``seed`` (an integer from 0 to 2**31 - 1) gives the pass the grain of
+        its own, as for :meth:`stroke`: it draws nothing from the sheet's
+        generator, and its grain does not depend on what was drawn before.
+
         Returns the volume of pigment the tool took off the sheet, less what
         it laid back: for a bare tool, what was left on it at the end; for a
         ``Smudger`` that left more than it took, less than nothing.
         """
-        return self._rub(path, _in_hand(tool, width), pressure)
+        _check_seed(seed)
+        return self._rub(path, _in_hand(tool, width), pressure, seed)
 
     def erase(
         self,
@@ -819,6 +836,8 @@ class Sheet:
         tool: Tool | Smudger = KNEADED,
         pressure: Profile = 0.5,
         width: float | None = None,
+        *,
+        seed: int | None = None,
     ) -> float:
         """Rub one pass of an eraser along ``path``. A kneaded eraser
         (``tools.KNEADED``, the default) lifts the dust and a little of what
@@ -851,9 +870,14 @@ class Sheet:
         the pass, and a single point is a dab, which takes one pass's worth
         off the paper under it.
 
+        ``seed`` (an integer from 0 to 2**31 - 1) gives the pass the grain of
+        its own, as for :meth:`stroke`: it draws nothing from the sheet's
+        generator, and its grain does not depend on what was drawn before.
+
         Returns the volume of pigment taken off the sheet.
         """
-        return self._rub(path, _in_hand(tool, width), pressure)
+        _check_seed(seed)
+        return self._rub(path, _in_hand(tool, width), pressure, seed)
 
     def rub(
         self,
@@ -864,6 +888,8 @@ class Sheet:
         angle: float = 0.0,
         spacing: float | None = None,
         hand: float = 1.0,
+        *,
+        seed: int | None = None,
     ) -> float:
         """Rub all of ``area`` with a stump, a finger or an eraser: passes
         side by side, to and fro, as a hand blends a sky or lifts a light
@@ -890,14 +916,22 @@ class Sheet:
         However the pressure falls, a rub takes the same numbers from the
         sheet's generator (the passes' places and one seed for the grain of
         them all), so what is drawn after it has the grain it would have had.
+        Given a ``seed`` (an integer from 0 to 2**31 - 1) it takes none from
+        the sheet's generator: it has a generator of its own, from which it
+        draws all it would have drawn from the sheet's, so that its grain
+        does not depend on what was drawn before and what is drawn after does
+        not depend on it.
 
         Returns the volume of pigment the tool took off the sheet in all,
         less what it laid back (less than nothing for a ``Smudger`` that
         left more than it took).
 
         Raises ValueError or TypeError, before anything is rubbed, as
-        :meth:`shade` does.
+        :meth:`shade` does (and for a ``seed`` that is not none or an integer
+        from 0 to 2**31 - 1).
         """
+        _check_seed(seed)
+        rng = self._rng if seed is None else np.random.default_rng(seed)
         smudger = _in_hand(tool, width)
         width = smudger.width
         outline = hatching.as_outline(area)
@@ -908,7 +942,7 @@ class Sheet:
         # middle, out to the outline of the tool: each stops half a width
         # short of the edge of the area, which keeps the tool inside it)
         strokes = hatching.strokes(
-            outline, angle, width, gap, hand, self._rng, inset=(0.5, 0.5)
+            outline, angle, width, gap, hand, rng, inset=(0.5, 0.5)
         )
         for k, (path, firm, _) in enumerate(strokes):
             path = path[::-1] if k % 2 else path  # to and fro
@@ -922,7 +956,7 @@ class Sheet:
         # pass has the seed of the sample it starts at, counted from the start
         # of the rub, so no two runs share one and none moves when the
         # pressure is nothing elsewhere)
-        base = int(self._rng.integers(1 << 31))
+        base = int(rng.integers(1 << 31))
         taken, first = 0.0, 0
         for points, touch in passes:
             marks = np.nonzero(touch > 0.0)[0]
@@ -1015,9 +1049,14 @@ class Sheet:
             # (where it lands and lifts, the tool goes at its own pace,
             # however short the pass)
             spacing if spacing >= 0.5 * pace else pace,
-            int(self._rng.integers(1 << 31)) if seed is None else seed,
+            self._seed(seed),
         )
         return smudger.load - before
+
+    def _seed(self, seed: int | None) -> int:
+        """``seed``, or by default one drawn from the sheet's generator: what
+        a kernel takes to salt the grain of a mark."""
+        return int(self._rng.integers(1 << 31)) if seed is None else int(seed)
 
     def _sampled(self, path, pressure: Profile, width: float):
         """``path`` sampled for a tip of ``width``: what the kernels take (see
@@ -1037,6 +1076,8 @@ class Sheet:
         hand: float = 1.0,
         tilt: float = 0.0,
         ends: Ends = "round",
+        *,
+        seed: int | None = None,
     ) -> float:
         """Shade ``area`` with one layer of strokes side by side, as a hand
         does: none quite straight or quite alike, each lighter where the tip
@@ -1060,13 +1101,20 @@ class Sheet:
         with ``"flat"`` every stroke stops square at the edge of the area.
 
         Shade again at another angle to cross-hatch or to build tone.
+        Given a ``seed`` (an integer from 0 to 2**31 - 1) the shading takes
+        nothing from the sheet's generator: it has a generator of its own,
+        from which it draws the unsteadiness of the hand and the grain of
+        every stroke, so that its grain does not depend on what was drawn
+        before and what is drawn after does not depend on it.
         Returns the volume of medium laid.
 
         Raises ValueError or TypeError, before anything is drawn, unless
         ``width`` (not given for a stick) and ``spacing`` are finite numbers
-        above 0, ``angle`` is finite, ``hand`` is finite and not negative and
-        ``tilt`` is between 0 and 1.
+        above 0, ``angle`` is finite, ``hand`` is finite and not negative,
+        ``tilt`` is between 0 and 1 and ``seed`` is none or an integer from 0
+        to 2**31 - 1.
         """
+        _check_seed(seed)
         own = isinstance(medium, Stick | Pen | HeldPen)  # (it has its own width)
         if own:
             if width is not None:
@@ -1090,12 +1138,18 @@ class Sheet:
         gap = _apart(medium, width, broad) if spacing is None else spacing
         _check_hatching(width, gap, angle, hand)
         laid = 0.0
+        rng = self._rng if seed is None else np.random.default_rng(seed)
         for path, firm, tip in hatching.strokes(
-            outline, angle, width, gap, hand, self._rng, broad, inset
+            outline, angle, width, gap, hand, rng, broad, inset
         ):
             along = hatching.bearing(pressure, path, firm, hand)
-            # (a stick's tip is as wide as it has worn, whatever the hand)
-            laid += self.stroke(path, medium, along, None if own else tip, tilt, ends)
+            # (a stick's tip is as wide as it has worn, whatever the hand; the
+            # grain of a stroke is drawn from the sheet's generator by default
+            # and from the shade's own if it has one)
+            mark = {} if seed is None else {"seed": int(rng.integers(1 << 31))}
+            laid += self.stroke(
+                path, medium, along, None if own else tip, tilt, ends, **mark
+            )
         return laid
 
     def save(self, path: str, **render_options) -> None:
@@ -1162,6 +1216,17 @@ def _along(profile: Profile, line, u, knot) -> np.ndarray:
         return np.full(u.shape, float(profile))
     values = spline.evaluate_profile(profile, u, knot, line.n_knots)
     return np.broadcast_to(np.asarray(values, dtype=np.float64), u.shape)
+
+
+def _check_seed(seed: int | None) -> None:
+    """ValueError unless ``seed`` is none or an integer from 0 to 2**31 - 1
+    (as a kernel takes it)."""
+    if seed is None:
+        return
+    if isinstance(seed, bool) or not isinstance(seed, int | np.integer):
+        raise ValueError(f"seed must be an integer or none, got {seed!r}")
+    if not 0 <= seed < 1 << 31:
+        raise ValueError(f"seed must be from 0 to 2**31 - 1, got {seed!r}")
 
 
 def _check_hatching(width: float, gap: float, angle: float, hand: float) -> None:
