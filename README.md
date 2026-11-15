@@ -159,8 +159,12 @@ what it reaches down to: indent whiskers, grass or a highlight firmly before
 shading and they stay white; a groove indented lightly fills in under a soft
 pencil pressed hard. A point narrower than the groove follows it down and
 marks its floor. A firm ballpoint line is such a groove too. And a hard pencil
-pressed firmly flattens the tooth (`Sheet.press`): what is shaded over it
-afterwards lies evenly, without the grain, and the paper bites it less.
+pressed firmly flattens the tooth (`Sheet.crush`): what is shaded over it
+afterwards lies evenly, without the grain, and the paper bites it less. The
+paper stays crushed whatever is drawn over it or erased from it, until a
+knife or a sand eraser cuts its surface away. Wax pressed firmly is
+polished level instead (`Sheet.polish`), which goes when the wax is taken
+off; `Sheet.press` is what a tip meets of the two.
 
 ```python
 from fusain import Smudger, charcoal, tools

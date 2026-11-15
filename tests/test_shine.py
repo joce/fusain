@@ -455,11 +455,11 @@ def test_the_gloss_is_the_polish_of_the_wax_that_is_there():
     sheet = _burnished()
     gloss = _gloss(sheet)
     rough = sheet.copy()
-    rough.press[:] = 0.0
+    rough.polish[:] = 0.0
     assert not rough.shine("wax").any()
     # (a film half polished still scatters most of the light)
     half = sheet.copy()
-    half.press *= 0.5
+    half.polish *= 0.5
     assert _gloss(half) == pytest.approx(0.25 * gloss, rel=1e-5)
     # a tooth pressed flat by a hard pencil has no wax on it to shine
     assert not _shaded(pencils.H4, 1.0, 4).shine("wax").any()

@@ -122,7 +122,7 @@ def test_what_flattens_is_a_tip_that_is_hard_dry_and_all_of_a_piece():
 def test_a_flattened_tooth_is_level_and_touched_all_over():
     sheet = _shaded(pencils.HB, 1.0, 3)
     rough = sheet.copy()
-    rough.press[:] = 0.0  # the same graphite, on a tooth that kept its shape
+    rough.crush[:] = 0.0  # the same graphite, on a tooth that kept its shape
     assert sheet.surface_height()[INSIDE].std() < 0.8 * (
         rough.surface_height()[INSIDE].std()
     )
@@ -132,7 +132,7 @@ def test_a_flattened_tooth_is_level_and_touched_all_over():
     # quarter of the depth of the tooth below that, 0.85 on average
     flat = _shaded(pencils.H4, 1.0, 6)
     kept = flat.copy()
-    kept.press[:] = 0.0
+    kept.crush[:] = 0.0
     top = TOOTH_HEIGHT * flat.paper.grain * flat.paper.depth
     level = flat.surface_height()[INSIDE] / top
     untouched = kept.surface_height()[INSIDE] / top
@@ -159,30 +159,33 @@ def test_a_flattened_tooth_is_level_and_touched_all_over():
 
 
 def test_a_flattened_tooth_bites_a_dry_medium_less():
-    """One stroke along a strip pressed flat and along one left alone."""
-    laid = {}
-    for press in (0.0, 1.0):
-        for medium in (pencils.B4, crayons.wax("#c0392b")):
-            sheet = _sheet(Paper(depth=0.0))  # (level: all of it is touched)
-            sheet.press[:] = press
-            laid[press, medium.name] = sheet.stroke(LINE, medium, 0.5, 6)
+    """One stroke along a strip pressed flat and along one left alone:
+    crushed, or levelled by polish (as wax polished flat levels it)."""
     dry, waxy = pencils.B4.name, crayons.wax("#c0392b").name
-    # (a little more than the share it bites: the tooth fills more slowly)
-    assert 1 - eng.FLAT_BITE < laid[1.0, dry] / laid[0.0, dry] < 0.5
-    assert laid[1.0, waxy] == pytest.approx(laid[0.0, waxy])
+    for flattened in ("crush", "polish"):
+        laid = {}
+        for press in (0.0, 1.0):
+            for medium in (pencils.B4, crayons.wax("#c0392b")):
+                sheet = _sheet(Paper(depth=0.0))  # (level: all of it is touched)
+                getattr(sheet, flattened)[:] = press
+                assert sheet.press.max() == press
+                laid[press, medium.name] = sheet.stroke(LINE, medium, 0.5, 6)
+        # (a little more than the share it bites: the tooth fills more slowly)
+        assert 1 - eng.FLAT_BITE < laid[1.0, dry] / laid[0.0, dry] < 0.5
+        assert laid[1.0, waxy] == pytest.approx(laid[0.0, waxy])
 
 
 def test_graphite_shines_more_and_more_evenly_on_a_flattened_tooth():
     for name, more in (("4H", 2.0), ("HB", 1.2)):
         sheet = _shaded(pencils.grade(name), 1.0, 3)
         rough = sheet.copy()
-        rough.press[:] = 0.0
+        rough.crush[:] = 0.0
         flat_shine = float(sheet.shine("graphite")[INSIDE].mean())
         assert flat_shine > more * float(rough.shine("graphite")[INSIDE].mean())
     # six firm layers of HB under the default lamp: the light it mirrors
     sheet = _shaded(pencils.HB, 1.0, 6)
     rough = sheet.copy()
-    rough.press[:] = 0.0
+    rough.crush[:] = 0.0
     uneven = []
     for target in (sheet, rough):
         glint = _light(target.render()) - _light(target.render(gloss=0))
@@ -191,7 +194,7 @@ def test_graphite_shines_more_and_more_evenly_on_a_flattened_tooth():
     # a soft lead shines by how much it lays, flattened or not
     soft = _shaded(pencils.B6, 1.0, 3)
     rough = soft.copy()
-    rough.press[:] = 0.0
+    rough.crush[:] = 0.0
     assert float(soft.shine("graphite")[INSIDE].mean()) == pytest.approx(
         float(rough.shine("graphite")[INSIDE].mean()), rel=0.02
     )

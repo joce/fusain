@@ -23,6 +23,52 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   mark that does not. Without a seed everything is as it was, to the bit
   (every hash of `tools/fingerprint.py`, the thorough one too).
 
+### Changed
+
+- The sheet keeps the paper's crush and the wax's polish apart
+  (fusain-dq2): `Sheet.crush`, how far a firm dry tip has crushed the
+  paper's own tooth, and `Sheet.polish`, how far the wax that lies there
+  has been polished level. `Sheet.press` is no longer an array of the
+  sheet but what a tip meets of the two, worked out when it is read
+  (`crush + polish - crush * polish`: polished wax levels its share of the
+  relief that the crush left); writing to it changes nothing, so code that
+  set `sheet.press` sets `sheet.crush` or `sheet.polish`. A sheet takes
+  four bytes a pixel more (380 for 376). There was one `press` for both,
+  and where a pixel held wax it was taken for the wax's polish. Measured
+  on cartridge paper (`tests/test_burnish.py`):
+  - A hard lead pressed under coloured pencil, the pencil then erased:
+    three firm layers of 4H crush the tooth by 0.908; three layers of a
+    dark coloured pencil over them, rubbed out four times with a vinyl
+    eraser, left 0.122 of it, and a light layer of HB shaded there
+    touched 0.79 of the pixels. The crush now stays, to the bit, and the
+    HB touches 0.92, as it does on the crushed tooth alone (fresh paper
+    0.68).
+  - Wax laid lightly over a crushed tooth is not polished: six light
+    layers of crayon (0.35) over those three of 4H had 0.64 of the gloss
+    of polished wax and held against a vinyl eraser as a burnished layer
+    does (a rub left 0.73 of them); they have no gloss now, and a rub
+    leaves 0.32, as on fresh paper (0.29). The gloss of wax and how it
+    holds against an eraser read the polish; the tooth a tip meets, how
+    little it bites a dry medium, the relief and the sheen of graphite
+    read both.
+  - The polish of thin wax goes with the wax: a blender pressed hard over
+    a very light layer polishes further than so little wax holds up, and
+    after six rubs of a vinyl eraser a sixth of the pixels kept a
+    hundredth or more of polish beyond what the wax left on them holds
+    (its thickness over `WAX_FAST`); now none keeps 0.004. Where a tool
+    takes wax, the polish left is at most what the wax left holds up.
+  - A dry tip pressed firmly on wax raises both, a waxy one the polish
+    only; a rubber eraser gives back the polish as it takes the wax and
+    never the crush; a sand eraser or a knife takes both with the surface
+    it cuts; fixative leaves both.
+
+  The stroke, rub and pen kernels take the two arrays where they took one.
+  Of the thirteen drawings of `tools/fingerprint.py`, the five without wax
+  (`graphite/cartridge/1`, `graphite/level/2`, `sticks/Ingres/3`,
+  `dust/charcoal paper/4`, `dust/rough/5`) are as they were in all but the
+  names of the two arrays; the other eight have a dry tip over wax or wax
+  over a crushed tooth somewhere, and change.
+
 ### Fixed
 
 - A tool rubbed over an area stays inside it (fusain-soe). `Sheet.rub` laid

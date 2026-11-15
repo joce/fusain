@@ -319,7 +319,7 @@ def test_the_side_of_a_tip_turned_sharply_leaves_nothing_below_nothing(
         sheet.shade((20, 20, 380, 280), crayons.wax("#2456a6"), 0.8, width=10)
     before = sheet.pigment().sum(dtype=np.float64)
     laid = sheet.stroke(path, medium, 1.0, width, tilt=1.0)
-    for name in ("held", "under", "loose", "bonded", "cover", "press"):
+    for name in ("held", "under", "loose", "bonded", "cover", "crush", "polish"):
         assert getattr(sheet, name).min() > -1e-6, name
     assert sheet.pigment().sum(dtype=np.float64) == pytest.approx(before + laid)
 

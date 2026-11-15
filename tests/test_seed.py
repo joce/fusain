@@ -8,7 +8,18 @@ import pytest
 from fusain import Sheet, Stick, charcoal, papers, pencils, pens, tools
 
 #: What a sheet holds, which a mark changes.
-STATE = ("tooth", "press", "dent", "cover", "held", "under", "loose", "bonded", "ink")
+STATE = (
+    "tooth",
+    "crush",
+    "polish",
+    "dent",
+    "cover",
+    "held",
+    "under",
+    "loose",
+    "bonded",
+    "ink",
+)
 #: Rows the marks below lie in (the stroke drawn elsewhere first lies below).
 TOP = slice(0, 140)
 

@@ -30,10 +30,11 @@ def _lum(rgb):
 def test_a_new_sheet_is_bare_paper():
     sheet = Sheet(48, 32, paper=papers.INGRES, seed=1)
     assert (sheet.width, sheet.height) == (48, 32)
-    assert sheet.tooth.shape == sheet.press.shape == (32, 48)
+    assert sheet.tooth.shape == sheet.crush.shape == sheet.polish.shape == (32, 48)
     assert sheet.held.shape == (32, 48, HELD)
     assert sheet.under.shape == sheet.loose.shape == (32, 48, LOOSE)
-    for state in (sheet.tooth, sheet.press, sheet.held, sheet.under, sheet.loose):
+    flattened = (sheet.crush, sheet.polish, sheet.press)
+    for state in (sheet.tooth, *flattened, sheet.held, sheet.under, sheet.loose):
         assert state.dtype == np.float32
     assert not sheet.pigment().any() and not sheet.press.any()
     np.testing.assert_allclose(
@@ -114,7 +115,8 @@ def test_a_copy_is_independent():
     sheet = Sheet(30, 20, seed=4)
     copy = sheet.copy()
     _lay(copy, copy.held, (slice(0, 5), slice(0, 5)), Pigment("#202020"), 1.0)
-    copy.press[:] = 0.5
+    copy.crush[:] = 0.5
+    copy.polish[:] = 0.5
     assert not sheet.pigment().any() and not sheet.press.any()
     assert copy.pigment().any() and copy.paper is sheet.paper
     np.testing.assert_array_equal(copy.tooth, sheet.tooth)

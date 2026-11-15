@@ -283,8 +283,8 @@ def test_a_white_pencil_pressed_hard_burnishes_nearly_as_the_blender_and_lighten
     assert _flecks(white) < 0.3 * flecks
     assert _flecks(white) < 1.3 * _flecks(blender)
     assert _gloss(white) > 0.5 * _gloss(blender) > 1.2 * _gloss(red)
-    assert white.press[INSIDE].mean() > 0.9 * blender.press[INSIDE].mean()
-    assert white.press[INSIDE].mean() > 1.3 * red.press[INSIDE].mean()
+    assert white.polish[INSIDE].mean() > 0.9 * blender.polish[INSIDE].mean()
+    assert white.polish[INSIDE].mean() > 1.3 * red.polish[INSIDE].mean()
     # the blender deepens the colour; the white pencil leaves it a paler
     # tint of it, as light as it was
     lightness, chroma = _lab(white)[0], _chroma(white)
@@ -324,10 +324,10 @@ def test_a_tip_begins_to_polish_by_degrees():
 
 def _patchy(sheet, where=INSIDE) -> float:
     """How unevenly an area is polished from stroke to stroke: the spread of
-    its ``press``, smoothed over a few pixels (the grain of the paper), as a
+    its ``polish``, smoothed over a few pixels (the grain of the paper), as a
     share of its mean."""
-    press = box_blur(sheet.press[where], 3).astype(np.float64)
-    return float(press.std() / press.mean())
+    polish = box_blur(sheet.polish[where], 3).astype(np.float64)
+    return float(polish.std() / polish.mean())
 
 
 @pytest.mark.parametrize(
@@ -345,7 +345,7 @@ def test_strokes_near_where_a_tip_begins_to_polish_polish_alike(make, width, mos
         sheet = _sheet()
         _layers(sheet, make(DARK), 2, pressure, width)
         assert _patchy(sheet) < bound, pressure
-        pressed.append(float(sheet.press[INSIDE].mean()))
+        pressed.append(float(sheet.polish[INSIDE].mean()))
     # and it is polished the more, the harder it is pressed
     assert 0.0 < pressed[0] < pressed[1] < pressed[2]
 
@@ -626,7 +626,8 @@ def test_the_tooth_comes_back_where_burnished_wax_is_scraped_off(tool, spacing):
     # touches 0.68 of fresh paper, and lay three or four times as evenly)
     sheet, fresh = _dense(True), _sheet()
     sheet.rub(AREA, tool, 0.9, 10, spacing=spacing)
-    assert sheet.press[RUBBED].mean() < 0.15  # (0.996)
+    assert sheet.polish[RUBBED].mean() < 0.15  # (0.996)
+    assert not sheet.crush.any()
     assert _gloss(sheet, RUBBED) < 0.025  # (none and 0.08)
     assert _relief(sheet) > 0.9 * _relief(fresh)  # (a twenty-eighth)
     new, bare = _over(sheet), _over(fresh)
@@ -637,10 +638,10 @@ def test_the_tooth_comes_back_where_burnished_wax_is_scraped_off(tool, spacing):
 def test_where_burnished_wax_holds_against_an_eraser_it_stays_level():
     # a vinyl eraser leaves most of the wax, which keeps the tooth level
     sheet = _dense(True)
-    pressed = sheet.press[RUBBED].mean()
+    pressed = sheet.polish[RUBBED].mean()
     for _ in range(3):
         sheet.rub(AREA, tools.ERASER, 0.9)
-    assert sheet.press[RUBBED].mean() > 0.95 * pressed
+    assert sheet.polish[RUBBED].mean() > 0.95 * pressed
     assert _touched(_over(sheet)) > 0.9
 
 
@@ -649,15 +650,126 @@ def test_a_tooth_a_hard_lead_crushed_stays_crushed_unless_it_is_cut():
     # a sand eraser or a knife takes the surface of the paper with it
     sheet = _sheet()
     _layers(sheet, pencils.H4, 3, 1.0)
-    crushed = sheet.press[RUBBED].mean()
+    crushed = sheet.crush[RUBBED].mean()
     assert crushed > 0.5
     erased, sanded = sheet.copy(), sheet.copy()
     for _ in range(3):
         erased.rub(AREA, tools.ERASER, 0.9)
     assert erased.pigment()[RUBBED].mean() < 0.1 * sheet.pigment()[RUBBED].mean()
-    assert erased.press[RUBBED].mean() == pytest.approx(crushed)
+    assert erased.crush[RUBBED].mean() == pytest.approx(crushed)
     sanded.rub(AREA, tools.SAND_ERASER, 0.9, 10)
-    assert sanded.press[RUBBED].mean() < 0.2 * crushed
+    assert sanded.crush[RUBBED].mean() < 0.2 * crushed
+
+
+# --------------------------------------------------------------------------
+# the paper's crush and the wax's polish are two things (fusain-dq2)
+
+
+def _crushed() -> Sheet:
+    """A tooth that three firm layers of 4H crushed."""
+    sheet = _sheet()
+    _layers(sheet, pencils.H4, 3, 1.0)
+    return sheet
+
+
+def test_the_crush_of_a_hard_lead_under_coloured_pencil_stays_when_that_is_erased():
+    # (with one press for both, the crush went with the wax: 0.908 fell to
+    # 0.122, and a light layer of HB shaded there touched 0.79 of the
+    # pixels, where it touches 0.92 of the crushed tooth and 0.68 of fresh
+    # paper)
+    sheet = _crushed()
+    crushed = sheet.crush.copy()
+    assert crushed[RUBBED].mean() > 0.85 and not sheet.polish.any()
+    on_crushed = _touched(_over(sheet.copy()))
+    _layers(sheet, pencils.coloured(DARK), 3, 0.5)
+    wax = float(sheet.held[RUBBED][..., IW].mean())
+    for _ in range(4):
+        sheet.rub(AREA, tools.ERASER, 0.9)
+    assert sheet.held[RUBBED][..., IW].mean() < 0.05 * wax
+    # a waxy tip does not crush the paper, and an eraser does not uncrush it
+    assert np.array_equal(sheet.crush, crushed)
+    assert sheet.polish[RUBBED].mean() < 0.05
+    assert _touched(_over(sheet)) > on_crushed - 0.02 > 0.85
+
+
+def test_the_polish_of_thin_wax_goes_with_the_wax():
+    # a blender pressed hard over a very light layer polishes further than
+    # so little wax holds up; erased, no pixel keeps more polish than the
+    # wax left on it is thick, over WAX_FAST (a sixth of them kept 0.01 or
+    # more beyond it; now none keeps 0.004, which is the wax the eraser
+    # drags off a pixel after it has lifted from it)
+    sheet = _sheet()
+    sheet.shade(BOX, pencils.coloured(DARK), 0.15)
+    sheet.shade(BOX, pencils.BLENDER, 1.0, angle=20)
+    assert sheet.polish[RUBBED].mean() > 0.5 and not sheet.crush.any()
+    for _ in range(6):
+        sheet.rub(AREA, tools.ERASER, 0.9)
+    cover = np.maximum(sheet.cover[RUBBED], 1e-6)
+    holds = sheet.held[RUBBED][..., IW] / cover / WAX_FAST
+    assert (sheet.polish[RUBBED] <= holds + 0.005).all()
+    assert sheet.polish[RUBBED].mean() < 0.15
+    assert not sheet.crush.any()
+
+
+def test_wax_laid_lightly_over_a_crushed_tooth_is_not_polished():
+    # (the crush was taken for the wax's polish wherever there was wax: six
+    # light layers of crayon over a tooth a 4H had crushed had 0.64 of the
+    # gloss of polished wax, and a vinyl eraser left 0.73 of them, as of a
+    # burnished layer, where it leaves 0.29 on fresh paper)
+    over, fresh = _crushed(), _sheet()
+    for sheet in (over, fresh):
+        for layer in range(6):
+            sheet.shade(BOX, crayons.wax(RED), 0.35, 9.0, angle=30 - 55 * layer)
+    assert over.crush[INSIDE].mean() > 0.85 and over.polish[INSIDE].mean() < 0.02
+    assert _gloss(over) < 0.01
+    left = []
+    for sheet in (over, fresh):
+        before = sheet.copy()
+        sheet.rub(AREA, tools.ERASER, 0.9)
+        left.append(_left(sheet, before, RUBBED))
+    assert left[0] < left[1] + 0.1 < 0.5
+
+
+def test_a_hard_lead_pressed_on_wax_polishes_the_wax_and_crushes_the_paper():
+    sheet = _sheet()
+    for layer in range(3):
+        sheet.shade(BOX, crayons.wax(RED), 0.6, 9.0, angle=30 - 55 * layer)
+    polished = float(sheet.polish[INSIDE].mean())
+    assert not sheet.crush.any()
+    sheet.shade(BOX, pencils.H4, 1.0, angle=-20)
+    assert sheet.polish[INSIDE].mean() > polished + 0.2
+    assert sheet.crush[INSIDE].mean() > 0.3
+    # to a tip the tooth is level as far as either made it so: the wax
+    # levels its share of the relief that the crush left
+    crush, polish = sheet.crush, sheet.polish
+    assert np.allclose(sheet.press, 1.0 - (1.0 - crush) * (1.0 - polish), atol=1e-6)
+    assert (sheet.press >= np.maximum(crush, polish) - 1e-6).all()
+    assert sheet.press.max() <= 1.0
+    # what a tip meets is worked out, not kept: writing to it changes nothing
+    pressed = sheet.press.copy()
+    sheet.press[:] = 0.0
+    assert np.array_equal(sheet.press, pressed)
+    # an eraser takes the wax and its polish, and leaves the crush; a sand
+    # eraser cuts the paper, and takes both
+    erased, sanded = sheet.copy(), sheet.copy()
+    for _ in range(5):
+        erased.rub(AREA, tools.ERASER, 0.9)
+    assert np.array_equal(erased.crush, sheet.crush)
+    assert erased.polish[RUBBED].mean() < 0.3 * sheet.polish[RUBBED].mean()
+    sanded.rub(AREA, tools.SAND_ERASER, 0.9, 10)
+    assert sanded.crush[RUBBED].mean() < 0.2 * sheet.crush[RUBBED].mean()
+    assert sanded.polish[RUBBED].mean() < 0.2 * sheet.polish[RUBBED].mean()
+
+
+def test_fixative_leaves_the_crush_and_the_polish_as_they_are():
+    sheet = _crushed()
+    for layer in range(2):
+        sheet.shade(BOX, crayons.wax(RED), 0.9, 9.0, angle=30 - 55 * layer)
+    crush, polish = sheet.crush.copy(), sheet.polish.copy()
+    assert polish[INSIDE].mean() > 0.3
+    sheet.fix()
+    assert np.array_equal(sheet.crush, crush)
+    assert np.array_equal(sheet.polish, polish)
 
 
 @pytest.mark.parametrize("scrape", [-0.1, 1.5, float("nan")])
