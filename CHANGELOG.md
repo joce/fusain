@@ -53,12 +53,34 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   `tools/fingerprint.py`, 0.4% of the pixels move by more than two levels
   (of 255), some by half their tone.
 - fusain requires murex 0.2.0.
+- `roll_stroke` (in `fusain._engine`) takes, in `pen`, how much the pen
+  blots and the colour its ink bronzes, and the ink on the rim of its ball
+  (`rim`, NaN for a pen just picked up); `blot` takes the pen.
 - `lay_stroke` and `rub_stroke` (in `fusain._engine`) take what they took;
   `bear`, `put_down` and `streak_at` take the streaks of the pass
   (`streaks_of`), and the first two the row they work in.
 
 ### Added
 
+- `HeldPen(pen)`: a ballpoint in the hand, as a `Stick` is a medium and a
+  `Smudger` a tool in the hand. It keeps the ink its ball gathers from one
+  line to the next until `wipe()` (which returns it); `load` is how much
+  there is. It lands with what its last line gathered and did not leave:
+  where it lands a share drawn at random comes round, as for a pen just
+  picked up (mostly next to none), and the rest at the first sharp turn.
+  A bare `Pen` is picked up afresh for every line, as before: it lands
+  with a drop drawn at random, which it leaves there, and takes away what
+  it gathers. `Sheet.stroke` and `Sheet.shade` take either, and return the
+  ink laid; what a `HeldPen` gathered is on the paper or on its ball.
+  Measured: a pen in the hand that drew a straight line of 6.53 of ink
+  holds 0.327 (`BALL_GATHER`, 0.05, of it), and where the next line lands
+  at 0.7 with a share of 0.52 coming round it leaves 0.1272 more than a pen
+  that gathers nothing, 0.745 of 0.52 of 0.327, to four digits.
+  `tools/fingerprint.py` draws one.
+- `Pen.bronze`, and `pens.ballpoint(..., bronze=...)`: the colour heavy ink
+  mirrors under a lamp. By default the light the ink absorbs most, as
+  before; a black ink is a blend of dyes, which bronzes as the one that
+  bronzes most (see Fixed). `Pen.mirrors` is that light in linear RGB.
 - `Pen.blots`: how much ink a ballpoint's ball gathers, to leave as a blob
   where the line turns sharply and, now and then, where it lands. 1 for a
   usual pen (the presets), 0 for one that never blots, more for a leaky
@@ -96,6 +118,15 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Black ballpoint ink bronzes a red between copper and violet, as a real
+  one does, where it bronzed grey: its ink was one neutral colour, which
+  absorbs all light alike, and so mirrors it alike. `pens.BLACK` is a blend
+  of dyes whose violet bronzes. Eight layers of it hatched at 0.7, under a
+  lamp overhead, add (0.0221, 0.0072, 0.0106) of light in linear RGB, from
+  (0.0221, 0.0221, 0.0199): a chroma of 41 at a hue of 1 degree, from 6.
+  The sheet keeps for each pixel the colour of its ink's bronze, mixed as
+  the inks are (`Sheet.ink` has three more parts, after the volume: linear
+  RGB, times the volume); blue and red ink bronze as they did.
 - A light ballpoint line blots as lightly as it is drawn. The ball left all
   the ink it had gathered where it landed and where the line turned, so a
   faint line had blobs as big and as dark as a firm one's, and they showed

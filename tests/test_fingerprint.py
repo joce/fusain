@@ -70,7 +70,7 @@ def test_every_mark_is_there():
             assert f"sheet:{key}" in marks, (name, key)
         assert "returned" in marks
     inked = RECORDED["marks"]["ballpoint/printer paper/11"]
-    assert {"sheet.ink", "sheet.inked", "sheet:overhead"} <= set(inked)
+    assert {"sheet.ink", "sheet.inked", "sheet:overhead", "pen._rim"} <= set(inked)
     carried = RECORDED["marks"]["dust/charcoal paper/4"]
     assert {"finger._carried", "stump:end._carried"} <= set(carried)
     worn = RECORDED["marks"]["sticks/Ingres/3"]

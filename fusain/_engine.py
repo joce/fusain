@@ -49,6 +49,11 @@ KINDS = 3
 #: What a tool carries is packed as dust is, with a fifth part: the volume of
 #: it that is paste.
 IP = N + 3
+#: The ink of pens is packed as dust is, with three parts more: the colour of
+#: the light it mirrors where it is heavy and bronzes (linear RGB, its
+#: brightest part 1), times its volume.
+IB = N + 3
+INK = N + 6
 
 #: How far down the tooth a tip reaches at full pressure, as a share of a
 #: tooth of depth 1: the hardest lead, and what the softest adds to it. Only
@@ -233,10 +238,13 @@ BALL_SURGE = 12.0
 #: bears on it, the share of a firm pass that the line lays there (from
 #: BALL_LIGHT at the lightest touch to all of it at full pressure), and the
 #: rest stays on the rim: a light line blots as lightly as it is drawn. A
-#: pen put to the paper has some on it already, which it leaves where it
-#: lands: at most the share BALL_START of that, and mostly next to none (a
-#: number drawn between 0 and 1, to the power BALL_SELDOM, of it), so that
-#: one line in four or so starts with a dot that shows.
+#: pen put to the paper has some on it already. A pen in the hand lands
+#: with what it gathered before, and where it lands at most the share
+#: BALL_START of that comes round, mostly next to none (a number drawn
+#: between 0 and 1, to the power BALL_SELDOM, of it), so that one line in
+#: four or so starts with a dot that shows; the rest comes round at the
+#: next turn. A pen just picked up lands with that share of the most the
+#: ball holds, all of which comes round.
 BALL_GATHER = 0.05
 BALL_BLOB = 4.0
 BALL_TURN = 2.0
@@ -1455,14 +1463,26 @@ def surge_at(travel, salt):
 
 
 @_inlined
-def blot(cover, held, under, loose, ink, inked, x, y, volume, radius, full, k, s):
+def stain(ink, iy, ix, dv, k, pen):
+    """Add ``dv`` of the ink of ``pen`` (see :func:`roll_stroke`; its
+    absorption is ``k``) to the pixel."""
+    for band in range(k.shape[0]):
+        ink[iy, ix, band] += dv * k[band]
+    ink[iy, ix, IS] += dv * pen[0]
+    ink[iy, ix, IV] += dv
+    for part in range(3):
+        ink[iy, ix, IB + part] += dv * pen[3 + part]
+
+
+@_inlined
+def blot(cover, held, under, loose, ink, inked, x, y, volume, radius, full, k, pen):
     """Leave a drop of ink of this ``volume`` at (``x``, ``y``): a round dot
     of this ``radius``, thickest at its middle. It lies in the valleys of
     the tooth as on its peaks: the ink of a pixel is then on all of it if
     there is enough to cover it ``full`` thick, and on a share of it if
     not. It takes on a film of pigment or of wax as badly as the line does
-    (:func:`ball_grip`). Returns the volume laid: less than the drop where
-    it skids or lies off the sheet."""
+    (:func:`ball_grip`). ``pen`` is as for :func:`roll_stroke`. Returns the
+    volume laid: less than the drop where it skids or lies off the sheet."""
     height, width = inked.shape
     x0, x1 = int(math.floor(x - radius)), int(math.ceil(x + radius))
     y0, y1 = int(math.floor(y - radius)), int(math.ceil(y + radius))
@@ -1482,10 +1502,7 @@ def blot(cover, held, under, loose, ink, inked, x, y, volume, radius, full, k, s
             dv *= ball_grip(cover, held, under, loose, iy, ix)
             if dv <= 0.0:
                 continue
-            for band in range(k.shape[0]):
-                ink[iy, ix, band] += dv * k[band]
-            ink[iy, ix, IS] += dv * s
-            ink[iy, ix, IV] += dv
+            stain(ink, iy, ix, dv, k, pen)
             # (the ink there is on at least as much of the pixel as it
             # covers ``full`` thick)
             inked[iy, ix] = max(inked[iy, ix], min(ink[iy, ix, IV] / full, 1.0))
@@ -1518,6 +1535,7 @@ def roll_stroke(
     k,
     pen,
     paper,
+    rim,
     salt,
 ):
     """Roll one pass of a ballpoint pen, its ball of ``radius`` pixels,
@@ -1525,26 +1543,31 @@ def roll_stroke(
     and moving ``steps`` pixels at each.
 
     ``pen`` is [the scattering of its ink per unit volume, how freely it
-    flows, how much it blots] (the ink's absorption per band is ``k``) and
+    flows, how much it blots, the colour its ink bronzes (linear RGB, its
+    brightest part 1)] (the ink's absorption per band is ``k``) and
     ``paper`` is [depth, bite, give, hold]. The ball lays ink at a steady
     rate wherever it touches the paper: how much does not depend on the
-    tooth, as it does for a stick,
-    and only a little on the pressure, which sets how much of the tooth the
-    ball reaches. The ink is a stain in the paper (``ink``, packed as dust
-    is, on the share ``inked`` of each pixel), under whatever the paper
-    carries; where that is thick or waxy, the ball skids and lays less.
+    tooth, as it does for a stick, and only a little on the pressure, which
+    sets how much of the tooth the ball reaches. The ink is a stain in the
+    paper (``ink``, packed as :data:`IB` says, on the share ``inked`` of
+    each pixel), under whatever the paper carries; where that is thick or
+    waxy, the ball skids and lays less.
 
     The ball presses a groove into the paper (``dent``), the deeper the
     harder it bears, and goes down into one that is there: it is as small as
     what made it. And it gathers ink on its rim as it rolls, which it leaves
     as a drop (:func:`blot`) where it lands and where the line turns, as
-    much of it as it bears on the paper there.
+    much of it as it bears on the paper there. ``rim`` holds the ink on the
+    rim of the ball: what it lands with, of which a share drawn at random
+    comes round where it lands (NaN for a pen just picked up, which lands
+    with a drop drawn so and leaves it there), updated in place to what it
+    lifts with.
 
     Returns the volume of ink laid, drops included: what the pen has lost,
-    but for what is still on its rim.
+    but for what it has gathered on its rim.
     """
     height, width = tooth.shape
-    s, flow, blots = pen[0], pen[1], pen[2]
+    flow, blots = pen[1], pen[2]
     depth, give = paper[0], paper[2]
     yields = GIVE_NONE + GIVE_FULL * give
     reach = BALL_REACH * yields
@@ -1552,10 +1575,14 @@ def roll_stroke(
     rise = BALL_ROUND / depth if depth > 1e-6 else 0.0
     bound = radius + 0.5
     per_pass = 1.0 / (2.0 * bound - 1.0)
-    # the drop of ink on the rim of the ball: what it holds at most, and
-    # what the pen lands with
+    # the drop of ink on the rim of the ball: what it holds at most, what
+    # the pen lands with, and the share of that which comes round where it
+    # lands (a pen just picked up lands with that much, all of which does)
     most = BALL_BLOB * BALL_INK * flow * blots * bound * bound
-    gathered = most * BALL_START * unit_noise(0, 2, salt + 3) ** BALL_SELDOM
+    seldom = unit_noise(0, 2, salt + 3) ** BALL_SELDOM
+    gathered, lands = rim[0], BALL_START * seldom
+    if gathered != gathered:
+        gathered, lands = most * BALL_START * seldom, 1.0
     least = BALL_SHOWS * BALL_INK * flow * bound * bound  # (a drop that shows)
     wx, wy = 1.0, 0.0  # the way it was last going
     down = False  # whether it was on the paper at the last point
@@ -1573,13 +1600,13 @@ def roll_stroke(
         tx, ty = heading(xs, ys, i)
         # (the share of a firm pass it lays here)
         firm = BALL_LIGHT + (1.0 - BALL_LIGHT) * pressure
-        # where it lands all it had gathered comes round; where the line
-        # turns, as much of it as the turn brings round
+        # where the line turns, as much of what it gathered comes round as
+        # the turn brings round
         if down:
             turned += turn_of(tx, ty, wx, wy)
             comes = gathered * min(turned / BALL_TURN, 1.0)
         else:
-            comes, turned = gathered, 0.0
+            comes, turned = gathered * lands, 0.0
         wx, wy, down = tx, ty, True
         if comes >= least:
             # it leaves as much of it as it bears on the paper
@@ -1597,7 +1624,7 @@ def roll_stroke(
                 BLOB_WIDE * bound,
                 BALL_INK * flow,
                 k,
-                s,
+                pen,
             )
             gathered = max(gathered - left, 0.0)
             total += left
@@ -1630,13 +1657,11 @@ def roll_stroke(
                 if dv <= 0.0:
                     continue  # (it skids: no ink, and no more paper inked)
                 inked[iy, ix] = max(inked[iy, ix], touch)
-                for band in range(k.shape[0]):
-                    ink[iy, ix, band] += dv * k[band]
-                ink[iy, ix, IS] += dv * s
-                ink[iy, ix, IV] += dv
+                stain(ink, iy, ix, dv, k, pen)
                 rolled += dv
         total += rolled
         gathered = min(gathered + BALL_GATHER * blots * rolled, most)
+    rim[0] = gathered
     return total
 
 

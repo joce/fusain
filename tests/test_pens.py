@@ -8,7 +8,7 @@ import pytest
 from murex import Pigment, Polyline
 from murex import spectral as sp
 
-from fusain import Pen, Sheet, crayons, papers, pastels, pencils, pens, tools
+from fusain import HeldPen, Pen, Sheet, crayons, papers, pastels, pencils, pens, tools
 from fusain import _engine as eng
 from fusain.sheet import IV
 
@@ -402,6 +402,99 @@ def test_lines_that_cross_darken():
     crossing = float(tone[59:61, 59:61].mean())
     single = float(tone[59:61, 20:40].mean())
     assert crossing < 0.6 * single
+
+
+# --------------------------------------------------------------------------
+# a pen in the hand: what one line gathers, the next lands with
+
+
+def test_a_pen_in_the_hand_is_its_pen_and_the_ink_on_its_ball():
+    pen = HeldPen(pens.BLUE)
+    assert pen.pen is pens.BLUE and pen.width == 3.0 and pen.load == 0.0
+    assert "blue ballpoint" in repr(pen)
+    with pytest.raises(TypeError, match="Pen"):
+        HeldPen(pencils.HB)  # type: ignore[arg-type]
+    sheet = Sheet(120, 60, seed=1)
+    with pytest.raises(TypeError, match="a HeldPen has its own width"):
+        sheet.stroke([(5, 5), (50, 30)], pen, width=4)
+    with pytest.raises(TypeError, match="a HeldPen has its own width"):
+        sheet.shade((5, 5, 50, 30), pen, width=4)
+    assert sheet.stroke([(10, 20.5), (110, 20.5)], pen, 0.5) > 0
+    load = pen.load
+    assert load > 0
+    assert pen.wipe() == load and pen.load == 0.0
+
+
+def _gathered_on_a_line(seed: int, share=lambda x: x > 0.5) -> tuple:
+    """A pen in the hand that has drawn a straight line, on a sheet where
+    the share of what it lands with that comes round where the next line
+    lands is as asked. Returns the sheet, the pen and the ink it laid."""
+    for salt in range(seed, seed + 200):
+        sheet, pen = Sheet(200, 80, seed=salt), HeldPen(pens.BLUE)
+        laid = sheet.stroke([(20, 20.5), (180, 20.5)], pen, 0.5)
+        if share(_lands_with(sheet)):
+            return sheet, pen, laid
+    raise AssertionError("no such sheet")
+
+
+def test_a_pen_in_the_hand_lands_with_what_it_gathered():
+    """It lands with what the line before gathered. Where it lands, the
+    share drawn for the line comes round (as for a pen just picked up: now
+    and then much of it) and the paper takes as much of that as the pen
+    bears on it; the rest stays on the ball, with what this line gathers."""
+    sheet, pen, first = _gathered_on_a_line(1)
+    # it is taken up clean, and a straight line leaves nothing of what it
+    # gathers
+    gathered = pen.load
+    assert gathered == pytest.approx(eng.BALL_GATHER * first, rel=1e-5)
+    # the next line, and the same with a pen that gathers nothing
+    plain, dry = sheet.copy(), HeldPen(pens.BLUE.with_(blots=0.0))
+    left = _firm(0.7) * _lands_with(sheet) * gathered
+    line = [(20, 60.5), (120, 60.5)]
+    second = sheet.stroke(line, pen, 0.7)
+    bare = plain.stroke(line, dry, 0.7)
+    assert second - bare == pytest.approx(left, rel=1e-4)
+    assert _near(sheet, 20, 60.5, 5) - _near(plain, 20, 60.5, 5) == pytest.approx(
+        left, rel=1e-4
+    )
+    assert pen.load == pytest.approx(gathered - left + eng.BALL_GATHER * bare, rel=1e-4)
+
+
+def test_what_does_not_come_off_where_it_lands_comes_off_at_the_first_turn():
+    """A line that turns sharply soon after it lands: a blob there from a
+    pen in the hand that has drawn a long line before, none from a clean
+    one."""
+    corners = []
+    for seed in (1, 20, 40):
+        sheet, pen, _ = _gathered_on_a_line(seed, lambda x: x < 0.01)
+        wiped = HeldPen(pens.BLUE)
+        clean = sheet.copy()
+        path = Polyline([(150.5, 40.5), (160.5, 40.5), (160.5, 75.5)])
+        sheet.stroke(path, pen, 0.5)
+        clean.stroke(path, wiped, 0.5)
+        corners.append(_near(sheet, 160.5, 40.5) / _near(clean, 160.5, 40.5))
+    assert min(corners) > 1.3
+
+
+def test_what_a_pen_in_the_hand_gathers_is_on_the_paper_or_on_its_ball():
+    """Over a scribble of sharp turns and a few lines, the ink the pen laid
+    in drops and the ink still on its ball are what it gathered: the share
+    BALL_GATHER of the ink of its lines."""
+    zigzag = Polyline([(20.5 + 12 * k, 20.5 + 25 * (k % 2)) for k in range(14)])
+    sheets, pens_, laid = [], [], []
+    for blots in (0.0, 1.0):
+        sheet, pen = _clean(220, 150, 2), HeldPen(pens.BLACK.with_(blots=blots))
+        laid.append(sheet.stroke(zigzag, pen, 0.8))
+        for k in range(4):  # (short, so that it never holds the most it can)
+            y = 80.5 + 12 * k
+            laid[-1] += sheet.stroke([(20, y), (60, y + 3)], pen, 0.8)
+        sheets.append(sheet)
+        pens_.append(pen)
+    for sheet, total in zip(sheets, laid, strict=True):
+        assert _ink(sheet) == pytest.approx(total, rel=1e-5)
+    lines, drops = laid[0], laid[1] - laid[0]
+    assert pens_[0].load == 0.0 and drops > 0.0
+    assert drops + pens_[1].load == pytest.approx(eng.BALL_GATHER * lines, rel=1e-4)
 
 
 # --------------------------------------------------------------------------
