@@ -1959,22 +1959,18 @@ def lay_tone(
         hand.sheet.shade(box_of(mask), lead, lookup(field), width, angle, tilt=tilt)
 
 
-#: The least a rub presses anywhere in its mask: a tool that rubs a field
-#: lifts off where the field is nothing, and each stretch it rubs is a pass
-#: of its own, with its own grain; kept on the paper all through the mask,
-#: it makes the same passes however the field it follows came out.
-LIGHTEST_RUB = 0.002
-
-
 def rub_area(hand: Hand, mask, tool, pressure, angle, width=None) -> None:
     """Rub over ``mask`` with a tool (bare, and so clean, or in the hand,
     with what it has picked up), passes to and fro, as hard as ``pressure``
     (a number or a field) asks, the tool kept inside the mask's edge so
     that it does not smear what lies next to it."""
     reach = tool.width if width is None else width
-    field = np.maximum(pressure, LIGHTEST_RUB) * shrink(mask, int(0.2 * reach))
-    if np.max(field) > 0.0:
-        hand.sheet.rub(box_of(mask), tool, lookup(field), width, angle)
+    inside = shrink(mask, int(0.2 * reach))
+    # (rubbed wherever the mask is, however little the field presses there: a
+    # rub takes the same numbers from the sheet's generator whatever its
+    # pressure, so one that follows what was seen is rubbed all the same)
+    if inside.any():
+        hand.sheet.rub(box_of(mask), tool, lookup(pressure * inside), width, angle)
 
 
 def fill_down(values: np.ndarray) -> np.ndarray:

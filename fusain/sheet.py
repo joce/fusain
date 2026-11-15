@@ -822,6 +822,10 @@ class Sheet:
         :class:`fusain.Smudger` (which has its own width and takes none)
         starts with what it picked up before, and keeps it.
 
+        However the pressure falls, a rub takes the same numbers from the
+        sheet's generator (the passes' places and one seed for the grain of
+        them all), so what is drawn after it has the grain it would have had.
+
         Returns the volume of pigment the tool took off the sheet in all,
         less what it laid back (less than nothing for a ``Smudger`` that
         left more than it took).
@@ -849,14 +853,22 @@ class Sheet:
             if not np.isfinite(touch).all():
                 raise ValueError("pressure must be finite all over the area")
             passes.append((points, touch))
-        taken = 0.0
+        # (one draw for the whole rub, whatever the pressure does: a run of a
+        # pass has the seed of the sample it starts at, counted from the start
+        # of the rub, so no two runs share one and none moves when the
+        # pressure is nothing elsewhere)
+        base = int(self._rng.integers(1 << 31))
+        taken, first = 0.0, 0
         for points, touch in passes:
             marks = np.nonzero(touch > 0.0)[0]
-            if marks.size < 2:
-                continue
-            for run in np.split(marks, np.nonzero(np.diff(marks) > 1)[0] + 1):
-                if run.size >= 2:
-                    taken += self._rub(points[run], smudger, touch[run].tolist())
+            if marks.size >= 2:
+                for run in np.split(marks, np.nonzero(np.diff(marks) > 1)[0] + 1):
+                    if run.size >= 2:
+                        seed = _seed_of(base, first + int(run[0]))
+                        taken += self._rub(
+                            points[run], smudger, touch[run].tolist(), seed
+                        )
+            first += len(points)
         return taken
 
     def fix(self, amount: float = 1.0) -> float:
@@ -891,9 +903,12 @@ class Sheet:
             total += float(newly.sum(dtype=np.float64))
         return total
 
-    def _rub(self, path, smudger: Smudger, pressure: Profile) -> float:
-        """One pass of a tool in the hand along ``path``. Returns the volume
-        it took off the sheet, less what it laid back."""
+    def _rub(
+        self, path, smudger: Smudger, pressure: Profile, seed: int | None = None
+    ) -> float:
+        """One pass of a tool in the hand along ``path``, with the grain of
+        ``seed`` (by default one drawn from the sheet's generator). Returns
+        the volume it took off the sheet, less what it laid back."""
         tool, width = smudger.tool, smudger.width
         line, points, u, knot, spacing, pace = _sample(path, width)
         bearing = _profile("pressure", pressure, line, u, knot)
@@ -935,7 +950,7 @@ class Sheet:
             # (where it lands and lifts, the tool goes at its own pace,
             # however short the pass)
             spacing if spacing >= 0.5 * pace else pace,
-            int(self._rng.integers(1 << 31)),
+            int(self._rng.integers(1 << 31)) if seed is None else seed,
         )
         return smudger.load - before
 
@@ -1082,6 +1097,20 @@ def _check_hatching(width: float, gap: float, angle: float, hand: float) -> None
         raise ValueError(f"angle must be a finite number of degrees: {angle!r}")
     if not (math.isfinite(hand) and hand >= 0):
         raise ValueError(f"hand must be 0 (ruler-straight) or more, got {hand!r}")
+
+
+#: What a seed steps by from one run of a rub to the next: odd, so that no two
+#: of fewer than 2**31 steps give the same seed, and far from 1, so that two
+#: seeds are not neighbours (a kernel's noise is salted with a seed and the
+#: seeds next to it).
+SEED_STEP = 0x1E3779B1
+
+
+def _seed_of(base: int, step: int) -> int:
+    """The seed ``step`` steps on from ``base``, as the kernels take it (below
+    2**31): the same on every platform, and different for each ``step``
+    (below 2**31)."""
+    return (base + step * SEED_STEP) % (1 << 31)
 
 
 def _in_hand(tool: Tool | Smudger, width: float | None) -> Smudger:
