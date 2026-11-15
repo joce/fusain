@@ -165,7 +165,13 @@ PLOUGH = 0.12
 #: Pressed harder than BURNISH_FROM, a tip polishes a waxy layer flat: one
 #: pass at full pressure on a film as slick as it gets raises ``press`` by
 #: BURNISH, and a pressed tooth is level, so the white specks close up.
+#: It sets in by degrees: the wax (and, under a dry tip, the paper) does not
+#: give way at one pressure everywhere, but at pressures spread evenly over
+#: BURNISH_SOFT either side of BURNISH_FROM (:func:`firmness`). So of the
+#: strokes of a shading near there, each a little firmer or lighter than
+#: the next, none polishes all and none nothing.
 BURNISH_FROM = 0.6
+BURNISH_SOFT = 0.2
 BURNISH = 1.5
 #: Polishing also smears the waxy layer: of what the paper holds there, the
 #: tip drags along this share at full pressure in one pass, and lays this
@@ -185,13 +191,14 @@ BURNISH_LAY = 4.0
 MELT_LIFT = 1.5
 MELT_LAY = 6.0
 #: A firm dry tip flattens the tooth itself: pressed harder than
-#: BURNISH_FROM, the hardest lead raises ``press`` by FLATTEN in one pass at
-#: full pressure. A softer tip gives before the paper does (it flattens as
-#: the cube of its hardness), and one that crumbles to dust bears on the
-#: paper only with what holds together (as the square of its binding). So a
-#: hard pencil pressed firmly levels the tooth, on which its graphite then
-#: lies flat and shines evenly; a soft one hardly does, and charcoal and
-#: pastel next to not at all. (A waxy tip polishes its film, as above.)
+#: BURNISH_FROM (setting in by degrees, as above), the hardest lead raises
+#: ``press`` by FLATTEN in one pass at full pressure. A softer tip gives
+#: before the paper does (it flattens as the cube of its hardness), and one
+#: that crumbles to dust bears on the paper only with what holds together
+#: (as the square of its binding). So a hard pencil pressed firmly levels
+#: the tooth, on which its graphite then lies flat and shines evenly; a soft
+#: one hardly does, and charcoal and pastel next to not at all. (A waxy tip
+#: polishes its film, as above.)
 FLATTEN = 5.0
 #: The tooth is what scrapes a dry medium off its stick, and a tooth pressed
 #: flat bites less: a dry medium lays this much less on it in a pass. It
@@ -439,6 +446,24 @@ def press_dust(held, under, loose, bonded, cover, iy, ix, share):
         bonded[iy, ix, 1, PASTE] -= bonded[iy, ix, 1, PASTE] * share
     if bonded[iy, ix, 0, PASTE] > 0.0:
         bonded[iy, ix, 0, PASTE] -= bonded[iy, ix, 0, PASTE] * share
+
+
+@_inlined
+def firmness(bearing):
+    """How hard a tip bearing with ``bearing`` (0..1) polishes or flattens
+    what it bears on, 1 at full pressure: how far it bears harder than what
+    gives way, as a share of how far full pressure does, where what gives
+    way does so at pressures spread evenly over BURNISH_SOFT either side of
+    BURNISH_FROM. So it is nothing up to BURNISH_SOFT below that, then
+    grows as the square of the pressure past there, and from BURNISH_SOFT
+    above it on is ``(bearing - BURNISH_FROM) / (1 - BURNISH_FROM)``, as
+    it would be were there no spread: no corner where it sets in."""
+    over = bearing - BURNISH_FROM
+    if over <= -BURNISH_SOFT:
+        return 0.0
+    if over < BURNISH_SOFT:
+        over = (over + BURNISH_SOFT) ** 2 / (4.0 * BURNISH_SOFT)
+    return over / (1.0 - BURNISH_FROM)
 
 
 @_inlined
@@ -790,8 +815,8 @@ def bear(
                 continue
             local = row[1, ix - xa]
             level = row[2, ix - xa]
-            # (a tooth pressed flat is level with its peaks, and nothing
-            # in a groove stands higher than its floor)
+            # (to a tip riding on it a tooth pressed flat is level with its
+            # peaks, and nothing in a groove stands higher than its floor)
             ground = tooth[iy, ix] + (1.0 - tooth[iy, ix]) * press[iy, ix]
             ground = min(ground, 1.0 - dent[iy, ix] * sunk)
             above = ground + MICRO - level
@@ -808,8 +833,8 @@ def bear(
             passing = per_pass * touch
             waxed = held[iy, ix, IW] / covered
             waxy = min(waxed / WAX_FULL, 1.0)
-            if bearing > BURNISH_FROM:
-                firm = (bearing - BURNISH_FROM) / (1.0 - BURNISH_FROM)
+            firm = firmness(bearing)
+            if firm > 0.0:
                 # (a hard tip crushes the tooth, whatever lies on it)
                 press[iy, ix] = min(press[iy, ix] + crush * firm * passing, 1.0)
                 # (a blender melts into the film, however thin it is)

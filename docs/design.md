@@ -48,7 +48,7 @@ Per pixel, all `float32`:
 | Field | What it holds |
 | --- | --- |
 | `tooth` | Height of the paper surface, 0 (valley) to 1 (peak). Set once from the paper's texture. |
-| `press` | How far the tooth has been flattened or polished here (0 to 1): by a hard tip pressed firmly, and by burnishing wax. A tooth pressed flat is level with its peaks. |
+| `press` | How far the tooth has been flattened or polished here (0 to 1): by a hard tip pressed firmly, and by burnishing wax. A tooth pressed flat is level: a tip touches all of it, as it would its peaks, and in the relief its peaks have come down to its valleys. |
 | `dent` | How far the paper has been indented here: the depth of a groove below the peaks of the tooth, in depths of the tooth of a paper of depth 1. By a stylus, and by the ball of a pen. |
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
 | `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. |
@@ -105,14 +105,21 @@ each is not. The rule is that a medium lies on what it meets:
 
 The surface has two fields because a tip meets it in two ways. Where a
 whole area has been pressed flat, the tip that comes next rides on it: what
-matters is that it is level, so `press` raises the low ground to the peaks,
-and the tip touches all of it. A groove is narrower than the tip, which rides
+matters is that it is level, so to a tip `press` raises the low ground to
+the peaks, and the tip touches all of it. A groove is narrower than the tip, which rides
 on the paper either side of it: what matters there is how far below that the
 floor is, so `dent` is a depth, and nothing in a groove stands higher than
 `1 - dent / depth` (the peaks of this paper's tooth being at 1). A light dent only takes the
 peaks off; a deep one is a level floor below the valleys. Both show in the
-relief the lamp lights: a flattened patch is smooth, and a groove is a line
-of shadow under a raking light.
+relief the lamp lights. There a flattened patch has been pressed down: its
+peaks come down towards its valleys, by `press` of their height, so that
+pressed flat it is level with them, a little below the paper around it,
+and a valley the tip never reached is not left a pit. (They were raised to
+the peaks, as for a tip, and such a valley was left a pit as deep as the
+tooth: six firm layers of 4H left a twentieth of the patch more than a
+quarter of a tooth below the rest, and under a raking light the patch
+looked as rough as the paper left alone; now none, and a seventh as rough.)
+A groove is a line of shadow under a raking light.
 
 Sizes are in pixels, and the paper's grain sets the scale of a drawing: the
 tooth of a drawing paper is finer than a pencil line, which is two or three
@@ -311,8 +318,17 @@ At each step, for each pixel under the tip:
    that thick, so charcoal shaded over it skips it: wax resist. Pressed hard, the tip polishes the film: it raises `press`,
    which levels the tooth so that every part of the pixel is touched, and it
    drags some of the waxy layer along and lays it back down, valleys
-   included. That closes the white specks (burnishing). How much a tip
-   polishes goes with how slick the film is, and it takes up `BURNISH_LIFT`
+   included. That closes the white specks (burnishing). It sets in by
+   degrees, between `BURNISH_SOFT` below `BURNISH_FROM` and as far above
+   it (from 0.4 to 0.8), since the wax does not give way at one pressure
+   everywhere: in there a tip polishes as the square of how far it bears
+   past 0.4, and beyond it in proportion to how far it bears past 0.6. (It
+   began sharply at 0.6, and the strokes of a shading near there, each a
+   little firmer or lighter than the next, polished or did not, which left
+   the area polished in streaks: over two layers of a dark coloured pencil
+   at 0.6, `press` smoothed over the grain spread by 0.78 of its mean, and
+   now by 0.58; of an oil pastel 1.08, now 0.73.) How much a tip polishes
+   goes with how slick the film is, and it takes up `BURNISH_LIFT`
    times its polish of what the paper holds. A colourless blender is made
    for this: soft clear wax and nothing else, it melts into the film
    (`Medium.melts`), so it polishes a thin film as if it were slick, takes
@@ -322,9 +338,9 @@ At each step, for each pixel under the tip:
    a tenth of the pixels still show the paper; one layer of the blender at
    full pressure leaves a fifth of those (two layers a twenty-fifth), the
    chroma of the patch goes from 34 to 59 (69), its lightness from 67 to 57
-   (54), it is half as grainy, and it has 0.46 (0.79) of the gloss of
-   polished wax; at a pressure of 0.7 the blender closes a third of the
-   flecks, and at 0.5 none. (In the first build the blender was a
+   (54), it is half as grainy, and it has 0.48 (0.80) of the gloss of
+   polished wax; at a pressure of 0.7 the blender closes two fifths of the
+   flecks, and at 0.5 a twentieth. (In the first build the blender was a
    coloured pencil without colour: one firm layer left two fifths of the
    flecks.) Two colours laid over each other are stirred into one, and
    a blender drawn from a dark out over bare paper drags it along: a
@@ -337,13 +353,14 @@ At each step, for each pixel under the tip:
    layers fill (the fourth takes a fifth of the first), the teal takes a
    fifth and goes a third of the way, and over one layer of lemon it takes
    over half. There the darks go first.
-7. **The tooth.** A dry tip pressed hard (harder than `BURNISH_FROM`, as for
-   burnishing) flattens the tooth itself, and raises `press` too: the hardest
-   lead by `FLATTEN` in a pass at full pressure, a softer one as the cube of
-   its hardness (it gives before the paper does), and one that crumbles to
-   dust as the square of its binding (it bears on the paper only with what
-   holds together). Three firm layers leave the tooth flattened by 0.88 under
-   a 4H, 0.72 under an HB, 0.36 under a 2B and 0.03 under a 6B; compressed
+7. **The tooth.** A dry tip pressed hard (harder than `BURNISH_FROM`, and
+   setting in by degrees, as burnishing does) flattens the tooth itself,
+   and raises `press` too: the hardest lead by `FLATTEN` in a pass at full
+   pressure, a softer one as the cube of its hardness (it gives before the
+   paper does), and one that crumbles to dust as the square of its binding
+   (it bears on the paper only with what holds together). Three firm layers
+   leave the tooth flattened by 0.88 under
+   a 4H, 0.74 under an HB, 0.37 under a 2B and 0.03 under a 6B; compressed
    charcoal and hard pastel flatten it by a few hundredths, vine charcoal and
    soft pastel next to not at all. A flattened tooth is touched all over, and bites
    less: a dry medium lays `FLAT_BITE` less on it in a pass (the tooth is
@@ -414,8 +431,22 @@ raking one; it is added to what the pigment sends back.
   pressure. It counts
   wherever the wax lies: a film laid over dust is on top and shines; what
   the paper holds shines through whatever dust lies over it, as graphite
-  does. The light is white, less than half as strong as graphite's and in a
-  wider lobe: a soft, even gloss, which a raking lamp still shows.
+  does. The light is white, less than half as strong as graphite's, and in a
+  narrower lobe, since a film of wax polished flat is smoother than one of
+  graphite flakes: it falls to half about 15 degrees from where the lamp is
+  mirrored, and to a fifth at 23 degrees, which is how far from the eye
+  above the sheet the default lamp is mirrored. So with the lamp overhead
+  burnished wax shines, a soft white gloss, and under the default lamp a
+  burnished dark stays deep, as it does in life away from the glare: four
+  firm layers of a dark coloured pencil burnished with the blender go from
+  L* 7 to 10 under it and to 19 overhead, and the gloss that the firm
+  layers alone show varies from place to place by a third of what it did.
+  (In the lobe it had first, wider than graphite's, the gloss greyed that
+  dark to 18 under the default lamp, and followed the polish stroke by
+  stroke.)
+  How narrow is assumed, not measured: polished wax is taken for a smooth
+  dielectric whose facets lean about 0.16 on average (a semi-gloss
+  finish; graphite's, in its lobe, about 0.38).
 - **Ballpoint ink** bronzes where it is heavy: from one and a half firm
   passes thick, fully at four and a half, so eight layers of firm hatching
   bronze half-way and a single line not at all; what is drawn over the ink

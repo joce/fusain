@@ -231,7 +231,9 @@ def test_a_waxed_tooth_takes_badly():
 def test_a_firm_pass_polishes_wax_and_a_soft_dry_tip_presses_next_to_nothing():
     waxed = _sheet()
     _layers(waxed, pencils.coloured(RED), 3, pressure=0.5)
-    assert waxed.press[INSIDE].mean() < 0.02  # a light touch does not polish
+    # a light touch polishes next to nothing (a trace where the lead bears
+    # hardest: polishing sets in by degrees)
+    assert waxed.press[INSIDE].mean() < 0.05
     waxed.shade(BOX, pencils.coloured(RED), 1.0)
     assert waxed.press[INSIDE].mean() > 0.3
     # (a hard dry tip flattens the tooth: see test_surface.py)
@@ -264,10 +266,10 @@ def test_a_polished_tooth_is_level_under_the_lamp_too():
     rough = sheet.surface_height()[INSIDE].std()
     _layers(sheet, pencils.BLENDER, 3, pressure=1.0)
     assert sheet.press[INSIDE].mean() > 0.9
-    # nearly all of the patch is level with the peaks (a few pits the
-    # blender never reached are left)
+    # all of the patch is level, its peaks brought down to its valleys: the
+    # few the blender never reached are not left pits (fusain-8au)
     height = sheet.surface_height()[INSIDE]
-    assert (height > 0.9 * sheet.surface_height().max()).mean() > 0.85
+    assert (height < 0.1 * sheet.surface_height().max()).mean() > 0.95
     assert height.std() < 0.7 * rough
     # outside the patch the paper keeps its relief
     assert sheet.surface_height()[:15].std() > 0.9 * rough

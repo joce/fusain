@@ -51,11 +51,17 @@ SHININESS = 12.0
 #: The gloss of wax: what a film of wax as slick as it gets
 #: (:data:`fusain._engine.WAX_FULL`), polished flat, adds to the light when
 #: it mirrors the lamp squarely, and how narrow that light is. Less than
-#: graphite and wider: a soft, even gloss, where graphite's is metallic.
+#: graphite, and narrower: a film of wax polished flat is smoother than one
+#: of graphite flakes. Its light falls to half about 15 degrees from where
+#: the lamp is mirrored and to a fifth at 23 degrees, where the default
+#: lamp is mirrored, so that under it a burnished dark stays deep, as it
+#: does in life away from the glare; with the lamp overhead it shines.
+#: (Assumed, not measured: a smooth dielectric whose facets lean about
+#: 0.16 on average, a semi-gloss finish.)
 #: A film half polished still scatters most of the light: the gloss goes as
 #: how far the surface is pressed flat, to the power WAX_POLISH.
 WAX_SHEEN = 0.025
-WAX_SHININESS = 5.0
+WAX_SHININESS = 80.0
 WAX_POLISH = 2.0
 #: The bronze of ink: what ink as heavy as it gets adds, in its own colour
 #: (it mirrors most the light it absorbs most, so blue ink shines copper).
@@ -91,12 +97,13 @@ class Sheet:
 
     Per pixel the sheet holds the height of the tooth (``tooth``, 0 valley to
     1 peak), how far it has been flattened or polished (``press``, 0 to 1:
-    a firm hard tip levels the tooth, with its peaks), how far it has been
-    indented (``dent``: the depth of a groove below the peaks of the tooth,
-    in depths of the tooth of a paper of depth 1), the
-    pigment fixed to the paper (``held``) and the pigment lying on it, in two
-    layers, ``loose`` on top and ``under`` beneath it, so that what was laid
-    last is seen over what was laid before. Most of that is dust, which is
+    a firm hard tip levels the tooth, its peaks coming down towards its
+    valleys, and a tip that comes after touches all of it), how far it has
+    been indented (``dent``: the depth of a groove below the peaks of the
+    tooth, in depths of the tooth of a paper of depth 1), the pigment fixed
+    to the paper (``held``) and the pigment lying on it, in two layers,
+    ``loose`` on top and ``under`` beneath it, so that what was laid last is
+    seen over what was laid before. Most of that is dust, which is
     what a stump, an eraser or a later stroke can still move; ``bonded``
     holds how much of each layer is not: dust that is set (:attr:`fixed`), a
     film of wax laid over the dust (:attr:`film`) and greasy paste
@@ -359,10 +366,11 @@ class Sheet:
         picked up afresh for each line; a :class:`fusain.HeldPen`, a pen in
         the hand, lands with the ink its ball gathered on the line before.
 
-        A dry tip pressed firmly (harder than about 0.6) flattens the tooth
-        (``press``), the more the harder the tip: a hard pencil does, a
-        soft one hardly, charcoal and pastel next to not at all. What is
-        drawn there afterwards lies evenly, and the paper bites it less.
+        A dry tip pressed firmly (harder than about 0.6, setting in by
+        degrees from 0.4) flattens the tooth (``press``), the more the
+        harder the tip: a hard pencil does, a soft one hardly, charcoal and
+        pastel next to not at all. What is drawn there afterwards lies
+        evenly, and the paper bites it less.
         Where the paper is indented, a tip lays only what it reaches down
         to (:meth:`indent`).
 
@@ -529,9 +537,11 @@ class Sheet:
         The lamp also shows what shines (:meth:`shine`). Seen from straight
         above, a heavy layer of graphite mirrors a high lamp and looks
         silvery, and hardly mirrors a raking one; polished wax has a softer,
-        wider gloss; and heavy ballpoint ink bronzes, in the colour it
-        absorbs most. ``gloss`` scales all of it: 0 renders the drawing
-        matte, as a scanner sees it.
+        narrower gloss, which shows with the lamp near overhead and hardly
+        under the default lamp, so that a burnished dark stays deep; and
+        heavy ballpoint ink bronzes, in the colour it absorbs most.
+        ``gloss`` scales all of it: 0 renders the drawing matte, as a
+        scanner sees it.
 
         When lit, raises ValueError unless ``light`` is three finite numbers
         with z > 0 and ``relief`` and ``gloss`` are finite and not negative.
@@ -560,14 +570,20 @@ class Sheet:
 
     def surface_height(self, relief: float = 1.0) -> np.ndarray:
         """Height of the paper's surface in pixels, (H, W), as it is lit: its
-        tooth, level with its peaks where it has been pressed flat, and no
+        tooth, brought down where it has been flattened or polished (by
+        ``press`` of its height: pressed flat, it is level with the valleys,
+        and a valley the tip never reached is not left a pit), and no
         higher than the floor of a groove where it has been indented. The
         peaks of an untouched tooth are at ``TOOTH_HEIGHT`` times the
-        paper's grain and depth (times ``relief``), and its valleys at 0."""
+        paper's grain and depth (times ``relief``), and its valleys at 0.
+
+        (To a tip that comes after, what matters about a flattened tooth is
+        that it is level: it touches all of it, as it would the peaks.)"""
         grain, depth = self.paper.grain, self.paper.depth
         if depth <= 0.0:  # (a level paper: nothing but its grooves)
             return -self.dent * np.float32(TOOTH_HEIGHT * grain * relief)
-        ground = self.tooth + (1.0 - self.tooth) * self.press
+        # (the peaks come down towards the valleys)
+        ground = self.tooth * (1.0 - self.press)
         ground = np.minimum(ground, 1.0 - self.dent / np.float32(depth))
         return ground * np.float32(TOOTH_HEIGHT * grain * depth * relief)
 

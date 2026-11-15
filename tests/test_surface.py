@@ -57,6 +57,15 @@ def _light(image, where=INSIDE) -> np.ndarray:
     return sp.srgb_to_linear(image[where].astype(np.float64)) @ sp.LUMINANCE
 
 
+def _shading(sheet, lamp, where=INSIDE) -> np.ndarray:
+    """How a lamp lights each pixel of the relief, as a share of the light
+    of a level sheet (what lies on the paper, and what shines, aside)."""
+    lit = sheet.render(light=lamp, gloss=0)[where].astype(np.float64)
+    flat = sheet.render(lighting=False)[where].astype(np.float64)
+    share = sp.srgb_to_linear(lit) / np.maximum(sp.srgb_to_linear(flat), 1e-9)
+    return share.mean(axis=2)
+
+
 def _in_groove(sheet) -> float:
     """What lies in the groove, as a share of what lies on the paper beside."""
     pigment = sheet.pigment()
@@ -79,7 +88,9 @@ def test_a_firm_hard_pencil_flattens_the_tooth_and_a_soft_one_hardly():
 
 
 def test_the_firmer_and_the_more_often_the_flatter():
-    assert _pressed(_shaded(pencils.HB, 0.4, 3)) < 1e-3  # a light touch: none
+    # a light touch: next to none (where its lead bears hardest, a trace: it
+    # sets in by degrees)
+    assert _pressed(_shaded(pencils.HB, 0.4, 3)) < 0.005
     firm = [_pressed(_shaded(pencils.HB, p)) for p in (0.7, 0.85, 1.0)]
     assert 0.0 < firm[0] < firm[1] < firm[2] < 0.3
     often = [_pressed(_shaded(pencils.HB, 1.0, n)) for n in (1, 3, 6)]
@@ -115,11 +126,24 @@ def test_a_flattened_tooth_is_level_and_touched_all_over():
     assert sheet.surface_height()[INSIDE].std() < 0.8 * (
         rough.surface_height()[INSIDE].std()
     )
-    # (level with its peaks, but for the valleys the lead never reached)
-    level = _shaded(pencils.H4, 1.0, 6).surface_height()[INSIDE]
-    assert (level > 0.95 * level.max()).mean() > 0.8
-    untouched = rough.surface_height()[INSIDE]
-    assert (untouched > 0.95 * untouched.max()).mean() < 0.1
+    # (fusain-8au) pressed flat, its peaks come down level with its valleys,
+    # and a valley the lead never reached is not left a pit: six firm layers
+    # of 4H were level with the peaks, and 0.06 of the patch lay more than a
+    # quarter of the depth of the tooth below that, 0.85 on average
+    flat = _shaded(pencils.H4, 1.0, 6)
+    kept = flat.copy()
+    kept.press[:] = 0.0
+    top = TOOTH_HEIGHT * flat.paper.grain * flat.paper.depth
+    level = flat.surface_height()[INSIDE] / top
+    untouched = kept.surface_height()[INSIDE] / top
+    assert np.median(level) < 0.05 < 0.4 < np.median(untouched)
+    assert not (np.median(level) - level > 0.1).any()
+    assert (level - np.median(level) > 0.25).mean() < 0.01
+    assert level.std() < 0.2 * untouched.std()
+    # so it is smooth under the lamp: a raking light shows it a seventh as
+    # much as the tooth left alone (it showed it as much)
+    shading = [_shading(target, RAKING) for target in (flat, kept)]
+    assert shading[0].std() < 0.25 * shading[1].std()
     # a light layer of a soft lead over it lies on all of it, evenly, where
     # on the rough tooth it marks the high ground; and it bites less, so no
     # more of it is laid for that

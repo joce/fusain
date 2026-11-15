@@ -16,10 +16,11 @@ red ballpoint, each hatched eight times over.
 Top, under a raking lamp: nothing mirrors it to the eye, and the graphite is
 at its darkest. Middle, under the default lamp: the heavy graphite is grey,
 the 2H that flattened the tooth has a sheen where the same lead laid lightly
-has none, and the polished wax has a soft gloss. Bottom, with the lamp
-straight overhead: the heavy graphite mirrors it and turns silvery, where
-the charcoal stays black; the wax is glossier; and the heavy ink bronzes, the
-blue towards copper, the red towards green.
+has none, and the polished wax has a faint gloss, which leaves its darks
+deep. Bottom, with the lamp straight overhead: the heavy graphite mirrors it
+and turns silvery, where the charcoal stays black; the polished wax mirrors
+it too, with a soft white gloss; and the heavy ink bronzes, the blue towards
+copper, the red towards green.
 """
 
 from __future__ import annotations

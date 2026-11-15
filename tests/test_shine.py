@@ -6,6 +6,7 @@ import itertools
 import numpy as np
 import pytest
 from murex import spectral as sp
+from murex.filters import box_blur
 
 from fusain import (
     Medium,
@@ -177,9 +178,10 @@ def test_the_shine_has_no_colour():
 def test_what_does_not_shine_renders_the_same_whatever_the_gloss():
     sheet = _sheet()
     # (charcoal has no sheen, wax laid lightly is not polished, and one line
-    # of a pen running dry is not heavy ink)
-    sheet.shade(BOX, charcoal.COMPRESSED, 0.4, 8, hand=0.0)
-    sheet.shade(BOX, pencils.coloured("#2456a6"), 0.4, angle=-20, hand=0.0)
+    # of a pen running dry is not heavy ink; neither is pressed hard enough
+    # to flatten or polish anything, even where its tip bears hardest)
+    sheet.shade(BOX, charcoal.COMPRESSED, 0.25, 8, hand=0.0)
+    sheet.shade(BOX, pencils.coloured("#2456a6"), 0.25, angle=-20, hand=0.0)
     sheet.stroke([(30, 75.5), (170, 75.5)], pens.BLUE.with_(flow=0.3), 0.5)
     assert sheet.held[..., IW].any() and sheet.ink is not None
     assert not sheet.shine().any()
@@ -303,39 +305,77 @@ def test_dust_over_polished_wax_dulls_it():
     assert _gloss(dusty) < 0.1 * gloss
 
 
-def test_polished_wax_has_a_soft_white_gloss_under_the_lamp():
+def test_polished_wax_has_a_soft_white_gloss_where_it_mirrors_the_lamp():
     sheet = _burnished()
     white = _tone(_sheet().render())
-    added = _added(sheet)
+    added = _added(sheet, OVERHEAD)
     # white light, a few hundredths of the paper's
     assert added.min() / white > 0.012 and added.max() / white < 0.035
     assert added.max() - added.min() < 0.003
     # the colour is still the red's
     assert np.argmax(sheet.render()[INSIDE].mean(axis=(0, 1))) == 0
     # twice the gloss, twice as much; none, as a scanner sees it; flat, none
-    double = sp.srgb_to_linear(sheet.render(gloss=2)[INSIDE].astype(np.float64))
-    matte = sp.srgb_to_linear(sheet.render(gloss=0)[INSIDE].astype(np.float64))
-    assert (double - matte).mean() == pytest.approx(2 * added.mean(), rel=0.03)
+    lit = sheet.render(light=OVERHEAD, gloss=2)[INSIDE].astype(np.float64)
+    matte = sheet.render(light=OVERHEAD, gloss=0)[INSIDE].astype(np.float64)
+    double = sp.srgb_to_linear(lit) - sp.srgb_to_linear(matte)
+    assert double.mean() == pytest.approx(2 * added.mean(), rel=0.03)
     assert np.array_equal(
         sheet.render(lighting=False), sheet.render(lighting=False, gloss=3)
     )
 
 
-def test_the_gloss_of_wax_is_softer_and_wider_than_the_shine_of_graphite():
+def test_the_gloss_of_wax_is_fainter_and_narrower_than_the_shine_of_graphite():
+    """Polished wax is satin; graphite is a broad metallic sheen."""
     wax, graphite = _burnished(), _shaded(pencils.B6, 1.0, 3)
-    wide = []
+    kept = []  # (of what it adds overhead, what it adds under the other lamps)
     for sheet in (wax, graphite):
-        raking, overhead = _added(sheet, RAKING).mean(), _added(sheet, OVERHEAD).mean()
-        assert 0.0 < raking < overhead
-        wide.append(raking / overhead)
-    # under a raking lamp the wax keeps more of its gloss: it is wider
-    assert wide[0] > 3 * wide[1]
+        added = [_added(sheet, lamp).mean() for lamp in (RAKING, None, OVERHEAD)]
+        assert 0.0 <= added[0] < added[1] < added[2]
+        kept.append((added[0] / added[2], added[1] / added[2]))
+    # under the default lamp the wax keeps a fifth of its gloss, graphite
+    # most of its shine; under a raking one the wax none, graphite a little
+    assert 0.15 < kept[0][1] < 0.3 and kept[1][1] > 0.7
+    assert kept[0][0] < 1e-3 and kept[1][0] > 0.05
     # and overhead it is fainter than graphite's, for as much of it
     per_shine = [
         _added(sheet, OVERHEAD).mean() / float(sheet.shine()[INSIDE].mean())
         for sheet in (wax, graphite)
     ]
     assert per_shine[0] < 0.7 * per_shine[1]
+
+
+def _lightness(sheet, lamp=None, gloss=1.0, where=INSIDE) -> np.ndarray:
+    """L* of each pixel under a lamp."""
+    image = sheet.render(light=lamp, gloss=gloss)[where].astype(np.float64)
+    y = np.maximum(sp.srgb_to_linear(image) @ sp.LUMINANCE, 0.0)
+    return np.where(y > 0.008856, 116.0 * np.cbrt(y) - 16.0, 903.3 * y)
+
+
+def test_a_burnished_dark_stays_deep_under_the_default_lamp():
+    # (fusain-5je) four firm layers of a dark coloured pencil, then burnished
+    # with the blender: the gloss took it from L* 7 to 18 under the default
+    # lamp, and the firm layers alone from 10 to 18, following how far each
+    # stroke had polished them (by 1.5 from place to place)
+    firm = _shaded(pencils.coloured("#141416"), 0.8, 4)
+    burnished = firm.copy()
+    for angle in (20, -50):
+        burnished.shade(BOX, pencils.BLENDER, 1.0, angle=angle)
+    added = {}
+    for name, sheet in (("firm", firm), ("burnished", burnished)):
+        for lamp, light in (("default", None), ("overhead", OVERHEAD)):
+            change = _lightness(sheet, light) - _lightness(sheet, light, 0.0)
+            added[name, lamp] = change
+    assert _lightness(burnished, gloss=0.0).mean() < 8.0
+    assert 0.0 < added["burnished", "default"].mean() < 4.0
+    assert 0.0 < added["firm", "default"].mean() < 3.0
+    # a soft, even gloss: smoothed over the grain, it varies by little
+    smooth = box_blur(added["firm", "default"].astype(np.float32), 2)
+    assert smooth.std() < 0.8
+    # with the lamp where the wax mirrors it, it shines
+    assert added["burnished", "overhead"].mean() > 2.5 * (
+        added["burnished", "default"].mean()
+    )
+    assert added["burnished", "overhead"].mean() > 9.0
 
 
 # --------------------------------------------------------------------------

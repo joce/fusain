@@ -658,7 +658,7 @@ def bill_light(hand: Hand, bird: Bird) -> None:
     tomium = mm.smooth_curve(mm.bill_point(mm.TOMIUM), 50)
     below = mm.on_bill(bird.model, 1, tomium + mm.grain_offset(tomium, -0.03), 1.4)
     for a, b in spans(mm.visible(bird.model, below, 8.0)):
-        hand.scratch(below[a:b, :2], (0.3 * swell(b - a)).tolist())
+        hand.scratch(below[a:b, :2], (0.7 * swell(b - a)).tolist())
 
 
 #: The pencils of the tail, darks first: colour, which of its colours it
@@ -1208,9 +1208,9 @@ def draw() -> Sheet:
 
 def main() -> None:
     out = Path(__file__).parent / "output" / "macaw.png"
-    # (as a scanner sees it: under a lamp the burnished wax has a gloss,
-    # which greys the darks)
-    image = draw().render(gloss=0.0)
+    # (under the default lamp, which the burnished wax does not mirror into
+    # the eye: its darks stay deep, with a soft gloss)
+    image = draw().render()
     write_png(str(out), np.round(image * 255).astype(np.uint8))
     print(f"wrote {out}")
 

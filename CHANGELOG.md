@@ -6,6 +6,77 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Burnishing and flattening set in by degrees (fusain-bre). A tip polished
+  wax, or flattened the tooth, only where it bore harder than 0.6, and from
+  nothing there: so of the strokes of a shading near that pressure, each a
+  little firmer or lighter than the next, some polished and some did not,
+  and the area was polished in streaks, which the gloss of wax showed (the
+  navy ground of oil pastel in `examples/output/crayons.png`). The wax and
+  the paper now give way at pressures spread evenly from 0.4 to 0.8
+  (`BURNISH_SOFT`, 0.2 either side of `BURNISH_FROM`): a tip polishes as
+  the square of how far it bears past 0.4, and from 0.8 on as it did
+  (`fusain._engine.firmness`). How unevenly two crossed layers on cartridge
+  paper are polished (the spread of `press` smoothed over the grain, as a
+  share of its mean), at 0.55, 0.6 and 0.65: a dark coloured pencil 0.91,
+  0.78 and 0.68 before, 0.63, 0.58 and 0.54 now; an oil pastel 1.34, 1.08
+  and 0.87, now 0.81, 0.73 and 0.66; at full pressure as before (0.19 and
+  0.17, now 0.18 and 0.15). The navy ground of `crayons.png`: 0.72, now
+  0.62. A firm layer polishes a little more than it did where its lead
+  bears least: the blender at 0.7 closes two fifths of the white flecks (a
+  third before) and at 0.5 a twentieth (none); three firm layers of HB
+  flatten the tooth by 0.74 (0.72). A light touch of 0.4 flattens a trace
+  where the lead bears hardest (three layers of HB: 0.004, from 0).
+- Under the default lamp a burnished dark stays deep (fusain-5je). The
+  gloss of polished wax was in a lobe wider than graphite's
+  (`WAX_SHININESS` 5), nine tenths of which the default lamp sent to the
+  eye: four firm layers of a dark coloured pencil burnished with the
+  blender went from L* 6.8 to 18.1 under it, and the firm layers alone
+  from 10.3 to 17.9, following how far each stroke had polished them. A film of wax
+  polished flat is smoother than one of graphite flakes, and its lobe is
+  now narrower (`WAX_SHININESS` 80): its light falls to half about 15
+  degrees from where the lamp is mirrored, and to a fifth at 23 degrees,
+  where the default lamp is. That is assumed, not measured (a smooth
+  dielectric whose facets lean about 0.16 on average, a semi-gloss
+  finish): a burnished coloured pencil shines where it mirrors the lamp
+  and is deep away from the glare. The burnished dark now goes to 10.3
+  under the default lamp, and to 18.8 overhead (18.9 before); the firm
+  layers to 12.6, and the gloss on them varies from place to place by 0.52
+  L* (smoothed over the grain), from 1.51. Under a raking lamp polished
+  wax no longer shines. Graphite and ink shine as they did.
+  `examples/macaw.py` is rendered under the default lamp again, gloss
+  included: on its burnished darks the gloss adds 1.3 L* (4.8 with the
+  wide lobe), varying by 0.5 (1.7).
+- A flattened patch is level in its relief, without pits (fusain-8au).
+  `Sheet.surface_height` raised a flattened or polished tooth towards its
+  peaks, as `press` does for a tip that comes after it, so a valley the tip
+  never reached was left a pit as deep as the tooth beside a plateau: six
+  firm layers of 4H on cartridge paper left 6% of the patch more than a
+  quarter of the depth of the tooth below the rest, 0.85 deep on average,
+  and under a raking lamp the patch looked as rough as the paper left
+  alone (its lighting varied by 0.105, the paper's by 0.109). Now the peaks
+  come down towards the valleys, by `press` of their height, so a tooth
+  pressed flat is level with its valleys, a little below the paper around
+  it: no pits, the relief varies a seventh as much as the paper's (0.029
+  of the depth of the tooth, from 0.210), and a raking lamp shows it a
+  seventh as much (0.015). Four firm layers of a dark coloured pencil,
+  0.088, now 0.040; burnished, 0.021, now 0.003. What a tip touches of a
+  flattened tooth, and so how a stroke lays over it, is as it was.
+  With the narrower gloss of wax, fewer of the tooth's facets catch the
+  lamp: on the firm dark the gloss varies from pixel to pixel by 1.1 L*
+  under the default lamp, from 1.4, and at most adds 5.5, from 7.6.
+
+### Examples
+
+- `examples/macaw.py`: the light under the bill's cutting edge is
+  scratched with the knife at 0.7, from 0.3. Part of that light was white
+  flecks of the paper, which the blender now closes as it polishes at the
+  rim of its tip; the knife makes it up. On the lower mandible within 12
+  pixels of the cutting edge, the light above its dark summed 50.4 before
+  (61 pixels lighter than L* 60), 43.4 with the knife at 0.3 (48), and is
+  51.4 now (61).
+
 ### Changed
 
 - Strokes and rubs are faster, by a quarter to a half, and no picture
