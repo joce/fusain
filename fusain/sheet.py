@@ -8,7 +8,7 @@ from collections.abc import Iterator, Sequence
 import numpy as np
 from murex import spectral as sp
 from murex import spline, write_png
-from murex.spline import Profile
+from murex.spline import Path, Profile
 
 from . import _engine as eng
 from . import hatching
@@ -280,10 +280,10 @@ class Sheet:
             # thicker; the rest of the pixel is bare paper (inked or not)
             share = np.clip(self.cover[rows][marked].astype(np.float64), 1e-6, 1.0)
             bare = out[marked] if stained else self.ground
-            seen = bare
+            seen = np.empty((share.size, N))
+            seen[:] = bare
             for layer in layers:  # from the paper up
-                packed = layer[marked].astype(np.float64) / share[:, None]
-                seen = sp.km_layer(packed[:, :N], packed[:, IS], seen)
+                _lay_over(seen, layer[marked].astype(np.float64) / share[:, None])
             out[marked] = share[:, None] * seen + (1.0 - share[:, None]) * bare
         return out
 
@@ -913,6 +913,32 @@ class Sheet:
         write_png(path, np.round(img * 255).astype(np.uint8))
 
 
+def _lay_over(seen: np.ndarray, packed: np.ndarray) -> None:
+    """Lay a layer over what is seen at each of some pixels (``seen``, a
+    reflectance per band, changed in place; ``packed`` is the layer there,
+    as a layer is packed, float64). It is ``sp.km_layer(packed[:, :N],
+    packed[:, IS], seen)`` to the last bit, in two compiled passes and
+    numpy's ``tanh`` between them (so that too is the very same function)
+    instead of some twenty numpy passes: most of the time of a render."""
+    depth = np.empty_like(seen)
+    eng.km_depth(packed, depth)
+    eng.km_over(packed, depth, np.tanh(depth), seen)
+
+
+class _Dense(Path):
+    """A path that works out its dense points once: sampling it and asking
+    its length each work them out otherwise."""
+
+    def __init__(self, path: Path):
+        self._path, self.n_knots = path, path.n_knots
+        self._points: tuple[np.ndarray, np.ndarray] | None = None
+
+    def _dense(self) -> tuple[np.ndarray, np.ndarray]:
+        if self._points is None:
+            self._points = self._path._dense()
+        return self._points
+
+
 Ends = str | tuple[str, str]
 #: How a stroke ends: in the outline of its tip, or cut square across.
 ENDS = ("round", "flat")
@@ -937,7 +963,7 @@ def _sample(path, width: Profile):
     how far apart they would be on a path long enough (the pace of the tip
     where it lands and lifts). ValueError unless the width is a finite
     number of pixels above 0."""
-    line = spline.as_path(path)
+    line = _Dense(spline.as_path(path))
     if isinstance(width, int | float | np.number):
         narrowest = float(width)
     else:  # (look at it every pixel or so, to find the narrowest)
