@@ -65,7 +65,11 @@ class Tool:
         eraser slides on it: of a coloured pencil, a crayon or an oil
         pastel it lifts the less the thicker the wax is, and hardly
         anything once the wax is polished. A tool that scrapes (grit, a
-        blade) takes that share of what the wax would have kept from it.
+        blade) takes that share of what the wax would have kept from it,
+        and cuts the surface of the paper by that share of what it lifts of
+        what the paper holds: with it go the stain a waxy medium leaves in
+        the paper, the ink of a ballpoint, and the flattening of the tooth,
+        which is the paper's own again where it has been cut.
     holds:
         How much pigment it holds when it is full, as a volume for each
         pixel of its face (a firm layer of charcoal is about half a unit
