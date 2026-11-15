@@ -249,6 +249,16 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Examples
 
+- `colour.png`, `crayons.png` and `macaw.png` change with the erasers and
+  the knife above; every other image is unchanged to the byte. In
+  `colour.png` the band the vinyl eraser rubs across the red keeps a pink
+  stain on the half that was not burnished (its mean luminance goes from
+  220 of 255 to 213) and is as it was on the burnished half. In `crayons.png` the
+  lights the kneaded eraser lifts out of the oil pastel keep a little of
+  the blue, and where it lifts off past the edge of the patch it leaves a
+  faint smear of it. In `macaw.png` the lines the knife scratches through
+  the burnished wax lose the gloss of the wax with the wax, by at most 4
+  levels; its lights under the bill and in the eye stay.
 - Every image is regenerated with the changes above. Seven are unchanged to
   the byte (`farm`, `papers`, `pencils`, `shine`, `stilllife`, `strokes`,
   `tips`: nothing in them is rubbed or erased), and `macaw.png` and
