@@ -1,5 +1,6 @@
 """Rubbing and erasing an area: Sheet.rub, measured."""
 
+import itertools
 from typing import Any
 
 import numpy as np
@@ -7,6 +8,7 @@ import pytest
 from murex import spectral as sp
 
 from fusain import Sheet, charcoal, papers, pencils, tools
+from fusain import sheet as sheet_module
 
 PATCH = (30, 30, 270, 170)
 INSIDE = (slice(60, 140), slice(70, 230))
@@ -99,6 +101,54 @@ def test_an_eraser_clears_an_area():
     cleared = sheet.pigment()[75:125, 115:185].sum()
     kept = sheet.pigment()[75:125, 40:85].sum() * (70 / 45)
     assert cleared < 0.11 * kept
+
+
+def _rubbed_then_drawn(pressure) -> Sheet:
+    """A sheet with its left part rubbed as ``pressure`` asks, and a stroke
+    drawn after it on the right, where nothing was rubbed."""
+    sheet = Sheet(300, 200, paper=papers.CARTRIDGE, seed=3)
+    sheet.shade((20, 20, 180, 180), charcoal.VINE, 0.6, 9)
+    sheet.rub((20, 20, 180, 180), tools.STUMP, pressure)
+    sheet.shade((220, 40, 290, 160), pencils.B4, 0.6, 5)
+    sheet.stroke([(200, 20), (290, 180)], charcoal.COMPRESSED, 0.7, 8)
+    return sheet
+
+
+def test_what_a_rub_draws_from_the_generator_does_not_depend_on_its_pressure():
+    def lifted_in(lo, hi, axis=0):
+        return lambda x, y: 0.7 * ~(((x, y)[axis] > lo) & ((x, y)[axis] < hi))
+
+    fields = {
+        "even": 0.7,
+        "gap": lifted_in(70, 110),  # (every pass falls in two runs)
+        "gaps": lambda x, y: 0.7 * (np.sin(x / 9.0) > -0.3),  # (in five or six)
+        "bare in the top": lifted_in(0, 80, axis=1),  # (some passes have none)
+        "nowhere": 0.0,
+    }
+    sheets = {name: _rubbed_then_drawn(p) for name, p in fields.items()}
+    even = sheets["even"]
+    for name, sheet in sheets.items():
+        # (the same state of the generator, and so the same grain for all that
+        # is drawn after, where the rubs did not reach)
+        assert sheet._rng.bit_generator.state == even._rng.bit_generator.state, name
+        assert np.array_equal(sheet.pigment()[:, 190:], even.pigment()[:, 190:]), name
+        assert np.array_equal(sheet.tooth, even.tooth), name
+    # (and the rubs differ where they reached)
+    assert not np.array_equal(sheets["gap"].pigment()[:, :180], even.pigment()[:, :180])
+    assert not np.array_equal(
+        sheets["bare in the top"].pigment()[:, :180], even.pigment()[:, :180]
+    )
+
+
+def test_the_seeds_of_the_runs_of_a_rub_repeat_and_are_all_different():
+    seeds = [sheet_module._seed_of(123456789, step) for step in range(100_000)]
+    assert len(set(seeds)) == len(seeds)
+    assert all(0 <= seed < 1 << 31 for seed in seeds)
+    # (the same on every platform: integer arithmetic, not Python's hash())
+    assert seeds[:4] == [123456789, 630408902, 1137361015, 1644313128]
+    assert seeds[1000] == 269428861
+    # (and no two of them are neighbours, which a kernel's noise would show)
+    assert min(abs(a - b) for a, b in itertools.combinations(seeds[:300], 2)) > 1000
 
 
 def test_the_passes_run_at_the_angle_asked_for_and_repeat_with_the_seed():

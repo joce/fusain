@@ -8,6 +8,29 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A rub takes the same numbers from the sheet's generator whatever its
+  pressure (fusain-2n6). `Sheet.rub` cut each pass into the stretches where
+  the pressure is above nothing (a tool is lifted where it is none) and drew
+  a seed from the sheet's generator for each, so a pressure that followed
+  what was measured of the drawing, or that was changed a little, gave
+  another number of draws, and every mark drawn after it had another grain.
+  It now draws one seed for the rub, however many passes and stretches it
+  falls into, and each stretch has a seed derived from it by integer
+  arithmetic (the sample of the rub it starts at, counting from the first
+  pass, times an odd step, below 2**31: the same on every platform, never
+  the same for two stretches, and a stretch keeps its seed where the
+  pressure is nothing elsewhere). One to the rub, not one to a pass: the
+  passes of a rub go by the area, the tool and the hand, not by the
+  pressure, but one seed to the rub holds however a rub comes to skip a
+  pass. A stretch that starts where the rub does has the seed that was
+  drawn. Two rubs over the same area whose pressure is nothing in different
+  places leave the generator in the same state, and what is drawn after
+  them lies with the same grain where they did not reach
+  (`tests/test_rub.py`). Every drawing
+  with a rub in it changes: of the thirteen of `tools/fingerprint.py`, the
+  six that rub (`dust/charcoal paper/4`, `dust/rough/5`, `pastel/sanded
+  card/6`, `wax/cartridge/7`, `wax/cold-pressed/8`, `drawing/toned grey/13`)
+  have new hashes, the seven that do not are as they were.
 - A pencil drawn over pastel shows on it (fusain-wo4). What the paper holds
   of a dry medium went in the tooth, under whatever dust lay there, and all
   that lay there was counted in the tip's way: over two layers of a pale
@@ -337,6 +360,22 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Examples
 
+- The four examples that call `Sheet.rub` (`charcoal.py`, `crayons.py`,
+  `deco.py` and `lake.py`) draw another grain in every rub, and in all
+  they draw after one: `charcoal.png` (the stump is loaded on a scrap of
+  its own sheet, so only the stump it carries changes), `crayons.png`,
+  `deco.png` and `lake.png`. The rest (`ballpoint`, `broadway`, `colour`,
+  `farm`, `fixative`, `macaw`, `papers`, `pencils`, `shine`, `stilllife`,
+  `strokes`, `tips`) rub with `smudge` or not at all, and are unchanged to
+  the byte by this.
+- `lake.png`: `LIGHTEST_RUB`, the least that `examples/lake.py` let a rub
+  press anywhere in its mask so that a field that fell to nothing here and
+  there did not cut each pass in stretches with a seed each, is gone: it
+  was kept for the fault above and for nothing else. The rub is still made
+  wherever the mask is, however little the field presses (so that the
+  sheet's generator is drawn from just as often). With the new rub, the
+  picture it makes with the floor and without it is the same to the pixel
+  but for 0.6% of them, which differ by a level.
 - `colour.png`, `crayons.png` and `macaw.png` change with the erasers and
   the knife above; every other image is unchanged to the byte. In
   `colour.png` the band the vinyl eraser rubs across the red keeps a pink

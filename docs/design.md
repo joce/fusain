@@ -647,6 +647,20 @@ in the hand (a `Smudger`) when it is lifted, and it lands with them; what a
 bare tool still carries at the end is counted and returned. Either way
 nothing is lost.
 
+A rub takes the same numbers from the sheet's generator whatever its
+pressure: the places of its passes (which go by the area, the tool, the angle
+and the hand) and one seed, from which the seed of each stretch it rubs is
+derived, as an integer step (`_seed_of`) from the sample of the rub that the
+stretch starts at. Where the pressure is nothing the tool is lifted and the
+passes fall into stretches, and a pass can fall into none; were each stretch
+to draw its own seed, a rub that followed what was measured of the drawing
+(a field a few thousandths off) would give another number of draws, and the
+grain of every mark after it would move. One seed to the rub, not to the
+pass: the number of passes goes by the area, the tool and the hand and so
+does not depend on the pressure, but a rub that skipped a pass for what it
+measures would, with a seed to each pass, shift the rest. A stretch's seed is
+the same wherever the pressure is nothing elsewhere.
+
 These are numba kernels under the same rules as oilpaint's (no `fastmath`, no
 `parallel`), so a drawing repeats exactly, and what makes them fast changes
 no result: `tools/fingerprint.py` hashes all that a suite of drawings leaves

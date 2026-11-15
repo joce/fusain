@@ -375,8 +375,10 @@ def test_a_light_layer_of_coloured_pencil_comes_off_a_vinyl_eraser():
         sheet.rub(AREA, tools.ERASER, 0.9)
         assert _left(sheet, before, RUBBED) < 0.2
         # (0.55 before fusain-d6p: the stain it leaves is a tint, and of so
-        # dark a pencil a grey)
-        assert _luminances(sheet, RUBBED).mean() > 0.45 * _paper(sheet)
+        # dark a pencil a grey; 0.457 of the paper's on the smooth paper, and
+        # 0.446 with the grain of the rub drawn as fusain-2n6 has it: a fifth
+        # of the sheet is rubbed, and the grain moves it by a hundredth)
+        assert _luminances(sheet, RUBBED).mean() > 0.4 * _paper(sheet)
         sheet.rub(AREA, tools.ERASER, 0.9)
         # (fusain-d6p: what the wax stained the paper with stays; it took
         # all but 0.007 of it)
