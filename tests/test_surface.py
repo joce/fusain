@@ -79,7 +79,9 @@ def test_a_firm_hard_pencil_flattens_the_tooth_and_a_soft_one_hardly():
 
 
 def test_the_firmer_and_the_more_often_the_flatter():
-    assert _pressed(_shaded(pencils.HB, 0.4, 3)) < 1e-3  # a light touch: none
+    # a light touch: next to none (where its lead bears hardest, a trace: it
+    # sets in by degrees)
+    assert _pressed(_shaded(pencils.HB, 0.4, 3)) < 0.005
     firm = [_pressed(_shaded(pencils.HB, p)) for p in (0.7, 0.85, 1.0)]
     assert 0.0 < firm[0] < firm[1] < firm[2] < 0.3
     often = [_pressed(_shaded(pencils.HB, 1.0, n)) for n in (1, 3, 6)]

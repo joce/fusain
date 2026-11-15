@@ -359,10 +359,11 @@ class Sheet:
         picked up afresh for each line; a :class:`fusain.HeldPen`, a pen in
         the hand, lands with the ink its ball gathered on the line before.
 
-        A dry tip pressed firmly (harder than about 0.6) flattens the tooth
-        (``press``), the more the harder the tip: a hard pencil does, a
-        soft one hardly, charcoal and pastel next to not at all. What is
-        drawn there afterwards lies evenly, and the paper bites it less.
+        A dry tip pressed firmly (harder than about 0.6, setting in by
+        degrees from 0.4) flattens the tooth (``press``), the more the
+        harder the tip: a hard pencil does, a soft one hardly, charcoal and
+        pastel next to not at all. What is drawn there afterwards lies
+        evenly, and the paper bites it less.
         Where the paper is indented, a tip lays only what it reaches down
         to (:meth:`indent`).
 

@@ -311,8 +311,17 @@ At each step, for each pixel under the tip:
    that thick, so charcoal shaded over it skips it: wax resist. Pressed hard, the tip polishes the film: it raises `press`,
    which levels the tooth so that every part of the pixel is touched, and it
    drags some of the waxy layer along and lays it back down, valleys
-   included. That closes the white specks (burnishing). How much a tip
-   polishes goes with how slick the film is, and it takes up `BURNISH_LIFT`
+   included. That closes the white specks (burnishing). It sets in by
+   degrees, between `BURNISH_SOFT` below `BURNISH_FROM` and as far above
+   it (from 0.4 to 0.8), since the wax does not give way at one pressure
+   everywhere: in there a tip polishes as the square of how far it bears
+   past 0.4, and beyond it in proportion to how far it bears past 0.6. (It
+   began sharply at 0.6, and the strokes of a shading near there, each a
+   little firmer or lighter than the next, polished or did not, which left
+   the area polished in streaks: over two layers of a dark coloured pencil
+   at 0.6, `press` smoothed over the grain spread by 0.78 of its mean, and
+   now by 0.58; of an oil pastel 1.08, now 0.73.) How much a tip polishes
+   goes with how slick the film is, and it takes up `BURNISH_LIFT`
    times its polish of what the paper holds. A colourless blender is made
    for this: soft clear wax and nothing else, it melts into the film
    (`Medium.melts`), so it polishes a thin film as if it were slick, takes
@@ -322,9 +331,9 @@ At each step, for each pixel under the tip:
    a tenth of the pixels still show the paper; one layer of the blender at
    full pressure leaves a fifth of those (two layers a twenty-fifth), the
    chroma of the patch goes from 34 to 59 (69), its lightness from 67 to 57
-   (54), it is half as grainy, and it has 0.46 (0.79) of the gloss of
-   polished wax; at a pressure of 0.7 the blender closes a third of the
-   flecks, and at 0.5 none. (In the first build the blender was a
+   (54), it is half as grainy, and it has 0.48 (0.80) of the gloss of
+   polished wax; at a pressure of 0.7 the blender closes two fifths of the
+   flecks, and at 0.5 a twentieth. (In the first build the blender was a
    coloured pencil without colour: one firm layer left two fifths of the
    flecks.) Two colours laid over each other are stirred into one, and
    a blender drawn from a dark out over bare paper drags it along: a
@@ -337,13 +346,14 @@ At each step, for each pixel under the tip:
    layers fill (the fourth takes a fifth of the first), the teal takes a
    fifth and goes a third of the way, and over one layer of lemon it takes
    over half. There the darks go first.
-7. **The tooth.** A dry tip pressed hard (harder than `BURNISH_FROM`, as for
-   burnishing) flattens the tooth itself, and raises `press` too: the hardest
-   lead by `FLATTEN` in a pass at full pressure, a softer one as the cube of
-   its hardness (it gives before the paper does), and one that crumbles to
-   dust as the square of its binding (it bears on the paper only with what
-   holds together). Three firm layers leave the tooth flattened by 0.88 under
-   a 4H, 0.72 under an HB, 0.36 under a 2B and 0.03 under a 6B; compressed
+7. **The tooth.** A dry tip pressed hard (harder than `BURNISH_FROM`, and
+   setting in by degrees, as burnishing does) flattens the tooth itself,
+   and raises `press` too: the hardest lead by `FLATTEN` in a pass at full
+   pressure, a softer one as the cube of its hardness (it gives before the
+   paper does), and one that crumbles to dust as the square of its binding
+   (it bears on the paper only with what holds together). Three firm layers
+   leave the tooth flattened by 0.88 under
+   a 4H, 0.74 under an HB, 0.37 under a 2B and 0.03 under a 6B; compressed
    charcoal and hard pastel flatten it by a few hundredths, vine charcoal and
    soft pastel next to not at all. A flattened tooth is touched all over, and bites
    less: a dry medium lays `FLAT_BITE` less on it in a pass (the tooth is

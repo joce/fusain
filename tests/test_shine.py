@@ -177,9 +177,10 @@ def test_the_shine_has_no_colour():
 def test_what_does_not_shine_renders_the_same_whatever_the_gloss():
     sheet = _sheet()
     # (charcoal has no sheen, wax laid lightly is not polished, and one line
-    # of a pen running dry is not heavy ink)
-    sheet.shade(BOX, charcoal.COMPRESSED, 0.4, 8, hand=0.0)
-    sheet.shade(BOX, pencils.coloured("#2456a6"), 0.4, angle=-20, hand=0.0)
+    # of a pen running dry is not heavy ink; neither is pressed hard enough
+    # to flatten or polish anything, even where its tip bears hardest)
+    sheet.shade(BOX, charcoal.COMPRESSED, 0.25, 8, hand=0.0)
+    sheet.shade(BOX, pencils.coloured("#2456a6"), 0.25, angle=-20, hand=0.0)
     sheet.stroke([(30, 75.5), (170, 75.5)], pens.BLUE.with_(flow=0.3), 0.5)
     assert sheet.held[..., IW].any() and sheet.ink is not None
     assert not sheet.shine().any()

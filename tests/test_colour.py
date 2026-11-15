@@ -231,7 +231,9 @@ def test_a_waxed_tooth_takes_badly():
 def test_a_firm_pass_polishes_wax_and_a_soft_dry_tip_presses_next_to_nothing():
     waxed = _sheet()
     _layers(waxed, pencils.coloured(RED), 3, pressure=0.5)
-    assert waxed.press[INSIDE].mean() < 0.02  # a light touch does not polish
+    # a light touch polishes next to nothing (a trace where the lead bears
+    # hardest: polishing sets in by degrees)
+    assert waxed.press[INSIDE].mean() < 0.05
     waxed.shade(BOX, pencils.coloured(RED), 1.0)
     assert waxed.press[INSIDE].mean() > 0.3
     # (a hard dry tip flattens the tooth: see test_surface.py)

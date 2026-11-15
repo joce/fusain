@@ -4,9 +4,20 @@ and a dark over a light (issue fusain-rz1), measured."""
 import numpy as np
 import pytest
 from murex import spectral as sp
+from murex.filters import box_blur
 
-from fusain import Paper, Sheet, Smudger, crayons, papers, pencils, tools
-from fusain._engine import IV, IW, POLISH_HOLDS, WAX_FAST, WAX_HOLDS, wax_grip
+from fusain import Paper, Sheet, Smudger, crayons, papers, pastels, pencils, tools
+from fusain._engine import (
+    BURNISH_FROM,
+    BURNISH_SOFT,
+    IV,
+    IW,
+    POLISH_HOLDS,
+    WAX_FAST,
+    WAX_HOLDS,
+    firmness,
+    wax_grip,
+)
 
 BOX = (20, 20, 180, 130)
 INSIDE = (slice(50, 100), slice(50, 150))
@@ -184,6 +195,55 @@ def test_a_white_pencil_pressed_hard_burnishes_too_but_less_than_the_blender():
     assert pencils.BLENDER.melts == 1.0 and pencils.coloured(RED).melts == 0.0
     with pytest.raises(ValueError, match="melts must be between 0 and 1"):
         pencils.BLENDER.with_(melts=1.5)
+
+
+# --------------------------------------------------------------------------
+# where a tip begins to polish
+
+
+def test_a_tip_begins_to_polish_by_degrees():
+    pressures = np.linspace(0.0, 1.0, 401)
+    firm = np.array([firmness(p) for p in pressures])
+    low, high = BURNISH_FROM - BURNISH_SOFT, BURNISH_FROM + BURNISH_SOFT
+    # nothing under a light touch; from there it grows, ever faster but
+    # with no corner, to what a sharp onset at BURNISH_FROM gives from high
+    assert not firm[pressures <= low].any()
+    assert 0.0 < firmness(low + 0.05) < firmness(BURNISH_FROM) < firmness(high)
+    slope = np.diff(firm) / np.diff(pressures)
+    assert (slope >= 0.0).all() and (np.diff(slope) > -1e-6).all()
+    assert np.abs(np.diff(slope)).max() < 0.05 * slope.max()
+    sharp = (pressures - BURNISH_FROM) / (1.0 - BURNISH_FROM)
+    beyond = pressures >= high
+    assert np.allclose(firm[beyond], sharp[beyond])
+    assert firmness(1.0) == pytest.approx(1.0)
+
+
+def _patchy(sheet, where=INSIDE) -> float:
+    """How unevenly an area is polished from stroke to stroke: the spread of
+    its ``press``, smoothed over a few pixels (the grain of the paper), as a
+    share of its mean."""
+    press = box_blur(sheet.press[where], 3).astype(np.float64)
+    return float(press.std() / press.mean())
+
+
+@pytest.mark.parametrize(
+    "make, width, most",
+    [(pencils.coloured, 6.0, (0.7, 0.65, 0.6)), (pastels.oil, 14.0, (0.9, 0.8, 0.72))],
+)
+def test_strokes_near_where_a_tip_begins_to_polish_polish_alike(make, width, most):
+    # (fusain-bre) the strokes of a shading bear each a little firmer or
+    # lighter than the next; around where a tip begins to polish, some of
+    # them did and some did not, and the area was polished in streaks
+    # (two layers of a dark: 0.91, 0.78 and 0.68 for coloured pencil, 1.34,
+    # 1.08 and 0.87 for oil pastel, when it began at 0.6 sharp)
+    pressed = []
+    for pressure, bound in zip((0.55, 0.6, 0.65), most, strict=True):
+        sheet = _sheet()
+        _layers(sheet, make(DARK), 2, pressure, width)
+        assert _patchy(sheet) < bound, pressure
+        pressed.append(float(sheet.press[INSIDE].mean()))
+    # and it is polished the more, the harder it is pressed
+    assert 0.0 < pressed[0] < pressed[1] < pressed[2]
 
 
 # --------------------------------------------------------------------------
