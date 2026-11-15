@@ -627,10 +627,12 @@ that covers the tooth (`COVERS` thick, on the covered share of the pixel).
 So a full stump leaves a tone as it is, however often it goes over it, and
 a finger loaded with one colour leaves a tone of another clean, where an
 exchange both ways would bring its colour all over it; but on bare paper
-the same stump draws a tone of its own: loaded on a patch of 6B, 0.72 of
-the paper's tone where it lands, 0.83 eight of its widths on, 0.91 after
-sixteen and 0.96 after twenty-four, by when it has laid nearly all it
-held. (In the first build it laid 0.59, 0.92, 0.98 and 0.99: darker where
+the same stump draws a tone of its own: loaded on a patch of 6B, 0.74 of
+the paper's tone where it lands, 0.85 eight of its widths on, 0.90 after
+sixteen and 0.94 after twenty-four, by when it has laid seven eighths of
+what it held (while the rub that loads it strayed past the patch and
+spent some of its load on the bare paper there, the stump came off it 7%
+less full and had laid 0.92 of that by then). (In the first build it laid 0.59, 0.92, 0.98 and 0.99: darker where
 it landed, and spent sooner.) A stump dragged once through a tone has
 hardly begun to fill, and leaves little beyond what was on its face. A
 full stump also lays dust on whatever bare paper it strays onto at the
@@ -664,12 +666,47 @@ Like a tip, a tool is put down with all of its face bearing and lifted the
 same way: where it lands and where it lifts, the paper it covers is rubbed
 as though the tool had slid onto it from behind and off it ahead, so a pass
 is as strong at its ends as in its middle, out to the outline of the tool,
-and a dab is one pass of the tool on the paper under it. The passes of a
-rub of an area therefore stop half a width of the tool short of its edge,
-as the strokes of a shading do, and the area is rubbed up to its edge and
-no further. (It used to rub
+and a dab is one pass of the tool on the paper under it. (It used to rub
 only as it slid on: at the ends of its path an eraser took two thirds of
 what it took further on, and a dab a quarter.)
+
+The hand that rubs an area (`Sheet.rub`, `hatching.passes`) is not the hand
+that shades one. A pencil's strokes are flicked on and off the paper: their
+ends stray half a width either way, past the edge as often as short of it,
+and are lighter where the pencil lands and lifts. Someone rubbing a tone
+with a stump or a finger works the tool up to the edge, where they can see
+it, and turns there, bearing as they go. So the middle of the tool keeps
+half its width inside the outline of the area, and its edge comes to the
+area's edge and no further: every pass runs from that line to that line,
+the outermost passes run along it, and the others lie evenly between. In
+the middle of the area the hand is as unsteady as a shading's (the passes
+stray across and wander); where the tool meets the edge it is guided by it,
+as steady as anywhere along a pass: the ends of the passes and the passes
+along the edge stray only as a point of a pass wanders (`WANDER`, a tenth
+of the tool's width, where the ends of a pencil's strokes stray by
+`STRAY_ALONG`, half of it), and only inwards, and the tool does not
+lighten where it turns. The points it goes through, and the curve through
+them, are kept half a width inside the outline, of a polygon too, at any
+angle; a tool wider than the area goes down its middle. Since a loaded tool
+gives its dust to bare tooth, the old hand dirtied the paper round every
+rubbed tone: rubbing the patch of charcoal in the third row of
+`examples/crayons.png` with a clean finger, which loads as it rubs, darkened
+the bare paper beside it by up to 105 levels of 255 (its luminance from
+0.87 to 0.25), on 2132 pixels, as far as 15 pixels past the ends of the
+passes and 7 past their sides; it leaves it as it was. And the ends of the
+passes, which strayed and lightened, are rubbed as their middles are: an
+eraser pressed lightly takes as much a pixel in from the end of its passes
+as in the middle of the area (0.94, was 0.54; three pixels in 1.01, was
+0.64), a stump smooths the grain as much two pixels in (0.98, was 0.76).
+What a tool kept inside cannot do is rub the last pixels along the sides
+of the outermost passes as well as the rest: only its rounded rim reaches
+them. Along those sides the outermost pixel is rubbed a tenth to a third
+as much as the middle and the area is rubbed as evenly as its middle from
+about a third of the tool's width in, where the old hand, whose tool
+reached a quarter of its width past the edge there, rubbed the outermost
+pixel 0.7 to 0.9 as much as the middle; a second rub across the first
+works them up to the edge. A caller
+who wants the tool to go past the edge, as it used to, gives a larger area.
 What a tool carries is in three parts: what it has lifted, which it lays
 back at its own rate; the dust on its face, which it lays back within a few
 pixels (in each step it shares out among the pixels under it what was on

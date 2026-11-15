@@ -25,6 +25,59 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A tool rubbed over an area stays inside it (fusain-soe). `Sheet.rub` laid
+  its passes with the hand of a shading: the ends of a pass strayed half the
+  tool's width either way, past the edge as often as short of it, the
+  outermost passes lay a quarter of a width in, so that the tool reached a
+  quarter of its width past the sides, and they strayed and wandered from
+  there. Since a loaded tool gives its dust to bare tooth (fusain-9zh), it
+  dirtied the paper round every tone it rubbed: the clean finger that rubs
+  the charcoal in the third row of `examples/crayons.png`, which loads as it
+  rubs, darkened the bare paper beside it by up to 105 levels of 255 (its
+  luminance from 0.87 to 0.25) on 2132 pixels, as far as 15 pixels past the
+  ends of the passes and 7 past their sides; a stump or a finger over a
+  shaded patch, as far as 7 and 14 pixels past the ends and 5 and 10 past
+  the sides (a luminance down by up to 0.51 and 0.59), and an eraser took
+  the tone the shading had laid past the edge. The hand that rubs now works
+  the tool up to the edge and turns there (`hatching.passes`): the middle
+  of the tool keeps half its width inside the outline, every pass runs from
+  that line to that line, and the outermost passes run along it; in the
+  middle of the area the passes stray and wander as before, but where the
+  tool meets the edge they stray only as a point of a pass wanders (a tenth
+  of a width, where a pencil's ends stray by half), and only inwards; the
+  points of a pass and the curve through them are kept inside, of a polygon
+  too and at any angle; and the tool bears as hard where it turns as in the
+  middle, where it lightened as a pencil's stroke does where it lands and
+  lifts. The same rubs leave the paper outside the area as it was: to the
+  bit with passes square to its edges; at another angle, but for a few
+  pixels changed by less than a thousandth of a firm layer; along a
+  slanted edge, but for the pixels the edge cuts through. The ends of
+  the passes are rubbed as their middles are: an eraser pressed lightly takes
+  0.67, 0.94 and 1.00 as much as in the middle of the area at the last
+  three pixels before their ends (was 0.45, 0.54 and 0.60), a stump smooths
+  the grain there 0.47, 0.80 and 0.98 as much (was 0.47, 0.58, 0.76), a
+  finger 0.32, 0.52 and 0.72 (was 0.43, 0.45, 0.52). Along the sides of the
+  outermost passes only the rounded rim of the tool reaches the last pixels:
+  the outermost one is rubbed 0.11 (eraser), 0.32 (stump) and 0.13 (finger)
+  as much as the middle, where the old hand, reaching past the edge, rubbed
+  it 0.71, 0.86 and 0.90, and the area is rubbed as its middle from about a
+  third of the tool's width in; a second rub across the first works them up
+  to the edge (a stump rubbed across then along: 0.55 and 0.66 at the
+  outermost pixel, 0.86 and 0.89 at the next, was 0.77 and 0.89, 0.80 and
+  0.93). A caller who wants the tool to go past the edge gives a larger
+  area. A tool that no longer spends its load past the tone comes off it
+  fuller: a stump rubbed over a patch of 6B 7% fuller (it then lays 0.87 of
+  it in 28 widths of bare paper, toning it as before, where it laid 0.92 of
+  less), a bare stump carries off 1.14 times what it holds from a rub of a
+  dark tone (was 1.01); two thresholds of `tests/test_smudger.py` follow.
+  Keeping the passes inside costs a rub about a tenth of a second over the
+  sheet of `tools/benchmark.py` (a kneaded eraser over it took 1.5 s) and
+  a hundredth or two over a patch 240 by 140. `Sheet.shade` is as it was,
+  to the bit. Every drawing with a rub in
+  it changes: of the thirteen of `tools/fingerprint.py`, the six that rub
+  have new hashes and the seven that do not are as they were (and so, over
+  `--thorough`, are the 163 of its 325 drawings that do not rub).
+
 - A rub takes the same numbers from the sheet's generator whatever its
   pressure (fusain-2n6). `Sheet.rub` cut each pass into the stretches where
   the pressure is above nothing (a tool is lifted where it is none) and drew
