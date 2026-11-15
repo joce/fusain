@@ -268,6 +268,17 @@ A tool is a tip plus, usually, a medium.
   it touched 0.96 and 0.998 of them, and lay three or four times as
   evenly, the tooth having stayed level. A vinyl eraser leaves most of the
   wax of a burnished dark, which stays level.
+- **An eraser smears wax** (built). An eraser that slides on wax that holds
+  against it drags some of it along (`WAX_DRAG` of what it would have
+  lifted, had the wax not held: so of a dense or burnished layer, and next
+  to nothing of a light one) and lays it back, held, `DRAG_LAY` of it over
+  each of its widths, on what is beside it and after it; wax sticks
+  wherever it is laid. A vinyl eraser rubbed to and fro out of four firm
+  layers of a near-black pencil, burnished, over the bare paper leaves a
+  grey halo 15 from the paper's colour (CIE 1976) within a width of the
+  dark, 8 at three to five widths and 2.6 at six to nine; not burnished,
+  13, 5 and 1.4; of a red, 6. (It left the paper clean.) What it drags is
+  on the tool until it is laid, and counted with what it carries.
 - **Wax stains the paper** (built). A waxy medium carries its pigment into
   the fibres of the paper: of what the paper holds of it, `STAIN` thick on
   the covered share of the pixel (as far as what it holds is waxy) is out

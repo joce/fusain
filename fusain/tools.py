@@ -126,7 +126,8 @@ CHAMOIS = Tool(1.6, 0.04, lay=0.12, press=0.1, smear=1.0, width=30.0, name="cham
 #: wax.
 KNEADED = Tool(2.5, 0.3, width=12.0, name="kneaded eraser")
 #: A vinyl eraser: it rubs off nearly everything but wax, on which it
-#: slides: it lightens a dense layer of coloured pencil only by degrees.
+#: slides: it lightens a dense layer of coloured pencil only by degrees, and
+#: smears a dense or burnished one along its way.
 ERASER = Tool(4.0, 2.5, width=10.0, name="vinyl eraser")
 #: A sand eraser (an ink eraser, or the tip of an electric one): grit in
 #: rubber, which abrades the wax a vinyl eraser slides on.

@@ -435,6 +435,54 @@ def test_burnished_wax_holds_faster_than_wax_that_kept_its_tooth():
     assert _luminances(burnished, spot).mean() < 0.03
 
 
+def _smeared(colour, layers, pressure, burnished):
+    """A patch of coloured pencil, burnished or not, rubbed to and fro with
+    a vinyl eraser in the hand from inside it out over the bare paper: how
+    far from the paper's colour that is, at one, two, three to five and six
+    to nine widths of the eraser out (CIE 1976), and the share of the
+    pigment and of the wax that the sheet and the eraser hold between
+    them."""
+    sheet = Sheet(300, 150, paper=papers.CARTRIDGE, seed=1)
+    for layer in range(layers):
+        sheet.shade(
+            (20, 20, 150, 130),
+            pencils.coloured(colour),
+            pressure,
+            angle=30 - 55 * layer,
+        )
+    if burnished:
+        for angle in (20, -50):
+            sheet.shade((20, 20, 150, 130), pencils.BLENDER, 1.0, angle=angle)
+    bare = Sheet(300, 150, paper=papers.CARTRIDGE, seed=1)
+    total, wax = _total(sheet), float(sheet.held[..., IW].sum(dtype=np.float64))
+    eraser = Smudger(tools.ERASER)
+    sheet.rub((60, 45, 240, 105), eraser, 0.9)
+    tints = []
+    for x0, x1 in ((156, 166), (166, 176), (176, 196), (200, 236)):
+        where = (slice(55, 95), slice(x0, x1))
+        tints.append(float(np.linalg.norm(_lab(sheet, where) - _lab(bare, where))))
+    kept = (_total(sheet) + eraser.load) / total
+    kept_wax = (float(sheet.held[..., IW].sum(dtype=np.float64)) + eraser.wax) / wax
+    return tints, (kept, kept_wax)
+
+
+def test_a_vinyl_eraser_smears_a_dense_or_burnished_dark_along_its_way():
+    # (fusain-d6p) wax that holds against an eraser is dragged along by it,
+    # and laid on what is beside it and after it: a dirty halo a width or
+    # so out of the dark, fading over several (there was none: the eraser
+    # left the paper beside the dark as clean as it found it)
+    for burnished, near in ((True, 12.0), (False, 9.0)):
+        tints, kept = _smeared(DARK, 4, 0.8, burnished)
+        assert tints[0] > near
+        assert tints[0] > tints[1] > tints[2] > tints[3] > 0.5
+        assert kept == pytest.approx((1.0, 1.0), abs=1e-5)
+    # of a red, a tint; of a light layer, which the eraser takes, nothing
+    tints, _ = _smeared(RED, 3, 0.7, True)
+    assert 3.0 < tints[0] < 10.0
+    tints, _ = _smeared(DARK, 1, 0.3, False)
+    assert tints[0] < 0.5
+
+
 def test_a_kneaded_eraser_barely_touches_coloured_pencil():
     light = _sheet()
     light.shade(BOX, pencils.coloured(DARK), 0.3)

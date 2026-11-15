@@ -8,6 +8,26 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A vinyl eraser smears a dense or burnished layer of wax along its way
+  (fusain-d6p). It lifted less of what wax held, and left the rest where it
+  was: rubbed out of a burnished dark over bare paper, it left the paper
+  as clean as it found it. A tool that does not smear (an eraser) now
+  slides on wax that holds against it and drags some of it along
+  (`WAX_DRAG`, 0.05 of what it would have lifted had the wax not held, so
+  of a light layer next to nothing), and lays it back, held, wax and all,
+  over a width or so (`DRAG_LAY`, 1 for each of its widths) on what is
+  beside it and after it. What it drags is on it until it is laid, and the
+  sheet and the eraser hold between them the pigment and the wax they
+  held. A vinyl eraser rubbed to and fro (at 0.9, 10 wide) out of four
+  firm layers of a near-black pencil, burnished, and on over the bare
+  paper: the paper within a width of the dark is 15 from its own colour
+  (CIE 1976), 12 at one to two widths, 8 at three to five and 2.6 at six
+  to nine (nothing before); not burnished, 13, 9, 5 and 1.4; three layers
+  of a red, burnished, 6, 4, 2.4 and 0.7; one light layer, 0.2. Within the
+  dark it takes about as much as it did (0.726 of the burnished dark is
+  left, from 0.732). The assumption, not a measurement: that the smear of
+  a burnished black is plainly seen a width out and fades within a few.
+
 - Coloured pencil, crayon and oil pastel leave a stain that no rubber
   eraser takes (fusain-d6p). In life wax carries its pigment into the
   fibres of the paper, and an erased layer always leaves a tint; in the

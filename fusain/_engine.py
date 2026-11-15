@@ -318,6 +318,13 @@ POLISH_HOLDS = 0.9
 #: stain of a light layer is most of what a heavy one leaves. A knife or a
 #: sand eraser takes it as far as it scrapes.
 STAIN = 0.008
+#: An eraser slides on wax that holds against it, and drags some of it
+#: along: this share of what it would have lifted, had the wax not held
+#: (:func:`drag_wax`). It lays that back, held, DRAG_LAY of it over each
+#: of its widths, on what is beside it and after it: a vinyl eraser smears
+#: a burnished dark a width or so along its way.
+WAX_DRAG = 0.05
+DRAG_LAY = 1.0
 #: Graphite slides. A tool that smears moves, in one pass at full pressure,
 #: this share (times how strongly it smears) of the graphite the paper
 #: holds; the clay of a lead holds the rest back, and the less graphite a
@@ -1528,6 +1535,49 @@ def slide_graphite(held, loose, slid, giving, bonded, cover, iy, ix, rubbed, bac
 
 
 @_inlined
+def drag_wax(held, slid, giving, bonded, iy, ix, drag, back):
+    """Drag the share ``drag`` of what the paper holds at a pixel, with its
+    wax, onto the face of a tool that slides on the wax (``slid``, packed as
+    what a tool carries is), and lay the share ``back`` of what its face is
+    giving in this step (``giving``) down again, held, wax and all: wax
+    sticks to paper and to wax alike. Returns the volume laid down."""
+    if drag > 0.0 and held[iy, ix, IW] > 0.0:
+        gone = min(held[iy, ix, IV] * drag / waxy_at(held, bonded, iy, ix), 1.0)
+        wax = held[iy, ix, IW] * gone
+        held[iy, ix, IW] -= wax
+        slid[IC] += wax
+    elif slid[IV] <= 0.0:
+        return 0.0  # (no wax here, and none on the tool)
+    given, _ = spread_dust(held, slid, giving, iy, ix, drag, back)
+    wax = giving[IC] * back
+    slid[IC] -= wax
+    held[iy, ix, IW] += wax
+    return given
+
+
+@_inlined
+def push_along(
+    held, loose, slid, giving, bonded, cover, iy, ix, lifts, share, back, slides
+):
+    """What a tool pushes along of what the paper holds at a pixel, in the
+    ``share`` of a pass at full pressure (``lifts`` as for :func:`lift`),
+    onto its face (``slid``), which lays the share ``back`` of what it gives
+    in this step (``giving``) down again: a tool that smears slides the
+    graphite (:func:`slide_graphite`, laying the share ``slides``, which wax
+    refuses); one that does not, an eraser, slides on wax that holds
+    against it, and drags some of it along (WAX_DRAG of what it would have
+    lifted, had the wax not held), which sticks wherever it is laid
+    (:func:`drag_wax`). Returns the volume laid down."""
+    if lifts[2] > 0.0:
+        rubbed = lifts[2] * share
+        return slide_graphite(
+            held, loose, slid, giving, bonded, cover, iy, ix, rubbed, slides
+        )
+    drag = WAX_DRAG * min(lifts[1] * share, 1.0) * (1.0 - lifts[3]) * lifts[6]
+    return drag_wax(held, slid, giving, bonded, iy, ix, drag, back)
+
+
+@_inlined
 def lift_bonded(layer, bonded, load, iy, ix, which, up_dust, up_paste, up_held):
     """The share of a layer at a pixel that a tool takes when not all of it
     is loose dust: the shares ``up_dust`` of its loose dust, ``up_paste`` of
@@ -1857,8 +1907,9 @@ def rub_under(
     dust, and what the paper holds, the share of what it carries that it
     lays back over each of its own widths, how strongly it presses the dust
     in, how strongly it smears, how far it scrapes through wax, how its
-    face bears, summed over it (:func:`face_of`), and the volume it holds
-    when it is full]; ``now`` is [x, y,
+    face bears, summed over it (:func:`face_of`), the volume it holds
+    when it is full, and the share of what it pushes along that it lays
+    back over each of its widths]; ``now`` is [x, y,
     heading (x, y), its pressure, and, for a tool landing or lifting, the x
     and y of where it does so (else NaN): it rubs then only the paper it
     covers there]. ``carried``, ``flat``, ``ink``, ``inked`` and
@@ -1883,13 +1934,14 @@ def rub_under(
     # on, per pixel moved
     per_pixel = tool[3] / (2.0 * bound * math.pi * bound * bound)
     per_near = SPREAD / (2.0 * bound * math.pi * bound * bound)
+    per_slid = tool[9] / (2.0 * bound * math.pi * bound * bound)
     lifts = np.array([lift_loose, lift_held, smear, 1.0, 1.0, math.inf, 1.0])
     load = carried[0]
     near = carried[1]  # the dust on the face of the tool, soon laid back
     slid = carried[2]  # held graphite it is pushing along, likewise
     # (what its face gives in this step, and how much of it there is to give)
     room = face_gives(giving[0], near, per_near * step * pressure * tool[7])
-    face_gives(giving[1], slid, per_near * step * pressure * tool[7])
+    room_slid = face_gives(giving[1], slid, per_slid * step * pressure * tool[7])
     x0 = max(int(math.floor(x - bound)), 0)
     x1 = min(int(math.ceil(x + bound)), width)
     y0 = max(int(math.floor(y - bound)), 0)
@@ -1913,14 +1965,16 @@ def rub_under(
             sticks = min(per_pixel * local * step, 1.0)
             back = min(per_near * local * step, room)
             room -= back
+            glides = min(per_slid * local * step, room_slid)
+            room_slid -= glides
             # what is on its face, and the graphite it pushes, it lays
             # anywhere but on wax, where dust hardly clings; the dust of its
             # load on bare tooth, and no other; its paste sticks to anything
-            takes, clings, slides = 1.0, back, back
+            takes, clings, slides = 1.0, back, glides
             if held[iy, ix, IW] > 0.0:
                 takes = 1.0 - wax_refuses(held, cover, iy, ix)
                 clings = back * (1.0 - (1.0 - takes) * dry_share(giving[0]))
-                slides = back * takes
+                slides = glides * takes
             down = sticks
             if sticks > 0.0:  # (not an eraser, which lays nothing)
                 takes *= hunger(cover, held, under, loose, iy, ix)
@@ -1941,7 +1995,7 @@ def rub_under(
             cut = scrape * min(lifts[1] * share, 1.0)
             bare_tooth(flat, held, cover, iy, ix, waxed, cut)
             scrape_ink(ink, inked, load, iy, ix, cut)
-            pushed = slide_graphite(
+            pushed = push_along(
                 held,
                 loose,
                 slid,
@@ -1950,7 +2004,9 @@ def rub_under(
                 cover,
                 iy,
                 ix,
-                smear * share,
+                lifts,
+                share,
+                glides,
                 slides,
             )
             # lay, as dust all over the pixel (here, and not in a helper:
@@ -2126,10 +2182,13 @@ def rub_stroke(
     """
     streaks = streaks_of(salt)
     count = xs.shape[0]
-    gear = np.empty(9)  # (the tool, as rub_under takes it)
+    gear = np.empty(10)  # (the tool, as rub_under takes it)
     gear[:7] = tool[:7]
     gear[7] = face_of(tool[0])
     gear[8] = tool[7] * math.pi * (tool[0] + 0.5) ** 2
+    # (what it pushes along it lays back as it does the dust on its face,
+    # if it smears; the wax it drags, if it does not, further on)
+    gear[9] = SPREAD if tool[5] > 0.0 else DRAG_LAY
     now = np.empty(7)
     now[5], now[6] = math.nan, math.nan
     # what the face of the tool gives in a step, of its dust and of the
