@@ -815,8 +815,8 @@ def bear(
                 continue
             local = row[1, ix - xa]
             level = row[2, ix - xa]
-            # (a tooth pressed flat is level with its peaks, and nothing
-            # in a groove stands higher than its floor)
+            # (to a tip riding on it a tooth pressed flat is level with its
+            # peaks, and nothing in a groove stands higher than its floor)
             ground = tooth[iy, ix] + (1.0 - tooth[iy, ix]) * press[iy, ix]
             ground = min(ground, 1.0 - dent[iy, ix] * sunk)
             above = ground + MICRO - level

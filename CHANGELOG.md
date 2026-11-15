@@ -48,6 +48,24 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   `examples/macaw.py` is rendered under the default lamp again, gloss
   included: on its burnished darks the gloss adds 1.3 L* (4.8 with the
   wide lobe), varying by 0.5 (1.7).
+- A flattened patch is level in its relief, without pits (fusain-8au).
+  `Sheet.surface_height` raised a flattened or polished tooth towards its
+  peaks, as `press` does for a tip that comes after it, so a valley the tip
+  never reached was left a pit as deep as the tooth beside a plateau: six
+  firm layers of 4H on cartridge paper left 6% of the patch more than a
+  quarter of the depth of the tooth below the rest, 0.85 deep on average,
+  and under a raking lamp the patch looked as rough as the paper left
+  alone (its lighting varied by 0.105, the paper's by 0.109). Now the peaks
+  come down towards the valleys, by `press` of their height, so a tooth
+  pressed flat is level with its valleys, a little below the paper around
+  it: no pits, the relief varies a seventh as much as the paper's (0.029
+  of the depth of the tooth, from 0.210), and a raking lamp shows it a
+  seventh as much (0.015). Four firm layers of a dark coloured pencil,
+  0.088, now 0.040; burnished, 0.021, now 0.003. What a tip touches of a
+  flattened tooth, and so how a stroke lays over it, is as it was.
+  With the narrower gloss of wax, fewer of the tooth's facets catch the
+  lamp: on the firm dark the gloss varies from pixel to pixel by 1.1 L*
+  under the default lamp, from 1.4, and at most adds 5.5, from 7.6.
 
 ### Changed
 

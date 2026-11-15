@@ -48,7 +48,7 @@ Per pixel, all `float32`:
 | Field | What it holds |
 | --- | --- |
 | `tooth` | Height of the paper surface, 0 (valley) to 1 (peak). Set once from the paper's texture. |
-| `press` | How far the tooth has been flattened or polished here (0 to 1): by a hard tip pressed firmly, and by burnishing wax. A tooth pressed flat is level with its peaks. |
+| `press` | How far the tooth has been flattened or polished here (0 to 1): by a hard tip pressed firmly, and by burnishing wax. A tooth pressed flat is level: a tip touches all of it, as it would its peaks, and in the relief its peaks have come down to its valleys. |
 | `dent` | How far the paper has been indented here: the depth of a groove below the peaks of the tooth, in depths of the tooth of a paper of depth 1. By a stylus, and by the ball of a pen. |
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
 | `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. |
@@ -105,14 +105,21 @@ each is not. The rule is that a medium lies on what it meets:
 
 The surface has two fields because a tip meets it in two ways. Where a
 whole area has been pressed flat, the tip that comes next rides on it: what
-matters is that it is level, so `press` raises the low ground to the peaks,
-and the tip touches all of it. A groove is narrower than the tip, which rides
+matters is that it is level, so to a tip `press` raises the low ground to
+the peaks, and the tip touches all of it. A groove is narrower than the tip, which rides
 on the paper either side of it: what matters there is how far below that the
 floor is, so `dent` is a depth, and nothing in a groove stands higher than
 `1 - dent / depth` (the peaks of this paper's tooth being at 1). A light dent only takes the
 peaks off; a deep one is a level floor below the valleys. Both show in the
-relief the lamp lights: a flattened patch is smooth, and a groove is a line
-of shadow under a raking light.
+relief the lamp lights. There a flattened patch has been pressed down: its
+peaks come down towards its valleys, by `press` of their height, so that
+pressed flat it is level with them, a little below the paper around it,
+and a valley the tip never reached is not left a pit. (They were raised to
+the peaks, as for a tip, and such a valley was left a pit as deep as the
+tooth: six firm layers of 4H left a twentieth of the patch more than a
+quarter of a tooth below the rest, and under a raking light the patch
+looked as rough as the paper left alone; now none, and a seventh as rough.)
+A groove is a line of shadow under a raking light.
 
 Sizes are in pixels, and the paper's grain sets the scale of a drawing: the
 tooth of a drawing paper is finer than a pencil line, which is two or three

@@ -266,10 +266,10 @@ def test_a_polished_tooth_is_level_under_the_lamp_too():
     rough = sheet.surface_height()[INSIDE].std()
     _layers(sheet, pencils.BLENDER, 3, pressure=1.0)
     assert sheet.press[INSIDE].mean() > 0.9
-    # nearly all of the patch is level with the peaks (a few pits the
-    # blender never reached are left)
+    # all of the patch is level, its peaks brought down to its valleys: the
+    # few the blender never reached are not left pits (fusain-8au)
     height = sheet.surface_height()[INSIDE]
-    assert (height > 0.9 * sheet.surface_height().max()).mean() > 0.85
+    assert (height < 0.1 * sheet.surface_height().max()).mean() > 0.95
     assert height.std() < 0.7 * rough
     # outside the patch the paper keeps its relief
     assert sheet.surface_height()[:15].std() > 0.9 * rough

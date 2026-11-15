@@ -97,12 +97,13 @@ class Sheet:
 
     Per pixel the sheet holds the height of the tooth (``tooth``, 0 valley to
     1 peak), how far it has been flattened or polished (``press``, 0 to 1:
-    a firm hard tip levels the tooth, with its peaks), how far it has been
-    indented (``dent``: the depth of a groove below the peaks of the tooth,
-    in depths of the tooth of a paper of depth 1), the
-    pigment fixed to the paper (``held``) and the pigment lying on it, in two
-    layers, ``loose`` on top and ``under`` beneath it, so that what was laid
-    last is seen over what was laid before. Most of that is dust, which is
+    a firm hard tip levels the tooth, its peaks coming down towards its
+    valleys, and a tip that comes after touches all of it), how far it has
+    been indented (``dent``: the depth of a groove below the peaks of the
+    tooth, in depths of the tooth of a paper of depth 1), the pigment fixed
+    to the paper (``held``) and the pigment lying on it, in two layers,
+    ``loose`` on top and ``under`` beneath it, so that what was laid last is
+    seen over what was laid before. Most of that is dust, which is
     what a stump, an eraser or a later stroke can still move; ``bonded``
     holds how much of each layer is not: dust that is set (:attr:`fixed`), a
     film of wax laid over the dust (:attr:`film`) and greasy paste
@@ -569,14 +570,20 @@ class Sheet:
 
     def surface_height(self, relief: float = 1.0) -> np.ndarray:
         """Height of the paper's surface in pixels, (H, W), as it is lit: its
-        tooth, level with its peaks where it has been pressed flat, and no
+        tooth, brought down where it has been flattened or polished (by
+        ``press`` of its height: pressed flat, it is level with the valleys,
+        and a valley the tip never reached is not left a pit), and no
         higher than the floor of a groove where it has been indented. The
         peaks of an untouched tooth are at ``TOOTH_HEIGHT`` times the
-        paper's grain and depth (times ``relief``), and its valleys at 0."""
+        paper's grain and depth (times ``relief``), and its valleys at 0.
+
+        (To a tip that comes after, what matters about a flattened tooth is
+        that it is level: it touches all of it, as it would the peaks.)"""
         grain, depth = self.paper.grain, self.paper.depth
         if depth <= 0.0:  # (a level paper: nothing but its grooves)
             return -self.dent * np.float32(TOOTH_HEIGHT * grain * relief)
-        ground = self.tooth + (1.0 - self.tooth) * self.press
+        # (the peaks come down towards the valleys)
+        ground = self.tooth * (1.0 - self.press)
         ground = np.minimum(ground, 1.0 - self.dent / np.float32(depth))
         return ground * np.float32(TOOTH_HEIGHT * grain * depth * relief)
 
