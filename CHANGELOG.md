@@ -118,6 +118,22 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A ballpoint line is as strong at its ends as in its middle. Where the
+  ball landed and lifted, the paper under it had only the passes of the
+  path's first and last points, so a line faded over the width of the
+  ball, from half strength at the ends of its path, and a dot had a tenth
+  of the ink of a line. The paper the ball meets where it lands and where
+  it lifts (where its surface comes down to the peaks of the tooth: all of
+  it pressed firmly, a narrower disc pressed lightly) now gets what it
+  would have had if the ball had rolled onto it and off it, as a stick's
+  does (`put_down`). Measured on a line of `pens.BLUE` that never blots,
+  the ink of each column of pixels against the middle's: half a pixel
+  behind where it lands, 0.28 at a pressure of 0.2 and 0.31 at 1.0, now
+  1.04 and 1.03; half a pixel past where it lifts, 0.28 and 0.29, now
+  1.03 and 0.98; a pixel and a half behind, 0.01 and 0.03, now 1.05 and
+  1.04 (the round of the ball, as wide as the line). A dot is 0.91 to 1.0
+  as dark as a line, from 0.09. Hatching a sheet with a ballpoint takes
+  0.32 s, from 0.29 s.
 - Black ballpoint ink bronzes a red between copper and violet, as a real
   one does, where it bronzed grey: its ink was one neutral colour, which
   absorbs all light alike, and so mirrors it alike. `pens.BLACK` is a blend

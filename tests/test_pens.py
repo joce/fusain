@@ -143,6 +143,37 @@ def test_the_flow_scales_the_ink():
     assert a == pytest.approx(0.5 * b, rel=1e-6)
 
 
+def test_a_line_is_as_strong_at_its_ends_as_in_its_middle():
+    """Where the ball lands and where it lifts, the paper it meets gets
+    what it would have had if the ball had rolled onto it and off it: the
+    ends of a line are as strong as its middle, out to the round of the
+    ball, and a dot is as dark as a line. (The ends faded over the width
+    of the ball: half a pixel behind where it landed, 0.3 of the middle's
+    ink; a dot had a tenth of a line's.)"""
+    dry = pens.BLUE.with_(blots=0.0)
+    for pressure in (0.2, 1.0):
+        columns, dots, lines = [], [], []
+        for seed in range(1, 5):
+            sheet = Sheet(200, 40, seed=seed)
+            sheet.stroke([(20, 20.0), (180, 20.0)], dry, pressure)
+            assert sheet.ink is not None
+            columns.append(sheet.ink[..., IV].sum(axis=0, dtype=np.float64))
+            lines.append(sheet.ink[18:22, 60:140, IV].mean())
+            dot = Sheet(40, 40, seed=seed)
+            dot.stroke([(20.0, 20.0)], dry, pressure)
+            assert dot.ink is not None
+            dots.append(dot.ink[18:22, 18:22, IV].mean())
+        ink = np.mean(columns, axis=0)
+        ink /= ink[60:140].mean()
+        # (the ball reaches two pixels from where it is: the line runs from
+        # the pixel 18 to the pixel 181, round at its ends)
+        assert ink[19:22].min() > 0.85 and ink[19:22].max() < 1.15, pressure
+        assert ink[178:181].min() > 0.85 and ink[178:181].max() < 1.15, pressure
+        assert min(ink[18], ink[181]) > 0.6
+        assert ink[17] == 0.0 and ink[182] == 0.0
+        assert np.mean(dots) > 0.85 * np.mean(lines), pressure
+
+
 def test_the_ink_does_not_come_quite_evenly():
     sheet = _line(0.6, papers.PRINTER)
     assert sheet.ink is not None
@@ -203,15 +234,18 @@ def _thickest(sheet) -> float:
 
 def test_a_line_starts_with_a_dot_of_ink_now_and_then():
     gathered, starts, extra = [], [], []
+    line = [(20, 20.5), (180, 20.5)]
     for seed in range(60):
-        sheet = Sheet(200, 40, seed=seed)
+        sheet, plain = Sheet(200, 40, seed=seed), Sheet(200, 40, seed=seed)
         gathered.append(_lands_with(sheet))
-        laid = sheet.stroke([(20, 20.5), (180, 20.5)], pens.BLUE, 0.5)
+        laid = sheet.stroke(line, pens.BLUE, 0.5)
         assert _ink(sheet) == pytest.approx(laid, rel=1e-5)  # blob and all
         # the ink where the line starts, and where it ends (nothing but line)
         start, end = _near(sheet, 20, 20.5, 5), _near(sheet, 180, 20.5, 5)
         starts.append(start / end)
-        extra.append((start - end) / MOST)
+        # and more than a pen that never blots lays there
+        plain.stroke(line, pens.BLUE.with_(blots=0.0), 0.5)
+        extra.append((start - _near(plain, 20, 20.5, 5)) / MOST)
     share, ratio = np.array(gathered), np.array(starts)
     # mostly next to nothing; one line in four or so starts with a dot that
     # shows; never more than a pen has on it
@@ -219,10 +253,10 @@ def test_a_line_starts_with_a_dot_of_ink_now_and_then():
     assert 0.15 < (share > 0.1).mean() < 0.4
     assert 0.3 < share.max() <= eng.BALL_START
     # and as much of that as the pen bears on the paper is the ink on the
-    # paper (the line itself is not quite even)
-    assert np.abs(np.array(extra) - _firm(0.5) * share).max() < 0.15
+    # paper (but for a drop too small to show, which stays on the ball)
+    assert np.abs(np.array(extra) - _firm(0.5) * share).max() < 0.01
     assert ratio[share < 0.01].min() > 0.7 and ratio[share < 0.01].max() < 1.3
-    assert ratio[share > 0.3].min() > 1.4
+    assert ratio[share > 0.3].min() > 1.3
 
 
 def test_a_blob_is_a_dot_a_little_wider_than_the_line_and_thickest_in_the_middle():
@@ -485,9 +519,9 @@ def test_what_a_pen_in_the_hand_gathers_is_on_the_paper_or_on_its_ball():
     for blots in (0.0, 1.0):
         sheet, pen = _clean(220, 150, 2), HeldPen(pens.BLACK.with_(blots=blots))
         laid.append(sheet.stroke(zigzag, pen, 0.8))
-        for k in range(4):  # (short, so that it never holds the most it can)
+        for k in range(3):  # (short, so that it never holds the most it can)
             y = 80.5 + 12 * k
-            laid[-1] += sheet.stroke([(20, y), (60, y + 3)], pen, 0.8)
+            laid[-1] += sheet.stroke([(20, y), (50, y + 3)], pen, 0.8)
         sheets.append(sheet)
         pens_.append(pen)
     for sheet, total in zip(sheets, laid, strict=True):

@@ -1517,6 +1517,60 @@ def turn_of(tx, ty, wx, wy):
 
 
 @njit(cache=True, error_model="numpy")
+def roll_over(
+    tooth, press, dent, cover, held, under, loose, ink, inked, k, pen, ball, salt
+):
+    """Lay the ink the ball leaves on the paper under it, at ``ball`` [x, y,
+    how far from its centre it reaches, the level in the tooth its middle
+    reaches down to, how far its surface rises from its middle to its rim,
+    how deep it presses a groove under its middle, the ink it lays where it
+    touches fully, and, for a ball landing or lifting, the x and y of where
+    it does so (else NaN): it inks then only the paper it meets there (where
+    its surface comes down to the peaks of the tooth: all of it pressed
+    firmly, a narrower disc pressed lightly, as the line is narrower), and
+    presses no groove]. ``pen`` is as for :func:`roll_stroke`. Returns the
+    volume laid."""
+    height, width = tooth.shape
+    x, y, bound, low, rise = ball[0], ball[1], ball[2], ball[3], ball[4]
+    sink, rate, at_x, at_y = ball[5], ball[6], ball[7], ball[8]
+    put = at_x == at_x  # (landing or lifting)
+    x0 = max(int(math.floor(x - bound)), 0)
+    x1 = min(int(math.ceil(x + bound)), width)
+    y0 = max(int(math.floor(y - bound)), 0)
+    y1 = min(int(math.ceil(y + bound)), height)
+    rolled = 0.0
+    for iy in range(y0, y1):
+        for ix in range(x0, x1):
+            dx, dy = ix + 0.5 - x, iy + 0.5 - y
+            d = math.sqrt(dx * dx + dy * dy)
+            edge = min(bound - d, 1.0)
+            if edge <= 0.0:
+                continue
+            across = (d / bound) ** 2
+            if put:  # (only what the ball meets where it is put)
+                ax, ay = ix + 0.5 - at_x, iy + 0.5 - at_y
+                there = (ax * ax + ay * ay) / (bound * bound)
+                if there >= 1.0 or low + rise * there >= 1.0 + MICRO:
+                    continue
+            else:
+                dent[iy, ix] = max(dent[iy, ix], sink * (1.0 - across))
+            level = low + rise * across
+            level += BALL_JITTER * JITTER * (unit_noise(ix, iy, salt) - 0.5)
+            ground = tooth[iy, ix] + (1.0 - tooth[iy, ix]) * press[iy, ix]
+            above = ground + MICRO - level
+            touch = min(max(above / (2.0 * MICRO), 0.0), 1.0) * edge
+            if touch <= 0.0:
+                continue
+            dv = rate * touch * ball_grip(cover, held, under, loose, iy, ix)
+            if dv <= 0.0:
+                continue  # (it skids: no ink, and no more paper inked)
+            inked[iy, ix] = max(inked[iy, ix], touch)
+            stain(ink, iy, ix, dv, k, pen)
+            rolled += dv
+    return rolled
+
+
+@njit(cache=True, error_model="numpy")
 def roll_stroke(
     tooth,
     press,
@@ -1531,6 +1585,7 @@ def roll_stroke(
     ys,
     pressures,
     steps,
+    landing,
     radius,
     k,
     pen,
@@ -1540,7 +1595,11 @@ def roll_stroke(
 ):
     """Roll one pass of a ballpoint pen, its ball of ``radius`` pixels,
     through the points (``xs``, ``ys``), bearing with ``pressures`` (0..1)
-    and moving ``steps`` pixels at each.
+    and moving ``steps`` pixels at each. Where it lands and where it lifts,
+    all the paper it meets there gets a full pass, as under the middle of
+    the line: what it would have had if the ball had rolled onto it from
+    behind and off it ahead, ``landing`` pixels at a time (see
+    :func:`put_down` and :func:`roll_over`).
 
     ``pen`` is [the scattering of its ink per unit volume, how freely it
     flows, how much it blots, the colour its ink bronzes (linear RGB, its
@@ -1566,7 +1625,6 @@ def roll_stroke(
     Returns the volume of ink laid, drops included: what the pen has lost,
     but for what it has gathered on its rim.
     """
-    height, width = tooth.shape
     flow, blots = pen[1], pen[2]
     depth, give = paper[0], paper[2]
     yields = GIVE_NONE + GIVE_FULL * give
@@ -1580,16 +1638,21 @@ def roll_stroke(
     # lands (a pen just picked up lands with that much, all of which does)
     most = BALL_BLOB * BALL_INK * flow * blots * bound * bound
     seldom = unit_noise(0, 2, salt + 3) ** BALL_SELDOM
-    gathered, lands = rim[0], BALL_START * seldom
+    gathered, coming = rim[0], BALL_START * seldom
     if gathered != gathered:
-        gathered, lands = most * BALL_START * seldom, 1.0
+        gathered, coming = most * BALL_START * seldom, 1.0
     least = BALL_SHOWS * BALL_INK * flow * bound * bound  # (a drop that shows)
+    # where the ball is, and how it bears (see :func:`roll_over`)
+    ball = np.empty(9)
+    ball[2], ball[4] = bound, rise
+    put = int(math.ceil(2.0 * bound / landing))  # (passes where it is put)
+    count = xs.shape[0]
     wx, wy = 1.0, 0.0  # the way it was last going
     down = False  # whether it was on the paper at the last point
     turned = 0.0  # how far the line has turned since the ball left a drop
     travel = 0.0
     total = 0.0
-    for i in range(xs.shape[0]):
+    for i in range(count):
         pressure = pressures[i]
         step = steps[i]
         travel += step
@@ -1600,13 +1663,15 @@ def roll_stroke(
         tx, ty = heading(xs, ys, i)
         # (the share of a firm pass it lays here)
         firm = BALL_LIGHT + (1.0 - BALL_LIGHT) * pressure
+        lands = i == 0 or pressures[i - 1] <= 0.0
+        lifts = i == count - 1 or pressures[i + 1] <= 0.0
         # where the line turns, as much of what it gathered comes round as
         # the turn brings round
         if down:
             turned += turn_of(tx, ty, wx, wy)
             comes = gathered * min(turned / BALL_TURN, 1.0)
         else:
-            comes, turned = gathered * lands, 0.0
+            comes, turned = gathered * coming, 0.0
         wx, wy, down = tx, ty, True
         if comes >= least:
             # it leaves as much of it as it bears on the paper
@@ -1629,36 +1694,57 @@ def roll_stroke(
             gathered = max(gathered - left, 0.0)
             total += left
             turned = 0.0
+        # (the first and the last point take half a spacing, the half of
+        # the ball ahead of them, behind them; where it lands or lifts there
+        # they take the other half too)
+        if count > 1 and ((lands and i == 0) or (lifts and i == count - 1)):
+            step += 0.5 * landing
         rate = BALL_INK * flow * firm
-        rate *= surge_at(travel, salt) * per_pass * step
-        sink = BALL_DENT * yields * pressure
-        x0 = max(int(math.floor(x - bound)), 0)
-        x1 = min(int(math.ceil(x + bound)), width)
-        y0 = max(int(math.floor(y - bound)), 0)
-        y1 = min(int(math.ceil(y + bound)), height)
-        rolled = 0.0
-        for iy in range(y0, y1):
-            for ix in range(x0, x1):
-                dx, dy = ix + 0.5 - x, iy + 0.5 - y
-                d = math.sqrt(dx * dx + dy * dy)
-                edge = min(bound - d, 1.0)
-                if edge <= 0.0:
-                    continue
-                across = (d / bound) ** 2
-                dent[iy, ix] = max(dent[iy, ix], sink * (1.0 - across))
-                level = 1.0 - reach * pressure**BALL_POWER + rise * across
-                level += BALL_JITTER * JITTER * (unit_noise(ix, iy, salt) - 0.5)
-                ground = tooth[iy, ix] + (1.0 - tooth[iy, ix]) * press[iy, ix]
-                above = ground + MICRO - level
-                touch = min(max(above / (2.0 * MICRO), 0.0), 1.0) * edge
-                if touch <= 0.0:
-                    continue
-                dv = rate * touch * ball_grip(cover, held, under, loose, iy, ix)
-                if dv <= 0.0:
-                    continue  # (it skids: no ink, and no more paper inked)
-                inked[iy, ix] = max(inked[iy, ix], touch)
-                stain(ink, iy, ix, dv, k, pen)
-                rolled += dv
+        surge = surge_at(travel, salt) * per_pass
+        ball[0], ball[1], ball[3] = x, y, 1.0 - reach * pressure**BALL_POWER
+        ball[5], ball[6] = BALL_DENT * yields * pressure, rate * (surge * step)
+        ball[7], ball[8] = math.nan, math.nan
+        rolled = roll_over(
+            tooth,
+            press,
+            dent,
+            cover,
+            held,
+            under,
+            loose,
+            ink,
+            inked,
+            k,
+            pen,
+            ball,
+            salt,
+        )
+        # where it lands, the paper under it as if it had rolled on from
+        # behind; where it lifts, as if it had rolled off ahead
+        ball[6], ball[7], ball[8] = rate * (surge * landing), x, y
+        for way in (-1.0, 1.0):
+            if (way < 0.0 and not lands) or (way > 0.0 and not lifts):
+                continue
+            for j in range(1, put + 1):
+                ball[0], ball[1] = (
+                    x + way * j * landing * tx,
+                    y + way * j * landing * ty,
+                )
+                rolled += roll_over(
+                    tooth,
+                    press,
+                    dent,
+                    cover,
+                    held,
+                    under,
+                    loose,
+                    ink,
+                    inked,
+                    k,
+                    pen,
+                    ball,
+                    salt,
+                )
         total += rolled
         gathered = min(gathered + BALL_GATHER * blots * rolled, most)
     rim[0] = gathered

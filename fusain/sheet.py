@@ -465,7 +465,14 @@ class Sheet:
             )
         if _square(ends) != (0.0, 0.0):
             raise ValueError(f"a ballpoint's line ends round: {ends!r}")
-        xs, ys, bearing, steps = self._sampled(path, pressure, pen.width)
+        line, points, u, knot, spacing, pace = _sample(path, pen.width)
+        bearing = _profile("pressure", pressure, line, u, knot)
+        xs, ys, bearing, steps = eng.as_kernel_arrays(
+            points, np.clip(bearing, 0.0, 1.0), spacing
+        )
+        # (where it lands and lifts, the ball goes at its own pace, however
+        # short the line: a line of no length is a dot)
+        landing = spacing if spacing >= 0.5 * pace else pace
         if self.ink is None or self.inked is None:
             self.ink = np.zeros((self.height, self.width, eng.INK), np.float32)
             self.inked = np.zeros((self.height, self.width), np.float32)
@@ -488,6 +495,7 @@ class Sheet:
                 ys,
                 bearing,
                 steps,
+                landing,
                 0.5 * float(pen.width),
                 np.ascontiguousarray(pen.ink.K, dtype=np.float64),
                 np.array(

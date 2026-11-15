@@ -476,7 +476,10 @@ kernel and its own layer:
 
 - **The ball** is hard and small, so even a light touch reaches the valleys of
   the tooth: a light line is still a line, not specks on the peaks. It is
-  round, so a light line is narrower than the ball.
+  round, so a light line is narrower than the ball. Where it lands and
+  lifts, the paper it meets gets what it would have had if the ball had
+  rolled onto it and off it, as under a stick: a line is as strong at its
+  ends as in its middle, and a dot as dark as a line.
 - **The ink** is laid at a rate that does not depend on the tooth or on how
   much is there already, only on the pressure (the lightest touch lays about a
   seventh of the firmest) and on a slow unevenness along the line. It is a
