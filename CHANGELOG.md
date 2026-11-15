@@ -568,6 +568,18 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- NumPy 1.x is no longer supported: fusain needs `numpy>=2.0`, and with it
+  `numba>=0.60`, the first numba that runs on NumPy 2 (fusain-klv). The
+  picture depended on NumPy's major version, and only NumPy 2 was ever
+  tested: under NumPy 1.26.4 (with Python 3.12 and numba 0.68.1) the colour
+  of every paper comes out as other numbers than under NumPy 2
+  (`murex.spectral.srgb_to_reflectance`), so 44 of the 421 marks of
+  `tools/fingerprint.py` differ, in all thirteen drawings, and
+  `examples/stilllife.py` draws another picture. With the same Python and
+  numba and NumPy 2.5.4 all 421 are as recorded, and so they are with the
+  oldest pair now allowed, NumPy 2.0.2 and numba 0.60.0. Nothing changes
+  for anyone on NumPy 2.
+
 - A short stroke takes a little less time around its kernel (fusain-238),
   and no picture changes: the thorough fingerprint (325 drawings) and
   every image of `examples/output/` come out as before, to the byte. A

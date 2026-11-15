@@ -1907,9 +1907,8 @@ class Hatcher:
             slide[k] = rng.normal(0, 0.15 * length)
             cut[k] = rng.uniform(0.35, 0.65)
         # The direction's multiples are worked out in its own precision,
-        # which is the field's (single) where NumPy keeps a product of a
-        # single-precision number and a Python one single, as from 2.0, and
-        # double before: the picture has always had that rounding.
+        # which is the field's (single): the picture has always had that
+        # rounding.
         place = np.arange(n) - (n - 1) / 2  # in strokes from the middle
         starts = (
             centre

@@ -243,8 +243,8 @@ tox = [
 [package.metadata]
 requires-dist = [
     { name = "murex", specifier = ">=0.2.0" },
-    { name = "numba", specifier = ">=0.57" },
-    { name = "numpy", specifier = ">=1.24" },
+    { name = "numba", specifier = ">=0.60" },
+    { name = "numpy", specifier = ">=2.0" },
 ]
 
 [package.metadata.requires-dev]
