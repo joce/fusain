@@ -12,7 +12,10 @@ holds a solid model of it whose shapes were measured on reference
 photographs (the bill's arch and hook, the bare face and its rows of tiny
 feathers, the red forehead, the eye set high on a flat head, the folded
 wing and where its coverts end, the tail), posed and lit from the upper
-left, with its cast shadows. Every pixel of the sheet knows where it lies
+left, with its cast shadows. It perches as a parrot does, across a branch
+at a slant: each foot a short scaly leg from under the thigh's feathers,
+two toes forward over the top of the branch and two back down its near
+side, the claws curving under. Every pixel of the sheet knows where it lies
 on the bird: how much light it takes, what colour the bird is there, and
 which way its feathers run.
 
@@ -1100,11 +1103,15 @@ def draw_eye_skin(hand: Hand, bird: Bird) -> None:
 
 
 def draw_feet(hand: Hand, bird: Bird) -> None:
-    """The feet gripping the branch: thick dark grey toes, rounded under the
-    light, ringed with scales; long dark curved claws."""
+    """The feet gripping the branch: the short legs and the thick toes dark
+    grey, rounded under the light and darkest toward their edges in the
+    belly's soft shadow, ringed with scales; the curved claws dark."""
     toes, claws = bird.part["toes"], bird.part["claws"]
-    s = bird.shade
-    hand.tone(CHAR, toes * band(s, 0.45, 0.85), 0.72, (70, -20), 2.4)
+    # (the shadow the feathers cast over the feet has a soft edge)
+    s = soft(bird.shade * toes, 3) / np.maximum(soft(toes, 3), 1e-6) * toes
+    rim = band(bird.model.seen.normal[..., 2], 0.8, 0.25)
+    dark = toes * band(s, 0.45, 0.85) * (0.55 + 0.45 * rim)
+    hand.tone(CHAR, dark, 0.72, (70, -20), 2.4)
     hand.tone(SLATE, toes * 1.0, 0.58, (30, -50), 2.4)
     hand.tone(GREY, toes * (1 - band(s, 0.3, 0.6)), 0.45, (110,), 2.4)
     mm.draw_feet(bird.model, Pencil(hand, CHAR, 1.7))
