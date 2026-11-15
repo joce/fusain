@@ -179,11 +179,12 @@ PLOUGH = 0.12
 BURNISH_FROM = 0.6
 BURNISH_SOFT = 0.2
 BURNISH = 1.5
-#: Polishing also smears the waxy layer: of what the paper holds there, the
-#: tip drags along this share at full pressure in one pass, and lays this
-#: many times what it drags back down over each of its own widths, valleys
-#: included: within a pixel or two, so that it closes the white specks next
-#: to it without carrying colour far.
+#: Polishing also smears the waxy layer: of what the paper holds there (and
+#: of a film of wax over the dust there), the tip drags along this share at
+#: full pressure in one pass, and lays this many times what it drags back
+#: down in the tooth over each of its own widths, valleys included: within
+#: a pixel or two, so that it closes the white specks next to it without
+#: carrying colour far.
 BURNISH_LIFT = 0.6
 BURNISH_LAY = 4.0
 #: A colourless blender melts into the film (:attr:`fusain.Medium.melts`):
@@ -522,14 +523,42 @@ def firmness(bearing):
 
 
 @_inlined
-def burnish(held, press, drag, iy, ix, polish, lift, lay):
+def drag_film(layer, bonded, drag, iy, ix, which, up):
+    """Take the share ``up`` of the film in one of the two layers at a pixel
+    (``which``: 0 underneath, 1 on top) onto a tip that polishes it
+    (``drag``): its volume, and that share of the layer with it. (What lies
+    in a layer is one mixture: a tool that lifts a film lifts it so too.)"""
+    film = bonded[iy, ix, which, FILM]
+    there = layer[iy, ix, IV]
+    if film <= 0.0 or there <= 0.0:
+        return
+    share = up * min(film / there, 1.0)
+    bonded[iy, ix, which, FILM] = film - film * up
+    for part in range(LOOSE):
+        taken = layer[iy, ix, part] * share
+        layer[iy, ix, part] -= taken
+        drag[part] += taken
+
+
+@_inlined
+def burnish(held, under, loose, bonded, press, drag, iy, ix, polish, lift, lay):
     """Polish a pixel by ``polish`` (the share of one full pass on a film as
     slick as it gets): press its tooth flat, take ``lift`` times that share
     of what it holds onto the tip (``drag``, packed as the held layer is),
-    and lay the share ``lay`` of what the tip drags back down on it."""
+    and of a film that lies over the dust there (``bonded``), and lay the
+    share ``lay`` of what the tip drags back down on it, in the tooth.
+
+    Wax is wax wherever it lies, and the tip shears a film on dust as it
+    shears one in the tooth: the wax of a film is counted with what the
+    paper holds, and was dragged by that share already, its pigment not. A
+    firm tip presses what it smears down into the valleys of the tooth,
+    through the dust, which it presses in more readily once the film over
+    it has gone (:func:`press_dust`)."""
     press[iy, ix] = min(press[iy, ix] + BURNISH * polish, 1.0)
     up = min(lift * polish, 1.0)
     down = min(lay, 1.0)
+    drag_film(under, bonded, drag, iy, ix, 0, up)
+    drag_film(loose, bonded, drag, iy, ix, 1, up)
     for part in range(HELD):
         taken = held[iy, ix, part] * up
         drag[part] += taken
@@ -927,7 +956,19 @@ def bear(
                 # (a blender melts into the film, however thin it is)
                 slick = waxy + (1.0 - waxy) * melts
                 polish, lay_back = firm * slick * passing, dragged * slide * touch
-                burnish(held, press, drag, iy, ix, polish, stir, lay_back)
+                burnish(
+                    held,
+                    under,
+                    loose,
+                    bonded,
+                    press,
+                    drag,
+                    iy,
+                    ix,
+                    polish,
+                    stir,
+                    lay_back,
+                )
             # the tip presses some of the dust under it into the paper
             pressed = min(PRESS_IN * bearing, 1.0) * passing
             press_dust(held, under, loose, bonded, cover, iy, ix, pressed)

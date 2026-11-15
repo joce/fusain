@@ -56,6 +56,22 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   and 0.005). Over three layers of light pen hatching, which pressed the
   paper down all over, an HB goes down with it and lays 1.10 of what it
   lays on paper left alone (0.98), and over firm hatching 0.65 (0.39).
+- Burnishing drags a film that lies over dust (fusain-pv2). A firm pass
+  polished and smeared only what the paper held; a film of wax laid over
+  dust stayed where it was, though its wax, which is counted with what the
+  paper holds, went with the tip. A firm tip now drags a film as it drags
+  what the paper holds, by the same share (wax is wax wherever it lies,
+  and it is the tip's polish that shears it), and lays it down in the
+  tooth, through the dust, which it then presses in more readily. One
+  firm layer of the blender over three layers of a dark coloured pencil
+  on near-white soft pastel works 0.21 of the dark that lay on the dust
+  into the tooth, from 0.01; drawn from such a patch out over bare paper,
+  it smears 0.13 of the dark next to the edge, from 0.08, as it smears
+  0.12 out of the tooth. It closes the white flecks as it did: over a
+  blue pastel a quarter of them are left (0.071 to 0.018), over the paper
+  a fifth (0.107 to 0.021). What the tip drags is the film's share of the
+  layer it lies in, which is one mixture, as an eraser takes it. The
+  medium and the wax are conserved.
 - Burnishing and flattening set in by degrees (fusain-bre). A tip polished
   wax, or flattened the tooth, only where it bore harder than 0.6, and from
   nothing there: so of the strokes of a shading near that pressure, each a
@@ -178,8 +194,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - `lay_stroke` (in `fusain._engine`) takes in `medium` whether its side
   lies flat; the `now` of `bear` goes on with whether the tip is the side
   of a stick laid flat and how fast the stroke turns, its `row` has a
-  fourth row, `set_down` takes `now` and `tip_at` whether the side lies
-  flat.
+  fourth row, `set_down` takes `now`, `tip_at` whether the side lies flat,
+  and `burnish` the two layers and `bonded`.
 - `lay_stroke` and `rub_stroke` (in `fusain._engine`) take what they took;
   `bear`, `put_down` and `streak_at` take the streaks of the pass
   (`streaks_of`), and the first two the row they work in.

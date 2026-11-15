@@ -354,7 +354,17 @@ At each step, for each pixel under the tip:
    that thick, so charcoal shaded over it skips it: wax resist. Pressed hard, the tip polishes the film: it raises `press`,
    which levels the tooth so that every part of the pixel is touched, and it
    drags some of the waxy layer along and lays it back down, valleys
-   included. That closes the white specks (burnishing). It sets in by
+   included. That closes the white specks (burnishing). A film that lies
+   on dust is wax as well, and the tip drags it as much as it drags what
+   the paper holds and presses it down into the tooth: one firm layer of
+   the blender over three of a dark coloured pencil laid on near-white
+   pastel works a fifth of the dark that lay on the dust into the tooth,
+   and drawn from such a patch out over the paper it smears 0.13 of the
+   dark next to the edge, as it smears 0.12 out of the tooth. (It took
+   only what the paper held, and the film's wax, which is counted with
+   that, without its pigment: a hundredth of the dark, and 0.08 next to
+   the edge.) It closes the white flecks as it does over the paper, by
+   polishing. It sets in by
    degrees, between `BURNISH_SOFT` below `BURNISH_FROM` and as far above
    it (from 0.4 to 0.8), since the wax does not give way at one pressure
    everywhere: in there a tip polishes as the square of how far it bears

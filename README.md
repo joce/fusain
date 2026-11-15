@@ -208,8 +208,10 @@ flecks of the paper close and the colour is deeper, more saturated, smoother
 and a little glossy. One firm layer of it leaves a fifth of the flecks, two
 next to none; pressed lightly it does nothing. It stirs what it goes over,
 so two colours laid over each other become one, and an edge it is drawn
-across is dragged out by a tip's width or so. (A white or a light pencil
-pressed hard burnishes too, less thoroughly, and adds its colour.)
+across is dragged out by a tip's width or so. Coloured pencil or crayon laid
+over pastel or charcoal lies on the dust as a film, and the blender works
+that into the tooth as well. (A white or a light pencil pressed hard
+burnishes too, less thoroughly, and adds its colour.)
 
 Wax holds against an eraser. A light layer of coloured pencil comes off a
 vinyl eraser fairly well; a dense one comes off by degrees, a burnished one
