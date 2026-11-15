@@ -434,6 +434,13 @@ smears, it also spreads the dust under it from grain to grain, within a few
 pixels: that is what evens a rubbed tone, and it goes faster than the
 pressing in. It presses some dust into the paper and pushes the dust on the
 high ground into the low, so `cover` rises and the white specks grey over. An eraser lays nothing back.
+Like a tip, a tool is put down with all of its face bearing and lifted the
+same way: where it lands and where it lifts, the paper it covers is rubbed
+as though the tool had slid onto it from behind and off it ahead, so a pass
+is as strong at its ends as in its middle, out to the outline of the tool,
+and a dab is one pass of the tool on the paper under it. (It used to rub
+only as it slid on: at the ends of its path an eraser took two thirds of
+what it took further on, and a dab a quarter.)
 What a tool carries is in three parts: what it has lifted, which it lays
 back at its own rate; the dust on its face, which it lays back within a few
 pixels; and the held graphite it is pushing along. All three stay on a tool

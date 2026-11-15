@@ -389,12 +389,13 @@ def test_burnished_wax_holds_faster_than_wax_that_kept_its_tooth():
         for sheet in (plain.copy(), burnished.copy())
     ]
     assert took[1] < 0.9 * took[0]
-    # (the issue's dab: a stroke less than a pixel long with the eraser
-    # lifts a few hundredths of what is under it, and no light shows)
+    # (the issue's dab: a stroke less than a pixel long with the eraser is
+    # one pass of it on the paper under it, which lifts a quarter of what
+    # is there, and no light shows)
     before = burnished.copy()
     burnished.erase([(100, 75), (100.6, 75.4)], tools.ERASER, 1.0, 4.5)
     spot = (slice(74, 77), slice(99, 102))
-    assert 0.9 < _left(burnished, before, spot) < 1.0
+    assert 0.7 < _left(burnished, before, spot) < 0.85
     assert _luminances(burnished, spot).mean() < 0.03
 
 

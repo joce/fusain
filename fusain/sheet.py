@@ -706,7 +706,10 @@ class Sheet:
         graphite, which slides.
 
         ``path`` and ``pressure`` are as for :meth:`stroke`; ``width`` is the
-        width of the tool in pixels (by default the tool's own).
+        width of the tool in pixels (by default the tool's own). The pass is
+        as strong where the tool lands and where it lifts as in its middle,
+        out to the outline of the tool, and a single point is a dab: one
+        pass of the tool on the paper under it.
 
         A bare tool is clean when it lands, so it leaves the paper lighter
         where it does, and it takes away what it still carries when it lifts.
@@ -744,7 +747,10 @@ class Sheet:
 
         ``path`` and ``pressure`` are as for :meth:`stroke`; ``width`` is the
         width of the eraser in pixels (by default the tool's own; a
-        :class:`fusain.Smudger` has its own and takes none).
+        :class:`fusain.Smudger` has its own and takes none). The eraser
+        takes as much where it lands and where it lifts as in the middle of
+        the pass, and a single point is a dab, which takes one pass's worth
+        off the paper under it.
 
         Returns the volume of pigment taken off the sheet.
         """
@@ -848,7 +854,11 @@ class Sheet:
         """One pass of a tool in the hand along ``path``. Returns the volume
         it took off the sheet, less what it laid back."""
         tool, width = smudger.tool, smudger.width
-        xs, ys, bearing, steps = self._sampled(path, pressure, width)
+        line, points, u, knot, spacing, pace = _sample(path, width)
+        bearing = _profile("pressure", pressure, line, u, knot)
+        xs, ys, bearing, steps = eng.as_kernel_arrays(
+            points, np.clip(bearing, 0.0, 1.0), spacing
+        )
         before = smudger.load
         eng.rub_stroke(
             self.cover,
@@ -861,14 +871,22 @@ class Sheet:
             ys,
             bearing,
             steps,
-            0.5 * float(width),
-            float(tool.lift_loose),
-            float(tool.lift_held),
-            float(tool.lay),
-            float(tool.press),
-            float(tool.smear),
-            float(tool.scrape),
+            np.array(
+                [
+                    0.5 * float(width),
+                    tool.lift_loose,
+                    tool.lift_held,
+                    tool.lay,
+                    tool.press,
+                    tool.smear,
+                    tool.scrape,
+                ],
+                dtype=np.float64,
+            ),
             smudger._carried,
+            # (where it lands and lifts, the tool goes at its own pace,
+            # however short the pass)
+            spacing if spacing >= 0.5 * pace else pace,
             int(self._rng.integers(1 << 31)),
         )
         return smudger.load - before

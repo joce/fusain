@@ -8,6 +8,34 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A smudge or an erase is as strong where it lands and lifts as in its
+  middle. A tool rubbed only as it slid on, so the paper under it where it
+  landed or lifted got from nothing (at its back) to a full pass (at its
+  front), as a stroke did before its ends were made full. One pass of a
+  kneaded eraser 14 wide at 0.7 over a 4B shading took 0.20 of the pigment
+  at the ends of its path and 0.05 five pixels outside them, where it took
+  0.31 further on (a vinyl eraser 0.73 and 0.23, against 0.91); a dab took
+  0.07 (0.32), and a pass three pixels long 0.11 (0.46). A stump stirred up
+  0.71 and 0.64 of the dust underneath at the two ends of its path, 0.24
+  and 0.13 five pixels outside them and 0.37 under a dab, against 0.91
+  further on. Where a tool lands and where it lifts, the paper it covers is
+  now rubbed as though the tool had slid onto it from behind and off it
+  ahead (`put_tool`, as `put_down` for a tip): an eraser takes 0.30 to 0.31
+  (0.91) everywhere under its pass, out to the outline of the tool, and
+  under a dab; a stump stirs 0.89 to 0.92, and 0.94 under a dab. A dab is
+  one pass of the tool on the paper under it. Every picture that rubs or
+  erases changes where the passes end; a short dab of an eraser takes four
+  times what it took.
+
+### Changed
+
+- `rub_stroke` (in `fusain._engine`) takes the tool as one array ([radius,
+  `lift_loose`, `lift_held`, `lay`, `press`, `smear`, `scrape`]) and the
+  pace at which it lands and lifts; what the tool does as it slides one
+  step is `rub_under`.
+
+### Fixed
+
 - The side of a stick laid flat bears evenly across its length
   (fusain-bqe). Every tip held on its side marked an ellipse across the
   stroke, so the band of a stick of charcoal or pastel fell off from its

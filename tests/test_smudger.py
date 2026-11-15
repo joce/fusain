@@ -109,7 +109,9 @@ def test_a_pass_leaves_no_pale_dot_where_it_lands(medium, width, tool):
     kept = after[ROWS, middle].sum() / before[ROWS, middle].sum()
     for band in (slice(122, 122 + reach), slice(298 - reach, 298)):
         landed = after[ROWS, band].sum() / before[ROWS, band].sum()
-        assert landed > 0.95 and abs(landed - kept) < 0.04
+        # (a stump now leaves a little more there than further on, not less:
+        # where it lifts, all the paper under it gets what it lays)
+        assert landed > 0.95 and abs(landed - kept) < 0.05
     assert 0.0 < taken < 0.03 * laid
     # and the rows of the passes do not show there as they did: the tone is
     # no more uneven from row to row where they land than in the middle

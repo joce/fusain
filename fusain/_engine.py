@@ -1586,6 +1586,144 @@ def stir_up(under, loose, bonded, iy, ix, stirred):
     return max(under[iy, ix, IV] + loose[iy, ix, IV] - hard, 0.0)
 
 
+@_inlined
+def lay_load(loose, bonded, load, iy, ix, down):
+    """Lay the share ``down`` of what a tool carries (``load``) on a pixel,
+    as dust on top; the paste in it is paste again. Returns the volume
+    laid."""
+    laid = load[IV] * down
+    for part in range(LOOSE):
+        given = load[part] * down
+        load[part] -= given
+        loose[iy, ix, part] += given
+    if load[IP] > 0.0:
+        given = load[IP] * down
+        load[IP] -= given
+        bonded[iy, ix, 1, PASTE] += given
+    return laid
+
+
+@njit(cache=True, error_model="numpy")
+def rub_under(
+    cover, flat, held, under, loose, bonded, carried, tool, now, step, streaks, salt
+):
+    """What a round tool does to the paper under it as it slides ``step``
+    pixels. ``tool`` is [its radius in pixels, how strongly it lifts the
+    dust, and what the paper holds, the share of what it carries that it
+    lays back over each of its own widths, how strongly it presses the dust
+    in, how strongly it smears, how far it scrapes through wax]; ``now`` is
+    [x, y, heading (x, y), its pressure, and, for a tool landing or lifting,
+    the x and y of where it does so (else NaN): it rubs then only the paper
+    it covers there]. ``carried``, ``flat`` and ``streaks`` are as for
+    :func:`rub_stroke`."""
+    height, width = cover.shape
+    x, y, tx, ty, pressure = now[0], now[1], now[2], now[3], now[4]
+    at_x, at_y = now[5], now[6]
+    press, smear, scrape = tool[4], tool[5], tool[6]
+    bound = tool[0] + 0.5
+    rim = RIM * bound + 0.5
+    per_pass = 1.0 / (2.0 * bound - rim)
+    # of what it carries, the share the tool lays on a pixel it bears fully
+    # on, per pixel moved
+    per_pixel = tool[3] / (2.0 * bound * math.pi * bound * bound)
+    per_near = SPREAD / (2.0 * bound * math.pi * bound * bound)
+    lifts = np.array([tool[1], tool[2], smear, 1.0])
+    load = carried[0]
+    near = carried[1]  # the dust on the face of the tool, soon laid back
+    slid = carried[2]  # held graphite it is pushing along, likewise
+    x0 = max(int(math.floor(x - bound)), 0)
+    x1 = min(int(math.ceil(x + bound)), width)
+    y0 = max(int(math.floor(y - bound)), 0)
+    y1 = min(int(math.ceil(y + bound)), height)
+    for iy in range(y0, y1):
+        dy = iy + 0.5 - y
+        xa, xb = row_span(x, dy, 0.0, 1.0, bound * bound, x0, x1)
+        for ix in range(xa, xb):
+            dx = ix + 0.5 - x
+            d = math.sqrt(dx * dx + dy * dy)
+            edge = min(bound - d, 1.0)
+            if edge <= 0.0:
+                continue
+            if at_x == at_x:  # (landing or lifting: only where it is put)
+                ax, ay = ix + 0.5 - at_x, iy + 0.5 - at_y
+                if math.sqrt(ax * ax + ay * ay) >= bound:
+                    continue
+            local = pressure * min((bound - d) / rim, 1.0) * edge
+            local *= streak_at(dx, dy, tx, ty, streaks, salt)
+            share = local * per_pass * step  # of one pass at full pressure
+            lifts[3] = wax_grip(held, cover, flat, iy, ix, scrape)
+            lift(held, under, loose, bonded, load, iy, ix, lifts, share)
+            back = min(per_near * local * step, 1.0)
+            pushed = slide_graphite(
+                held, loose, slid, bonded, cover, iy, ix, smear * share, back
+            )
+            # lay, as dust all over the pixel
+            before = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
+            down = min(per_pixel * local * step, 1.0)
+            laid = lay_load(loose, bonded, load, iy, ix, down)
+            # spread, from grain to grain
+            rate = min(SPREADS * smear * share, 1.0)
+            given, taken = spread_top(loose, bonded, near, iy, ix, rate, back)
+            laid += given
+            after = before + laid - taken
+            if after <= 1e-9:
+                cover[iy, ix] = 0.0  # rubbed clean
+                continue
+            bare = 1.0 - cover[iy, ix]
+            cover[iy, ix] += bare * min((laid + pushed) / after, 1.0)
+            # press in; stir up what is underneath; and push what is
+            # loose into the low ground
+            spent = min(press * share, 1.0)
+            press_dust(held, under, loose, bonded, cover, iy, ix, spent)
+            stirred = min(smear * share, 1.0)
+            dusty = stir_up(under, loose, bonded, iy, ix, stirred) / after
+            cover[iy, ix] += (1.0 - cover[iy, ix]) * stirred * dusty
+
+
+@njit(cache=True, error_model="numpy")
+def put_tool(
+    cover,
+    flat,
+    held,
+    under,
+    loose,
+    bonded,
+    carried,
+    tool,
+    now,
+    streaks,
+    salt,
+    spacing,
+    way,
+):
+    """Where a tool lands (``way`` -1) or lifts (``way`` 1), at ``now`` (see
+    :func:`rub_under`): rub the paper it covers there as it would have been
+    rubbed had the tool slid onto it from behind (off it ahead), so that all
+    of that gets a full pass, as under the middle of a pass, and not only
+    the paper ahead of the middle of the tool (behind it). It goes as it
+    goes along a pass, ``spacing`` pixels at a time."""
+    x, y, tx, ty = now[0], now[1], now[2], now[3]
+    count = int(math.ceil(2.0 * (tool[0] + 0.5) / spacing))
+    now[5], now[6] = x, y
+    for j in range(1, count + 1):
+        now[0], now[1] = x + way * j * spacing * tx, y + way * j * spacing * ty
+        rub_under(
+            cover,
+            flat,
+            held,
+            under,
+            loose,
+            bonded,
+            carried,
+            tool,
+            now,
+            spacing,
+            streaks,
+            salt,
+        )
+    now[0], now[1], now[5], now[6] = x, y, math.nan, math.nan
+
+
 @njit(cache=True, error_model="numpy")
 def rub_stroke(
     cover,
@@ -1598,27 +1736,23 @@ def rub_stroke(
     ys,
     pressures,
     steps,
-    radius,
-    lift_loose,
-    lift_held,
-    lay,
-    press,
-    smear,
-    scrape,
+    tool,
     carried,
+    landing,
     salt,
 ):
-    """Rub one pass of a round tool of ``radius`` pixels through the points
-    (``xs``, ``ys``), bearing with ``pressures`` (0..1) and moving ``steps``
-    pixels at each. Where it bears fully, one pass lifts the shares
-    ``lift_loose`` of the dust (less of the dust underneath) and
-    ``lift_held`` of the held pigment onto the tool, presses the share
-    ``press`` of the dust into the paper, and stirs the share ``smear`` of
-    the dust underneath up into the dust on top and spreads it over the
-    pixel; and over each of its own widths the tool lays the share ``lay`` of
-    what it carries back down, as dust on top. As strongly as it smears, it
-    also spreads the dust on top over the pixels around, and slides the
-    graphite that the paper holds (:func:`slide_graphite`).
+    """Rub one pass of a round tool through the points (``xs``, ``ys``),
+    bearing with ``pressures`` (0..1) and moving ``steps`` pixels at each.
+    ``tool`` is [its radius in pixels, ``lift_loose``, ``lift_held``,
+    ``lay``, ``press``, ``smear``, ``scrape``]. Where it bears fully, one
+    pass lifts the shares ``lift_loose`` of the dust (less of the dust
+    underneath) and ``lift_held`` of the held pigment onto the tool, presses
+    the share ``press`` of the dust into the paper, and stirs the share
+    ``smear`` of the dust underneath up into the dust on top and spreads it
+    over the pixel; and over each of its own widths the tool lays the share
+    ``lay`` of what it carries back down, as dust on top. As strongly as it
+    smears, it also spreads the dust on top over the pixels around, and
+    slides the graphite that the paper holds (:func:`slide_graphite`).
 
     Not all that lies in the two layers is loose dust (``bonded``, the
     volume of each kind in each layer). What is set, by fixative or under a
@@ -1637,78 +1771,62 @@ def rub_stroke(
     graphite it is pushing along, likewise. The tool lands with it and it is
     updated in place, so a tool that is not cleaned between two passes gives
     back as it takes.
+
+    Where it lands and where it lifts, all the paper under the tool is
+    rubbed as under the middle of a pass (:func:`put_tool`), at the pace
+    ``landing`` (the spacing of the points, or that of a path long enough
+    if they are closer: a pass of no length is a dab).
     """
-    height, width = cover.shape
-    bound = radius + 0.5
-    rim = RIM * bound + 0.5
-    per_pass = 1.0 / (2.0 * bound - rim)
-    # of what it carries, the share the tool lays on a pixel it bears fully
-    # on, per pixel moved
-    per_pixel = lay / (2.0 * bound * math.pi * bound * bound)
-    per_near = SPREAD / (2.0 * bound * math.pi * bound * bound)
-    lifts = np.array([lift_loose, lift_held, smear, 1.0])
     streaks = streaks_of(salt)
-    load = carried[0]
-    near = carried[1]  # the dust on the face of the tool, soon laid back
-    slid = carried[2]  # held graphite it is pushing along, likewise
-    for i in range(xs.shape[0]):
-        pressure = pressures[i]
+    count = xs.shape[0]
+    now = np.empty(7)
+    now[5], now[6] = math.nan, math.nan
+    for i in range(count):
         step = steps[i]
-        if pressure <= 0.0 or step <= 0.0:
+        if pressures[i] <= 0.0 or step <= 0.0:
             continue
-        x, y = xs[i], ys[i]
-        tx, ty = heading(xs, ys, i)
-        x0 = max(int(math.floor(x - bound)), 0)
-        x1 = min(int(math.ceil(x + bound)), width)
-        y0 = max(int(math.floor(y - bound)), 0)
-        y1 = min(int(math.ceil(y + bound)), height)
-        for iy in range(y0, y1):
-            dy = iy + 0.5 - y
-            xa, xb = row_span(x, dy, 0.0, 1.0, bound * bound, x0, x1)
-            for ix in range(xa, xb):
-                dx = ix + 0.5 - x
-                d = math.sqrt(dx * dx + dy * dy)
-                edge = min(bound - d, 1.0)
-                if edge <= 0.0:
-                    continue
-                local = pressure * min((bound - d) / rim, 1.0) * edge
-                local *= streak_at(dx, dy, tx, ty, streaks, salt)
-                share = local * per_pass * step  # of one pass at full pressure
-                lifts[3] = wax_grip(held, cover, flat, iy, ix, scrape)
-                lift(held, under, loose, bonded, load, iy, ix, lifts, share)
-                back = min(per_near * local * step, 1.0)
-                pushed = slide_graphite(
-                    held, loose, slid, bonded, cover, iy, ix, smear * share, back
+        now[0], now[1] = xs[i], ys[i]
+        now[2], now[3] = heading(xs, ys, i)
+        now[4] = pressures[i]
+        lands = i == 0 or pressures[i - 1] <= 0.0
+        lifts = i == count - 1 or pressures[i + 1] <= 0.0
+        # (the first and the last point take half a spacing, which is the
+        # half of the tool ahead of them, behind them; what lands or lifts
+        # there takes the other half too)
+        if count > 1 and ((lands and i == 0) or (lifts and i == count - 1)):
+            step += 0.5 * landing
+        for way in (-1.0, 0.0, 1.0):
+            if way == 0.0:
+                rub_under(
+                    cover,
+                    flat,
+                    held,
+                    under,
+                    loose,
+                    bonded,
+                    carried,
+                    tool,
+                    now,
+                    step,
+                    streaks,
+                    salt,
                 )
-                # lay, as dust all over the pixel
-                before = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
-                down = min(per_pixel * local * step, 1.0)
-                laid = load[IV] * down
-                for part in range(LOOSE):
-                    given = load[part] * down
-                    load[part] -= given
-                    loose[iy, ix, part] += given
-                if load[IP] > 0.0:  # (the paste in it is paste again)
-                    given = load[IP] * down
-                    load[IP] -= given
-                    bonded[iy, ix, 1, PASTE] += given
-                # spread, from grain to grain
-                rate = min(SPREADS * smear * share, 1.0)
-                given, taken = spread_top(loose, bonded, near, iy, ix, rate, back)
-                laid += given
-                after = before + laid - taken
-                if after <= 1e-9:
-                    cover[iy, ix] = 0.0  # rubbed clean
-                    continue
-                bare = 1.0 - cover[iy, ix]
-                cover[iy, ix] += bare * min((laid + pushed) / after, 1.0)
-                # press in; stir up what is underneath; and push what is
-                # loose into the low ground
-                spent = min(press * share, 1.0)
-                press_dust(held, under, loose, bonded, cover, iy, ix, spent)
-                stirred = min(smear * share, 1.0)
-                dusty = stir_up(under, loose, bonded, iy, ix, stirred) / after
-                cover[iy, ix] += (1.0 - cover[iy, ix]) * stirred * dusty
+            elif (way < 0.0 and lands) or (way > 0.0 and lifts):
+                put_tool(
+                    cover,
+                    flat,
+                    held,
+                    under,
+                    loose,
+                    bonded,
+                    carried,
+                    tool,
+                    now,
+                    streaks,
+                    salt,
+                    landing,
+                    way,
+                )
 
 
 @_inlined

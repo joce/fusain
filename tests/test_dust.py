@@ -83,10 +83,11 @@ def test_a_stump_drags_dust_along_and_out_onto_bare_paper():
     carried = sheet.smudge(ALONG, tools.STUMP, 0.7, 20.0)
     beyond = float(sheet.pigment()[60:80, 200:].sum())
     assert beyond > 0.01 * before
-    # fading as the stump runs out of dust
+    # fading as the stump runs out of dust (to the end of the pass, which is
+    # as strong where the stump lifts as before it)
     assert (
         sheet.pigment()[60:80, 200:225].sum()
-        > 1.7 * sheet.pigment()[60:80, 235:260].sum()
+        > 1.4 * sheet.pigment()[60:80, 235:260].sum()
     )
     # only where the stump went, and only forwards
     assert (
@@ -248,6 +249,72 @@ def test_what_is_left_is_still_that_pigment():
         np.testing.assert_allclose(
             layer[..., IS].sum(dtype=np.float64), volume * pigment.S, rtol=1e-4
         )
+
+
+# --------------------------------------------------------------------------
+# the ends of a pass
+
+
+def _share_taken(tool, path, of="pigment") -> np.ndarray:
+    """The share that one pass of ``tool`` along ``path`` takes of what lay
+    under the middle of its way (along y = 70), per column: of the pigment,
+    or of the layer of dust underneath, which a stump stirs up."""
+    medium, width = (charcoal.VINE, 14.0) if of == "under" else (pencils.B4, 7.0)
+    sheet = _drawn(medium, width)
+
+    def there() -> np.ndarray:
+        volume = sheet.under[..., IV] if of == "under" else sheet.pigment()
+        return volume[68:72].astype(np.float64).sum(axis=0)
+
+    before = there()
+    rub = sheet.smudge if of == "under" else sheet.erase
+    rub(path, tool, 0.7, 14.0)
+    return np.where(before > 0, 1.0 - there() / np.maximum(before, 1e-9), 0.0)
+
+
+@pytest.mark.parametrize(
+    "tool, of",
+    [(tools.ERASER, "pigment"), (tools.KNEADED, "pigment"), (tools.STUMP, "under")],
+    ids=["vinyl eraser", "kneaded eraser", "stump"],
+)
+def test_a_pass_is_as_strong_where_it_lands_and_lifts_as_in_its_middle(tool, of):
+    # a tool used to rub only as it slid on, so the paper under it where it
+    # landed or lifted got from nothing (at its back) to a full pass (at its
+    # front): at the ends of its path a kneaded eraser took two thirds of
+    # what it took further on, and five pixels outside them a sixth
+    taken = _share_taken(tool, [(60, 70), (140, 70)], of)
+    middle = float(taken[90:110].mean())
+    assert middle > 0.25
+    for x in (55, 60, 67, 133, 140, 145):
+        assert float(taken[x - 1 : x + 2].mean()) == pytest.approx(middle, rel=0.06)
+    # round: out to the outline of the tool, which is 14 wide, and no further
+    assert taken[50] == 0 and taken[149] == 0
+
+
+@pytest.mark.parametrize(
+    "tool, of",
+    [(tools.ERASER, "pigment"), (tools.KNEADED, "pigment"), (tools.STUMP, "under")],
+    ids=["vinyl eraser", "kneaded eraser", "stump"],
+)
+def test_a_dab_is_one_pass_of_the_tool_on_the_paper_under_it(tool, of):
+    # (a dab of a kneaded eraser used to take a quarter of what a pass
+    # takes, and a pass three pixels long a third)
+    middle = float(_share_taken(tool, [(60, 70), (140, 70)], of)[90:110].mean())
+    for path in ([(100, 70)], [(100, 70), (103, 70)]):
+        taken = _share_taken(tool, path, of)
+        assert float(taken[99:102].mean()) == pytest.approx(middle, rel=0.06)
+        assert not taken[:91].any() and not taken[112:].any()
+
+
+def test_what_a_tool_takes_where_it_lands_and_lifts_is_on_it():
+    sheet = _drawn(charcoal.VINE)
+    total = _total(sheet)
+    taken = sheet.erase([(100, 70)], tools.KNEADED, 0.8, 20.0)
+    taken += sheet.smudge([(60, 100), (64, 100)], tools.FINGER, 0.8)
+    taken += sheet.smudge([(170, 40), (200, 44)], tools.STUMP, 0.8, 20.0)  # and off
+    assert taken > 0
+    np.testing.assert_allclose(_total(sheet) + taken, total, rtol=1e-5)
+    assert min(float(layer.min()) for layer in _layers(sheet)) >= 0
 
 
 # --------------------------------------------------------------------------
