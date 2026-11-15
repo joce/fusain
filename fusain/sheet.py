@@ -106,7 +106,7 @@ class Sheet:
     seen over what was laid before. Most of that is dust, which is
     what a stump, an eraser or a later stroke can still move; ``bonded``
     holds how much of each layer is not: dust that is set (:attr:`fixed`), a
-    film of wax laid over the dust (:attr:`film`) and greasy paste
+    film laid over the dust (:attr:`film`) and greasy paste
     (:attr:`paste`). ``cover`` is the share of the pixel that carries
     pigment: the rest shows bare paper. Memory: about 0.37 KB per pixel.
 
@@ -170,10 +170,17 @@ class Sheet:
 
     @property
     def film(self) -> np.ndarray:
-        """Volume of film in each of the two layers, (H, W, 2): what a waxy
-        medium (a coloured pencil, a crayon, an oil pastel) laid not on the
-        paper but on what lay over it. It stays on top of that, and no stump
-        or kneaded eraser moves it. A view, as :attr:`fixed` is."""
+        """Volume of film in each of the two layers, (H, W, 2): what a
+        medium laid not on the paper but on what lay over it. A waxy medium
+        (a coloured pencil, a crayon, an oil pastel) lays one wherever dust
+        lies; a dry one (a pencil, a stick of charcoal) on a bed of dust,
+        more of it than the crumbs of its own mark. It stays on top of the
+        dust. A film of wax sets most of the dust under it, and a tool
+        slides on it and lifts it only as it lifts what the paper holds: no
+        stump or kneaded eraser moves it. The film of a dry medium is only
+        as fast as the dust it lies on: a pencil line on loose pastel comes
+        away with the pastel, and one on fixed pastel stays. A view, as
+        :attr:`fixed` is."""
         return self.bonded[..., FILM]
 
     @property
@@ -380,10 +387,16 @@ class Sheet:
         to (:meth:`indent`): it rests on the highest of the paper it covers,
         so one narrower than a groove goes down into it.
 
-        What the paper holds of the medium goes under the dust that lies
-        there, in the tooth; but a waxy medium (a coloured pencil, a crayon,
-        an oil pastel) is a film, which lies on the dust (:attr:`film`) and
-        sets part of it (:attr:`fixed`).
+        A medium lies on what it meets. What the paper holds of it is in
+        the tooth, under such crumbs as its own; but what a waxy medium (a
+        coloured pencil, a crayon, an oil pastel) lays where dust lies is a
+        film on the dust (:attr:`film`), which sets part of it
+        (:attr:`fixed`), and so is what a dry one (a pencil, a stick of
+        charcoal) lays on a bed of dust, more of it than its own mark
+        leaves: a pencil line shows over pastel, loose or fixed, a little
+        weaker than on bare paper. Such a bed is not in a dry tip's way,
+        nor is what lies under it; but pastel rubbed so far into the paper
+        that no dust is left on it fills the tooth, and takes little.
 
         Returns the volume of medium laid, which is what the tip lost.
 
@@ -741,7 +754,8 @@ class Sheet:
         (``tools.KNEADED``, the default) lifts the dust and a little of what
         the paper holds; a vinyl one (``tools.ERASER``) takes nearly all.
         The paste of an oil pastel, a film of wax laid over dust and the
-        dust set under it come off as what the paper holds does.
+        dust set under it come off as what the paper holds does; a pencil
+        line drawn over loose pastel comes off with the pastel.
 
         Wax holds what it binds, and an eraser slides on it: a light layer
         of coloured pencil comes off a vinyl eraser fairly well, a dense

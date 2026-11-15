@@ -23,7 +23,9 @@ them, and an eraser slides on them: their lights are kept, or scratched out
 with a knife. A light pastel covers a dark one.
 Crayons and oil pastels leave a film of wax that dry media hardly take over,
 even one firm line of it (wax resist); drawn over dust, they lie on it and
-bind part of it. An oil pastel is a paste, which a finger smears and a
+bind part of it. A pencil drawn over pastel lies on it too: its line shows,
+a little weaker than on bare paper, and comes away with the pastel unless
+the pastel is fixed. An oil pastel is a paste, which a finger smears and a
 kneaded eraser does not lift.
 A point wears as it draws, until it is sharpened. A hard pencil pressed
 firmly flattens the tooth, and a stylus indents a line that a tone shaded

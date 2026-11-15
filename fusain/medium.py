@@ -27,7 +27,9 @@ class Medium:
     binding:
         0..1: the share of what it lays that is held by the paper at once,
         the rest lying on it as dust that can still be moved (or, for a
-        medium that is waxy and soft, as paste, which only smears).
+        medium that is waxy and soft, as paste, which only smears). That is
+        on its own ground: where a firm stick meets a bed of dust, more of
+        it than its own crumbs, that share lies on the dust as a film.
     wax:
         0..1: the share of it that is wax (or oil). Wax films over the tooth
         and makes it slick: later layers take less and less, and a firm pass
