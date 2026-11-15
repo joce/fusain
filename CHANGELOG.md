@@ -17,8 +17,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   from 2.9 s; rubbing it with a finger, 2.3 s, from 5.9 s; with a kneaded
   eraser, 2.7 s, from 6.5 s; with a stump over graphite, 4.2 s, from 7.7 s;
   and hatching it with a ballpoint, 0.54 s, from 0.83 s. Rendering it takes
-  what it took, 3.2 s, most of it Kubelka-Munk, which is murex's to make
-  faster. `examples/lake.py` takes three minutes, from nearly four (about
+  1.3 s, from 3.2 s: most of it is Kubelka-Munk, which murex 0.2.0 works
+  out in compiled code. `examples/lake.py` takes three minutes, from nearly four (about
   half of what is left is its looking at the sheet as it goes), and
   `deco.py` and `broadway.py` a quarter to a third less; the examples that
   mostly plan their strokes in numpy (`stilllife.py`, `farm.py`,
@@ -39,7 +39,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
     dust of a pass settles in one visit of each pixel; and the loops over
     the bands of a pigment are vectorised.
   - The dense points of a path are worked out once for a stroke, where
-    they were worked out twice (to sample it and for its length).
+    they were worked out twice (to sample it and for its length): murex
+    0.2.0 keeps them.
+- fusain requires murex 0.2.0.
 - `lay_stroke` and `rub_stroke` (in `fusain._engine`) take what they took;
   `bear`, `put_down` and `streak_at` take the streaks of the pass
   (`streaks_of`), and the first two the row they work in.
