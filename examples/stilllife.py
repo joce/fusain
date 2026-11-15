@@ -689,13 +689,16 @@ def flat_under(x, z):
     return out
 
 
-def cloth_point(u, v):
+def cloth_surface(u, v):
     """The cloth at (u across 0 to 1, v down its length in cm from the back):
-    on the table, over the rounded edge, then hanging."""
+    on the table, over the rounded edge, then hanging.  Returns its points
+    and the heading of the folds (as ``folds_at`` gives it) at the place on
+    the table, (x, z_top), where each lies or would lie: for the part of the
+    cloth that is on the table, where it is."""
     z_top = np.minimum(CLOTH_BACK + v, TABLE_FRONT)
     left = np.interp(z_top, [CLOTH_BACK, TABLE_FRONT], CLOTH_LEFT)
     x = left + u * (CLOTH_RIGHT - left)
-    lift, _ = folds_at(x, z_top)
+    lift, heading = folds_at(x, z_top)
     ripple = 0.3 * (noise2(x / 9, z_top / 9, 3) - 0.5)
     ripple += 0.12 * (noise2(x / 2.5 + 40, z_top / 4.0, 6) - 0.5)
     y_top = CLOTH_Y + (lift + ripple) * flat_under(x, z_top)
@@ -705,7 +708,12 @@ def cloth_point(u, v):
     z = z_top + EDGE_R * np.sin(arc) + hanging_folds(x, drop)
     y = np.where(past > 0, CLOTH_Y - EDGE_R * (1 - np.cos(arc)) - drop, y_top)
     y = np.where(past > 0, y + (y_top - CLOTH_Y) * np.exp(-past / 1.5), y)
-    return np.stack([x, y, z], -1)
+    return np.stack([x, y, z], -1), heading
+
+
+def cloth_point(u, v):
+    """The points of ``cloth_surface``."""
+    return cloth_surface(u, v)[0]
 
 
 def hanging_folds(x, drop):
@@ -737,11 +745,10 @@ def cloth_part(rows=420, cols=520):
     v = np.linspace(0, length, rows)
     u = np.linspace(0, 1, cols)
     U, V = np.meshgrid(u, v)
-    p = cloth_point(U, V - cloth_hem(U, V, length))
+    p, d = cloth_surface(U, V - cloth_hem(U, V, length))
     t_across = unit_rows(np.gradient(p, axis=1))
     t_along = unit_rows(np.gradient(p, axis=0))
     top = p[..., 2] < TABLE_FRONT - 0.5
-    _, d = folds_at(p[..., 0], p[..., 2])
     dirs = unit_rows(np.stack([d[..., 0], 0 * d[..., 0], d[..., 1]], -1))
     slope = np.sum(dirs * t_along, axis=-1, keepdims=True) * t_along
     slope += np.sum(dirs * t_across, axis=-1, keepdims=True) * t_across
@@ -1690,12 +1697,13 @@ def glass_strip(b: Buffers, cam: Camera):
 
 @njit(cache=True, error_model="numpy")
 def _trace(
-    x, y, dx, dy, field, part, want, target, tmin, turn, step, nmax, out, full
+    x, y, dx, dy, field, part, want, target, tmin, turn, step, nmax, out, mid, way, full
 ):  # pragma: no cover
     """Follow the direction field from (x, y), setting off along (dx, dy)
     and turned by ``turn`` (radians) from the field, while on the part
     ``want``, where the target is at least ``tmin`` and no other line of
-    the layer is near (``full``).  Writes the points to ``out`` and returns
+    the layer is near (``full``).  Writes the points to ``out``, the first at
+    row ``mid`` and each next ``way`` (1 or -1) rows further, and returns
     how many."""
     h, w = part.shape
     c, s = math.cos(turn), math.sin(turn)
@@ -1709,7 +1717,7 @@ def _trace(
         crowd = crowd + 1 if full[yi, xi] else 0
         if crowd > 6:
             break
-        out[n, 0], out[n, 1] = x, y
+        out[mid + way * n, 0], out[mid + way * n, 1] = x, y
         n += 1
         fx, fy = field[yi, xi, 0], field[yi, xi, 1]
         gx, gy = fx * c - fy * s, fx * s + fy * c
@@ -1736,6 +1744,50 @@ def _stamp(occ, xs, ys, radius):  # pragma: no cover
             for x in range(max(int(cx) - r, 0), min(int(cx) + r + 1, w)):
                 if (x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= r2:
                     occ[y, x] = 1
+
+
+@njit(cache=True, error_model="numpy")
+def _trace_bundle(
+    starts,
+    dx,
+    dy,
+    turns,
+    nmax,
+    field,
+    part,
+    want,
+    target,
+    tmin,
+    shortest,
+    gap,
+    full,
+    pool,
+    rows,
+):  # pragma: no cover
+    """Trace the strokes of a bundle one after the other, each from its row
+    of ``starts`` at the angle ``turns[k]`` to the field: along (dx, dy) for
+    at most ``nmax[k, 0]`` steps, and along (-dx, -dy) for ``nmax[k, 1]``.
+    A stroke of ``shortest`` points or more is kept: its points are in row
+    ``k`` of ``pool`` (the second way's from its end back to the start, then
+    the first way's; the start is in the middle of the row) between the rows
+    ``rows[k, 0]`` and ``rows[k, 1]`` (excluded), and the room it takes from
+    the strokes after it (0.62 ``gap``) is marked in ``full``.  Any other
+    stroke gets no rows."""
+    mid = pool.shape[1] // 2
+    for k in range(starts.shape[0]):
+        ahead = _trace(
+            starts[k, 0], starts[k, 1], dx, dy, field, part, want, target, tmin,
+            turns[k], 2.0, nmax[k, 0], pool[k], mid, 1, full,
+        )  # fmt: skip
+        back = _trace(
+            starts[k, 0], starts[k, 1], -dx, -dy, field, part, want, target, tmin,
+            turns[k], 2.0, nmax[k, 1], pool[k], mid, -1, full,
+        )  # fmt: skip
+        rows[k, 0], rows[k, 1] = mid, mid
+        if back + max(ahead - 1, 0) >= shortest:
+            rows[k, 0], rows[k, 1] = mid - back + 1, mid + ahead
+            seg = pool[k, rows[k, 0] : rows[k, 1]]
+            _stamp(full, seg[:, 0], seg[:, 1], 0.62 * gap)
 
 
 def line_weight(p):
@@ -1845,44 +1897,40 @@ class Hatcher:
         gap = float(np.clip(line_weight(p) / max(goal[y, x], 1e-3), *ps.spacing))
         n = int(rng.integers(*ps.count))
         length = rng.uniform(*ps.length)
-        want = part[y, x]
+        # What each stroke draws, in the order it draws it: how far it is
+        # from the middle of the bundle, how far along it starts, where it
+        # divides into its two ways.  (The generator cannot give them
+        # grouped by kind without giving other numbers.)
+        spacing, slide, cut = np.empty(n), np.empty(n), np.empty(n)
+        for k in range(n):
+            spacing[k] = rng.uniform(0.85, 1.15)
+            slide[k] = rng.normal(0, 0.15 * length)
+            cut[k] = rng.uniform(0.35, 0.65)
+        # The direction's multiples are worked out in its own precision,
+        # which is the field's (single) where NumPy keeps a product of a
+        # single-precision number and a Python one single, as from 2.0, and
+        # double before: the picture has always had that rounding.
+        place = np.arange(n) - (n - 1) / 2  # in strokes from the middle
+        starts = (
+            centre
+            + across * (place * gap * spacing).astype(d.dtype)[:, None]
+            + d * slide.astype(d.dtype)[:, None]
+        )
+        ahead = length * cut  # the length of each stroke's first way
+        steps = (np.stack([ahead, length - ahead], 1) / 2).astype(np.int64)
+        pool = np.empty((n, 2 * int(steps.max(initial=0)) + 1, 2))
+        rows = np.empty((n, 2), np.int64)
+        _trace_bundle(
+            starts, float(d[0]), float(d[1]), turn + fan * place, steps,
+            field, part, part[y, x], goal, 0.12 * ps.cap,
+            ps.shortest, gap, self.full, pool, rows,
+        )  # fmt: skip
         laid_any = False
         for k in range(n):
-            off = (k - (n - 1) / 2) * gap * rng.uniform(0.85, 1.15)
-            start = centre + across * off + d * rng.normal(0, 0.15 * length)
-            spread = turn + fan * (k - (n - 1) / 2)
-            pts = self.trace(ps, start, d, spread, field, goal, part, want, length)
-            if pts is not None:
-                self.draw(ps, pts, p, goal, laid)
-                _stamp(self.full, pts[:, 0], pts[:, 1], 0.62 * gap)
+            if rows[k, 1] > rows[k, 0]:
+                self.draw(ps, pool[k, rows[k, 0] : rows[k, 1]], p, goal, laid)
                 laid_any = True
         return laid_any
-
-    def trace(self, ps: Pass, start, d, turn, field, goal, part, want, length):
-        half = [length * self.rng.uniform(0.35, 0.65)]
-        half.append(length - half[0])
-        out = np.zeros((600, 2))
-        ways = []
-        for sign, ln in zip((1, -1), half, strict=True):
-            k = _trace(
-                start[0],
-                start[1],
-                sign * d[0],
-                sign * d[1],
-                field,
-                part,
-                want,
-                goal,
-                0.12 * ps.cap,
-                turn,
-                2.0,
-                int(ln / 2),
-                out,
-                self.full,
-            )
-            ways.append(out[:k].copy())
-        pts = np.vstack([ways[1][::-1], ways[0][1:]])
-        return pts if len(pts) >= ps.shortest else None
 
     def draw(self, ps: Pass, pts, p, goal, laid):
         """One stroke, tapering at both ends and following the target."""

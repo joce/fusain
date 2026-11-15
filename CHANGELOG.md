@@ -444,6 +444,38 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Examples
 
+- `examples/stilllife.py` plans its drawing in about an eighth less time
+  (processor time 34 to 37 s before, 30 to 31 s after; three runs each, one
+  after the other, on a machine busy with other work), and the picture is
+  the same to the byte (`stilllife.png`). Two things, from a profile before
+  (cProfile, 70 s) that put 12 s in the cloth's folds and 20 s in the
+  bundles of strokes:
+  - `cloth_part` worked out the folds over the table twice at the same
+    points: `cloth_point` for the cloth's height, and again for the heading
+    (the cloth's 218,400 points, in passes of 4096: 54 of the 163 passes of
+    `folds_over`). The table is 84% of the cloth, and where the cloth lies
+    on it a point is where the first call looked, to the bit.
+    `cloth_surface` now returns the heading with the points (`cloth_point`
+    is its points), and `cloth_part` uses it: 6.5 to 3.3 s of processor
+    time for the cloth.
+  - `Hatcher.bundle` made a call of Python round the compiled `_trace` for
+    each way of each stroke (218,048 strokes, 436,096 calls, each with a
+    zero-filled buffer, two copies and a `vstack`; only 9,544 strokes were
+    laid, the rest were too short and thrown away). The strokes of a bundle
+    are traced by one compiled `_trace_bundle`, from their starts (worked
+    out by numpy in one go, with the single-precision products the loop
+    had), into a buffer made for the bundle, where each stroke that is long
+    enough is marked in `full`, as before, for the next to keep off. What
+    stays in Python is what cannot be batched: the three numbers each
+    stroke draws from the generator, in the order they were drawn, since a
+    different order gives different numbers. The bundles without their
+    strokes' drawing: 5.7 to 3.8 s of processor time (1.1 s of it the
+    compiled kernel), and the drawing of the strokes `Hatcher.draw`, 3 s,
+    is as it was.
+  - Left as they are, the largest of what is left to plan: `Hatcher.chances`
+    (4.5 s, 33,000 calls, each drawing the generator's numbers for the
+    stretch of the ink map that holds the cells that want some) and the rest
+    of `Hatcher.lay` (3 s of its own).
 - The four examples that call `Sheet.rub` (`charcoal.py`, `crayons.py`,
   `deco.py` and `lake.py`) draw another grain in every rub, and in all
   they draw after one: `charcoal.png` (the stump is loaded on a scrap of
@@ -536,6 +568,28 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- A short stroke takes a little less time around its kernel (fusain-238),
+  and no picture changes: the thorough fingerprint (325 drawings) and
+  every image of `examples/output/` come out as before, to the byte. A
+  pressure, a width or a tilt given as a number is made an array of that
+  number straight away; murex was asked to evaluate it as a profile, and
+  fusain then broadcast and checked what came back: about 4 microseconds
+  each for a pressure and a width, 9 for a tilt. The shape of the tip is
+  filled in column by column, where three arrays were stacked and copied
+  (4 microseconds). Measured with the kernel replaced by a compiled
+  function of the same arguments that does nothing (CPU time, best of 25,
+  on a shared 4-core machine): each of the 2000 short strokes of
+  `tools/benchmark.py` took 95 microseconds around its kernel and takes
+  75; the strokes of a shading, whose pressure is a function, 167 and 155.
+  With the kernel, the 2000 short strokes take 0.50 s of CPU, from 0.55 s
+  (best of 20, three times over), a tenth less; 40 small patches of
+  hatching, 1.64 to 1.72 s, from 1.71 to 1.75 s; shading the whole sheet,
+  whose strokes are long, as before. What is left of the 75: murex's
+  sampling of the path, about 33 (making the path, 5; its dense points,
+  10; resampling them, 18, of which numpy spacing the samples takes 5 and
+  interpolating them 5); fusain's own checks and arrays, about 14; handing
+  the kernel its 19 arguments, 1.3 (one argument takes 0.15: packing them
+  into fewer would save next to nothing).
 - What a ballpoint's ball gathers beyond the most it holds is documented
   (fusain-45t; `HeldPen`, `fusain._engine.roll_stroke` and
   `docs/design.md`). The rim holds a drop at most (`BALL_BLOB`: 0.48 for a

@@ -496,12 +496,12 @@ class Sheet:
         widths = _profile("width", point, line, u, knot)
         if not (widths > 0.0).all():
             raise ValueError("width must be a number of pixels above 0 all along")
-        tilts = spline.evaluate_profile(tilt, u, knot, line.n_knots)
-        tilts = np.broadcast_to(np.asarray(tilts, dtype=np.float64), u.shape)
+        tilts = _along(tilt, line, u, knot)
         if not ((tilts >= 0.0) & (tilts <= 1.0)).all():
             raise ValueError(f"tilt must be between 0 (point) and 1 (side): {tilt!r}")
-        sides = known.side * widths if stick is None else np.full_like(u, stick.side)
-        shapes = np.ascontiguousarray(np.stack([widths, tilts, sides], axis=1))
+        shapes = np.empty((len(u), 3))
+        shapes[:, 0], shapes[:, 1] = widths, tilts
+        shapes[:, 2] = known.side * widths if stick is None else stick.side
         if len(points) == 1:
             square = (0.0, 0.0)  # (a dot is the outline of the tip)
         paper, pigment = self.paper, known.pigment
@@ -1144,11 +1144,22 @@ def _sample(path, width: Profile):
 def _profile(name: str, profile: Profile, line, u, knot) -> np.ndarray:
     """``profile`` evaluated at the points ``u`` (``knot``) of ``line``, or
     ValueError unless it is finite all along."""
-    values = spline.evaluate_profile(profile, u, knot, line.n_knots)
-    values = np.broadcast_to(np.asarray(values, dtype=np.float64), u.shape)
+    values = _along(profile, line, u, knot)
     if not np.isfinite(values).all():
         raise ValueError(f"{name} must be finite all along the stroke")
     return values
+
+
+def _along(profile: Profile, line, u, knot) -> np.ndarray:
+    """``profile`` evaluated at the points ``u`` (``knot``) of ``line``: one
+    float for each. A number is the same all along, as
+    :func:`murex.spline.evaluate_profile` makes it, without the long way
+    round (most strokes are given numbers, and a short one takes as long to
+    evaluate as to draw)."""
+    if isinstance(profile, float | int | np.floating | np.integer):
+        return np.full(u.shape, float(profile))
+    values = spline.evaluate_profile(profile, u, knot, line.n_knots)
+    return np.broadcast_to(np.asarray(values, dtype=np.float64), u.shape)
 
 
 def _check_hatching(width: float, gap: float, angle: float, hand: float) -> None:
