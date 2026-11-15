@@ -658,7 +658,7 @@ def bill_light(hand: Hand, bird: Bird) -> None:
     tomium = mm.smooth_curve(mm.bill_point(mm.TOMIUM), 50)
     below = mm.on_bill(bird.model, 1, tomium + mm.grain_offset(tomium, -0.03), 1.4)
     for a, b in spans(mm.visible(bird.model, below, 8.0)):
-        hand.scratch(below[a:b, :2], (0.3 * swell(b - a)).tolist())
+        hand.scratch(below[a:b, :2], (0.7 * swell(b - a)).tolist())
 
 
 #: The pencils of the tail, darks first: colour, which of its colours it

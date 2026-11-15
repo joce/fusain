@@ -67,6 +67,16 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   lamp: on the firm dark the gloss varies from pixel to pixel by 1.1 L*
   under the default lamp, from 1.4, and at most adds 5.5, from 7.6.
 
+### Examples
+
+- `examples/macaw.py`: the light under the bill's cutting edge is
+  scratched with the knife at 0.7, from 0.3. Part of that light was white
+  flecks of the paper, which the blender now closes as it polishes at the
+  rim of its tip; the knife makes it up. On the lower mandible within 12
+  pixels of the cutting edge, the light above its dark summed 50.4 before
+  (61 pixels lighter than L* 60), 43.4 with the knife at 0.3 (48), and is
+  51.4 now (61).
+
 ### Changed
 
 - Strokes and rubs are faster, by a quarter to a half, and no picture
