@@ -247,6 +247,9 @@ PLOUGH = 0.12
 #: pass added to it: twelve layers at 0.6 then polished as a firm one.)
 BURNISH_FROM = 0.6
 BURNISH_SOFT = 0.2
+#: Where it sets in, BURNISH_FROM - BURNISH_SOFT, written out: in floating point
+#: 0.6 - 0.2 is not 0.4, and a tip at 0.4 would have a firmness of 1e-33.
+BURNISH_ONSET = 0.4
 BURNISH = 1.5
 #: A pass brings what it presses flat towards the level of its load, and
 #: each part of the pass closes a share of the gap that is left: SETTLE
@@ -626,9 +629,9 @@ def firmness(bearing):
     grows as the square of the pressure past there, and from BURNISH_SOFT
     above it on is ``(bearing - BURNISH_FROM) / (1 - BURNISH_FROM)``, as
     it would be were there no spread: no corner where it sets in."""
-    over = bearing - BURNISH_FROM
-    if over <= -BURNISH_SOFT:
+    if bearing <= BURNISH_ONSET:
         return 0.0
+    over = bearing - BURNISH_FROM
     if over < BURNISH_SOFT:
         over = (over + BURNISH_SOFT) ** 2 / (4.0 * BURNISH_SOFT)
     return over / (1.0 - BURNISH_FROM)
