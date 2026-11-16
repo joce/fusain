@@ -8,7 +8,17 @@ import pytest
 from murex import spectral as sp
 from murex.filters import box_blur
 
-from fusain import Paper, Sheet, Smudger, crayons, papers, pastels, pencils, tools
+from fusain import (
+    Paper,
+    Sheet,
+    Smudger,
+    Stick,
+    crayons,
+    papers,
+    pastels,
+    pencils,
+    tools,
+)
 from fusain._engine import (
     BURNISH,
     BURNISH_FROM,
@@ -935,23 +945,104 @@ def test_the_crush_of_a_hard_lead_under_coloured_pencil_stays_when_that_is_erase
     assert _touched(_over(sheet)) > on_crushed - 0.02 > 0.85
 
 
+#: All of a sheet.
+EVERYWHERE = (slice(None), slice(None))
+
+
+def _beyond(sheet, where=RUBBED) -> float:
+    """How far the polish of an area goes beyond what the wax there holds
+    up, at its worst pixel: polished wax keeps the tooth level as far as it
+    is WAX_FAST thick on the covered share of the pixel."""
+    cover = np.maximum(sheet.cover[where].astype(np.float64), 1e-6)
+    holds = sheet.held[where][..., IW] / cover / WAX_FAST
+    return float((sheet.polish[where] - holds).max())
+
+
+def _thinly_burnished(paper=papers.CARTRIDGE) -> Sheet:
+    """A very light layer of a dark coloured pencil, burnished."""
+    sheet = _sheet(paper)
+    sheet.shade(BOX, pencils.coloured(DARK), 0.15)
+    sheet.shade(BOX, pencils.BLENDER, 1.0, angle=20)
+    return sheet
+
+
 def test_the_polish_of_thin_wax_goes_with_the_wax():
     # a blender pressed hard over a very light layer polishes further than
     # so little wax holds up; erased, no pixel keeps more polish than the
     # wax left on it is thick, over WAX_FAST (a fifth of them kept 0.01 or
-    # more beyond it; now none keeps 0.002, which is the wax the eraser
-    # drags off a pixel after it has lifted from it)
-    sheet = _sheet()
-    sheet.shade(BOX, pencils.coloured(DARK), 0.15)
-    sheet.shade(BOX, pencils.BLENDER, 1.0, angle=20)
+    # more beyond it; then up to 0.002, the wax the eraser dragged off a
+    # pixel after it had lifted from it: fusain-979)
+    sheet = _thinly_burnished()
     assert sheet.polish[RUBBED].mean() > 0.5 and not sheet.crush.any()
     for _ in range(6):
         sheet.rub(AREA, tools.ERASER, 0.9)
-    cover = np.maximum(sheet.cover[RUBBED], 1e-6)
-    holds = sheet.held[RUBBED][..., IW] / cover / WAX_FAST
-    assert (sheet.polish[RUBBED] <= holds + 0.005).all()
+        assert _beyond(sheet) < 1e-6
     assert sheet.polish[RUBBED].mean() < 0.15
     assert not sheet.crush.any()
+
+
+@pytest.mark.parametrize(
+    "make, tool",
+    [
+        (lambda: _dense(True), tools.ERASER),
+        (_thinly_burnished, tools.ERASER),
+        (_thinly_burnished, tools.FINGER),
+        (_thinly_burnished, tools.CHAMOIS),
+    ],
+)
+def test_a_tool_leaves_no_polish_beyond_what_the_wax_it_leaves_holds_up(make, tool):
+    # (fusain-979) the polish went with the wax as the tool lifted it, and
+    # not with what went after: the wax a vinyl eraser drags off a pixel,
+    # or what a finger spreads of it, and the cover that rises under what
+    # they lay. Until a tool next lifted there it kept up to 0.0033 beyond
+    # what its wax held up on a burnished dark, 0.0020 on a light layer
+    # the blender had polished, 0.0008 under a finger and 0.0002 under a
+    # chamois. Now it is what the pixel is left with that counts.
+    sheet = make()
+    assert _beyond(sheet, EVERYWHERE) < 1e-6
+    for _ in range(3):
+        sheet.rub(AREA, tool, 0.9)
+        assert _beyond(sheet, EVERYWHERE) < 1e-6
+
+
+def test_a_dry_tip_that_drags_wax_off_leaves_no_polish_beyond_what_is_left():
+    # (fusain-979) a dry tip pressed hard on polished wax smears it, and
+    # drags some of it off a pixel; the polish stayed as it was. Over a
+    # burnished light layer that an eraser had left polished as far as its
+    # wax holds up, the side of a 4B pressed hard left 8 pixels up to 0.040
+    # beyond it, until a tool next lifted there. Now it goes with the wax.
+    sheet = _thinly_burnished(papers.BRISTOL)
+    sheet.rub(AREA, tools.ERASER, 0.9)
+    assert _beyond(sheet, EVERYWHERE) < 1e-6
+    polished = sheet.polish[RUBBED].mean()
+    sheet.shade(AREA, Stick(pencils.B4, width=3), 1.0, angle=-20, tilt=1.0)
+    assert _beyond(sheet, EVERYWHERE) < 1e-6
+    assert sheet.polish[RUBBED].mean() > 0.95 * polished
+
+
+@pytest.mark.parametrize("tip", [pencils.BLENDER, pencils.coloured("#ffffff")])
+@pytest.mark.parametrize("layer", [pencils.B6, pastels.soft(BLUE)])
+def test_a_tip_that_melts_polishes_no_tooth_that_it_lays_no_wax_on(tip, layer):
+    # (fusain-979) a blender, or a white pencil, melts into a film of wax
+    # however thin it is, and polishes it as if it were slick; over a tooth
+    # so full of graphite or pastel that it lays nothing there, it polished
+    # the dust: 145 pixels to up to 0.83 under the blender over the 6B, 268
+    # to up to 0.62 under the white over the pastel, polish that had no wax
+    # to go with when a tool came, and stayed
+    sheet = _sheet()
+    _layers(sheet, layer, 3, 1.0)
+    sheet.shade(BOX, tip, 1.0, angle=20)
+    bare = sheet.held[..., IW] <= 0.0
+    assert bare[INSIDE].sum() > 20
+    assert not sheet.polish[bare].any()
+    # it polishes the wax it does lay, thin as it is, as before
+    assert sheet.polish[INSIDE][~bare[INSIDE]].mean() > 0.5
+    # and once a tool has been over it, as far as the wax left holds it up
+    for tool in (tools.ERASER, tools.STUMP):
+        rubbed = sheet.copy()
+        rubbed.rub(AREA, tool, 0.9)
+        assert _beyond(rubbed) < 1e-6
+        assert not rubbed.polish[rubbed.held[..., IW] <= 0.0].any()
 
 
 def test_wax_laid_lightly_over_a_crushed_tooth_is_not_polished():

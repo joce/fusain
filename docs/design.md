@@ -232,8 +232,14 @@ too, which raises both where it is pressed hard on wax, the polish of the
 wax and the crush of the paper under it. The polish goes with the wax.
 Polished wax keeps the tooth level as far as it fills it, `WAX_FAST` thick:
 where a tool takes wax off, the polish left is at most what the wax left
-is thick over that, and with the wax gone it is gone. A blade takes it
-with the surface it cuts. Fixative leaves both as they are.
+is thick over that, and with the wax gone it is gone. That is worked out
+for each pixel once the tool has done all it does there, with the wax and
+the cover it leaves (it drags wax off and lays dust after it has lifted).
+A tip raises the polish only where it leaves wax: one that melts into the
+film polishes it however thin it is, but over a tooth so full of a dry
+medium that it lays nothing there, nothing. Where a tip that does not melt
+drags wax off a pixel, the polish goes with it as under a tool. A blade takes the polish with
+the surface it cuts. Fixative leaves both as they are.
 
 Each is read for what it is:
 
