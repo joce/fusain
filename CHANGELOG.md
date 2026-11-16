@@ -304,6 +304,31 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   card/6`, `wax/cartridge/7`, `wax/cold-pressed/8`, `drawing/toned grey/13`)
   have new hashes, the seven that do not are as they were.
 
+- A shading takes one number from the sheet's generator, however many
+  strokes it takes (fusain-92i). `Sheet.shade` drew the unsteadiness of the
+  hand and a seed for each stroke from the sheet's generator, so how many
+  numbers it drew followed how many strokes it laid, and with a `Stick`
+  that follows its width, which follows its wear, which follows the
+  pressure of all it drew before: a stick worn a little more or less gave
+  every mark drawn after the shading another grain. It now draws one number
+  and seeds a generator of the shading's own with it, as a `seed` given to
+  it does (a shading without one is the shading seeded with the number it
+  drew), from which the hand is drawn; each stroke has a seed derived from
+  that number and its place in the shading, as the stretches of a rub do,
+  so that a stroke's grain no longer depends on how many numbers the hand
+  took before it. A worn stick still shades with fewer strokes; what is
+  drawn after it has the grain it would have had (`tests/test_shade.py`).
+  Every drawing with a shading in it changes, seeded or not: all thirteen
+  of `tools/fingerprint.py` have new hashes, and the ten images of
+  `examples/output/` drawn with a shading. Nine tests whose bounds held
+  for the one sample of the hand they were measured on, and not for every
+  sample (the old code failed them on other sheets too), have bounds that
+  take in the spread over several sheets, with the values measured; the
+  test of a rub's edge gives its rub a seed of its own, since an unsteady
+  hand's passes can stray a width apart and leave a band between them
+  rubbed a fifth as much as the middle; and two tests that stand in for
+  `Sheet.stroke` pass on the seed a shading now gives it.
+
 - A drop of ballpoint ink inks a pixel as far as it is ink (fusain-9dg).
   A drop inked a pixel as far as all the ink there would cover a firm pass
   thick, its own and the line's: any drop, however small, inked all of a

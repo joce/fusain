@@ -106,12 +106,17 @@ def test_a_rub_works_its_area_up_to_the_edge(tool, pressure, rim):
     # sides (top and bottom) as at its middle. (A stump or a finger smooths
     # the grain; an eraser pressed lightly takes a share of the tone. Where
     # the ends of the passes strayed either way and lightened, a light
-    # eraser took 0.4 to 0.75 as much as in the middle over a width in)
+    # eraser took 0.4 to 0.75 as much as in the middle over a width in.)
+    # The rub has a seed of its own: the passes of a hand as unsteady as
+    # this stray across by 0.15 of a width either way, half a width apart,
+    # and two of them now and then stray a width apart and leave a band
+    # between them that only the rims of the tool reach, rubbed a fifth as
+    # much as the middle, which this test is not about.
     sheet = Sheet(300, 200, paper=papers.CARTRIDGE, seed=1)
     for a in (30, -40):
         sheet.shade((10, 10, 290, 190), charcoal.VINE, 0.6, 9.0, angle=a)
     before, light = sheet.pigment().astype(np.float64), _luminance(sheet)
-    sheet.rub((40, 40, 260, 160), Smudger(tool), pressure)
+    sheet.rub((40, 40, 260, 160), Smudger(tool), pressure, seed=4)
     after, dark = sheet.pigment().astype(np.float64), _luminance(sheet)
 
     def rubbed(rows, cols) -> float:

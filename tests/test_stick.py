@@ -344,9 +344,9 @@ def test_a_shading_lays_the_bands_of_a_stick_laid_flat_side_by_side(monkeypatch)
         sheet, centres = Sheet(300, 300, seed=2), []
         draw = sheet.stroke
 
-        def recording(path, medium, pressure, width, tilt, ends):
+        def recording(path, medium, pressure, width, tilt, ends, **mark):
             centres.append(float(np.mean([p[1] for p in path])))
-            return draw(path, medium, pressure, width, tilt, ends)
+            return draw(path, medium, pressure, width, tilt, ends, **mark)
 
         monkeypatch.setattr(sheet, "stroke", recording)
         sheet.shade((20, 20, 280, 280), medium, 0.6, 6.0, 0.0, hand=0.0, tilt=1.0)

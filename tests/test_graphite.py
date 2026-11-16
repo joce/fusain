@@ -337,9 +337,9 @@ def test_shading_with_the_side_takes_fewer_broader_strokes(monkeypatch):
         sheet, widths = Sheet(200, 150, seed=2), []
         draw = sheet.stroke
 
-        def counting(path, medium, pressure, width, tilt, ends):
+        def counting(path, medium, pressure, width, tilt, ends, **mark):
             widths.append(width)
-            return draw(path, medium, pressure, width, tilt, ends)
+            return draw(path, medium, pressure, width, tilt, ends, **mark)
 
         monkeypatch.setattr(sheet, "stroke", counting)
         sheet.shade((20, 20, 180, 130), pencils.B2, 0.6, 5.0, hand=0.0, tilt=tilt)
