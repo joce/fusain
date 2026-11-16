@@ -23,6 +23,174 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   mark that does not. Without a seed everything is as it was, to the bit
   (every hash of `tools/fingerprint.py`, the thorough one too).
 
+### Changed
+
+- The sheet keeps the paper's crush and the wax's polish apart
+  (fusain-dq2): `Sheet.crush`, how far a firm dry tip has crushed the
+  paper's own tooth, and `Sheet.polish`, how far the wax that lies there
+  has been polished level. `Sheet.press` is no longer an array of the
+  sheet but what a tip meets of the two, worked out when it is read
+  (`crush + polish - crush * polish`: polished wax levels its share of the
+  relief that the crush left); it is an array that cannot be written to
+  (ValueError), so code that set `sheet.press` sets `sheet.crush` or
+  `sheet.polish`. A sheet takes
+  four bytes a pixel more (380 for 376). There was one `press` for both,
+  and where a pixel held wax it was taken for the wax's polish. Measured
+  on cartridge paper (`tests/test_burnish.py`):
+  - A hard lead pressed under coloured pencil, the pencil then erased:
+    three firm layers of 4H crushed the tooth by 0.908; three layers of a
+    dark coloured pencil over them, rubbed out four times with a vinyl
+    eraser, left 0.048 of it, and a light layer of HB shaded there
+    touched 0.69 of the pixels. The crush (0.918 now) stays, to the bit,
+    and the HB touches 0.94, as it does on the crushed tooth alone (fresh
+    paper 0.68).
+  - Wax laid lightly over a crushed tooth is not polished: six light
+    layers of crayon (0.35) over those three of 4H had 0.64 of the gloss
+    of polished wax and held against a vinyl eraser as a burnished layer
+    does (a rub left 0.69 of them); they have no gloss now, and a rub
+    leaves 0.26, as on fresh paper (0.30). The gloss of wax and how it
+    holds against an eraser read the polish; the tooth a tip meets, how
+    little it bites a dry medium, the relief and the sheen of graphite
+    read both.
+  - The polish of thin wax goes with the wax: a blender pressed hard over
+    a very light layer polishes further than so little wax holds up, and
+    after six rubs of a vinyl eraser a fifth of the pixels kept a
+    hundredth or more of polish beyond what the wax left on them holds
+    (its thickness over `WAX_FAST`); now none keeps 0.002. Where a tool
+    takes wax, the polish left is at most what the wax left holds up.
+  - A dry tip pressed firmly on wax raises both, a waxy one the polish
+    only; a rubber eraser gives back the polish as it takes the wax and
+    never the crush; a sand eraser or a knife takes both with the surface
+    it cuts; fixative leaves both.
+
+  The stroke, rub and pen kernels take the two arrays where they took one.
+  On its own this leaves the five drawings of `tools/fingerprint.py`
+  without wax as they were in all but the names of the two arrays, and
+  changes the eight that have a dry tip over wax, wax over a crushed tooth
+  or an eraser on polished wax; with the levels of the next entry, all
+  thirteen change.
+- A tip presses the tooth flat as far as its pressure can, and no further
+  for being pressed again (fusain-2z5). The crush and the polish were each
+  the sum of what every pass added, up to 1. Where the strokes of a
+  shading overlap, a pixel has two or three passes for its neighbour's
+  one, so a shading was polished in streaks; and any pressure above 0.4
+  flattened the tooth in the end, given passes enough: six firm layers of
+  HB crushed it by 0.99, as a 4H does, and twelve layers of a coloured
+  pencil at 0.6 polished it by 0.82, as one firm layer does.
+
+  Each now goes to a level set by the load (`fusain._engine.settled`). A
+  tip that bears with firmness `f` (nothing up to a pressure of 0.4, 1 at
+  full pressure, as before) polishes a film to `min(BURNISH * f, 1)` of
+  how slick the film is, and crushes the paper to `min(crush * f, 1)`,
+  `crush` being what its hardness makes of `FLATTEN`: the numbers that a
+  pass's worth of sliding added before are where the pressure now stops. A
+  slick film is polished flat from 0.87 on, to 0.42 at 0.7, 0.19 at 0.6
+  and 0.05 at 0.5; at full pressure a 4H crushes the tooth flat, an HB to
+  0.38, a 2B to 0.18, a 6B to 0.014. A pass closes the gap to its level
+  `SETTLE` (2) times as fast as it added to the press before, so a pass
+  over a tooth left alone ends about where it ended, a second closes most
+  of what is left and a third changes next to nothing; a firmer pass over
+  a lighter one raises the press to its own level, and a lighter one over
+  a firmer one leaves it. And what presses flat is the tip, not the grain
+  of its lead: the level goes by the tip's bearing (its pressure, less
+  towards its rim) without the streaks that make the grain of a line.
+  With them, each stroke left bands polished from a fifth to all the way,
+  and going over it again went on polishing under the hardest bands of
+  each pass. What a firm tip smears and lays is as it was.
+
+  Measured on cartridge paper (`tests/test_burnish.py`, `test_surface.py`),
+  before and now:
+  - One pass (a tip 6 wide along each of eight lines, the press under its
+    middle): the blender on six light layers of red 0.40 and 0.29 at 0.7,
+    0.60 and 0.55 at 0.8, 0.88 and 0.92 at full pressure; an HB on bare
+    paper 0.07 and 0.07, 0.13 and 0.13, 0.22 and 0.29; a 4H 0.17 and 0.16,
+    0.31 and 0.35, 0.56 and 0.72. From 0.7 up a pass does what it did to
+    within a third either way: a dry one crushes a third more at full
+    pressure, where the weak bands of a lead crushed less than the tip
+    does. Nearer 0.4 it does less (the blender two fifths less at 0.6, and
+    a third of what it did at 0.5), since the streaks took the hardest
+    bands of a lead past 0.4 where the tip's pressure is not yet there.
+  - Going over it again: the blender at 0.7, one to three passes and six,
+    0.40, 0.66, 0.87 and 0.96; now 0.29, 0.37, 0.40 and 0.41 (the level of
+    0.7 is 0.42). An HB at 0.9: 0.17, 0.37, 0.55 and 0.97; now 0.21, 0.26,
+    0.28 and 0.29. The blender at 0.7 over the blender at full pressure
+    took 0.913 to 0.957, and leaves 0.928 at 0.929.
+  - Layers: three and six firm layers crushed the tooth by 0.88 and 0.94
+    under a 4H, 0.74 and 0.99 under an HB, 0.37 and 0.74 under a 2B, 0.03
+    and 0.06 under a 6B; now 0.89 and 0.95, 0.34 and 0.37, 0.16 and 0.18,
+    0.013 and 0.014. Twelve layers of a coloured pencil at 0.5, 0.6 and
+    0.7 polished the wax by 0.29, 0.82 and 0.97, with 0.09, 0.54 and 0.73
+    of the gloss of polished wax; now 0.05, 0.20 and 0.49, with 0.002,
+    0.03 and 0.18. Coloured pencil is built in light layers, which fill
+    the tooth with wax and keep it, and burnished at the end by pressing
+    hard: one firm layer of the blender over those twelve polishes them by
+    0.85 to 0.91, with 0.55 to 0.64 of the gloss.
+  - How evenly one layer is polished (the spread of the polish smoothed
+    over 3 pixels, as a share of its mean), at 0.7 and at full pressure.
+    Under ruled strokes, all alike (`hand=0`): coloured pencil 0.35 and
+    0.21, now 0.13 and 0.08; oil pastel 0.42 and 0.24, now 0.12 and 0.06;
+    the blender over three light layers 0.28 and 0.07, now 0.06 and 0.01.
+    With the hand as it is: coloured pencil 0.44 and 0.28, now 0.35 and
+    0.20; wax crayon 0.60 and 0.39, now 0.49 and 0.29; oil pastel 0.65 and
+    0.44, now 0.63 and 0.38; the blender 0.45 and 0.19, now 0.40 and 0.16.
+    Two crossed layers at 0.6 (the measure of fusain-bre): coloured pencil
+    0.58, now 0.41; oil pastel 0.73, now 0.57. The law no longer makes a
+    shading uneven; the hand still does, and that is most of what there
+    was. Its strokes are firm by 15% either way, which near where a tip
+    begins to polish is the difference between a little and a lot (at 0.7
+    their levels run from 0.18 to 0.77, a spread of 0.39 of their mean),
+    they are lighter at their ends, and they stray, so that some paper is
+    under the rim of a tip and never under its flat: an oil pastel at 0.7
+    with every stroke as firm, 0.47; as firm at its ends too, 0.43; and in
+    its place, 0.13. More layers even it out, each place keeping the level
+    of the firmest pass over it: twelve layers at 0.7 are uneven by 0.10.
+
+  What rested on the sum, and has moved:
+  - A firm HB or 2B no longer flattens the tooth as a hard lead does. Three
+    firm layers of HB shine 1.25 times as much as on a tooth left alone
+    (1.4), six shine three fifths as unevenly (a third), and a light layer
+    of 2B over them touches 0.72 of the pixels (0.90; fresh paper 0.73).
+    Under a 4H all of it is as it was: 2.4 times the shine, and the 2B
+    touches 0.92.
+  - A film is polished no further than it is slick. Two layers of a
+    coloured pencil at full pressure, whose film is thin yet, are polished
+    by 0.55 with 0.18 of the gloss (0.77 and 0.37, their passes adding up
+    past how slick the film was); of a crayon 0.83 and 0.72 (0.87 and
+    0.81), of an oil pastel 0.85 and 0.75 (0.90 and 0.85).
+  - Firm layers that are not burnished hold less fast against an eraser.
+    Four layers of a dark coloured pencil at 0.8 polish the wax by 0.50
+    (0.84), and a rub of a vinyl eraser leaves 0.47 of them and three rubs
+    0.05, at 0.46 of the paper's tone (0.63 and 0.27, at 0.10: they held
+    nearly as burnished ones). Burnished with the blender they are as they
+    were: 0.68 and 0.32 (0.69 and 0.33), as dark as before, and the eraser
+    takes 0.40 of what it takes of the firm layers alone (0.75).
+  - The blender does what it did: one firm layer over three light ones of
+    red leaves 0.16 of the white flecks (0.19) with 0.45 of the gloss
+    (0.48), two leave 0.03 (0.04) with 0.76 (0.79); at 0.7 it closes two
+    fifths of the flecks and at 0.5 a twentieth, as before. A white pencil
+    leaves 0.19 of the flecks (0.23) with 0.24 of the gloss (0.29), and
+    polishes 0.88 as far as the blender (0.94): it polishes a thin film
+    as far as it melts into it. A burnished dark under the default lamp
+    is at L* 9.8 (10.2; matte 6.6), and 17.9 with the lamp overhead
+    (18.6). Burnished wax scraped by a knife or a sand eraser, and what
+    is drawn there after, are as they were.
+  - An HB at full pressure leaves 0.029 of the pixels white, where it left
+    0.044: a pass crushes the tooth as far as its load does while it is
+    over it, and the strokes of the same layer that overlap it touch more
+    of a tooth already crushed.
+
+  A stroke carries one more number for each pixel of its row (the bearing
+  without the streaks), and takes 4 to 8% longer than before the two
+  entries (processor time on a sheet of 1120 by 820, before and after turn
+  and turn about: shading with an HB 1.73 s and 1.81 s, with a firm
+  coloured pencil 2.11 s and 2.22 s): 2 to 3% for the second array, and
+  as much for the level. Rubs and renders take what they took. Every
+  drawing where a tip bears harder than 0.4
+  changes, and so do all thirteen of `tools/fingerprint.py`, recorded
+  again; one whose strokes stay under 0.35 or so is as it was but for a
+  trace (the streaks no longer take a light stroke past 0.4: three layers
+  of HB at 0.4 crushed the tooth by 0.004, and now by 0.0005).
+
 ### Fixed
 
 - A tool rubbed over an area stays inside it (fusain-soe). `Sheet.rub` laid

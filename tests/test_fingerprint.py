@@ -62,7 +62,7 @@ def test_a_drawing_gives_the_recorded_hashes(name, scene, paper, seed):
 def test_every_mark_is_there():
     """Each drawing is looked at as a whole at its end: all a sheet holds,
     what it shows, and the numbers its calls returned."""
-    held = ("tooth", "press", "dent", "cover", "held", "under", "loose")
+    held = ("tooth", "crush", "polish", "dent", "cover", "held", "under", "loose")
     for name, marks in RECORDED["marks"].items():
         for key in (*held, "_fresh", "bonded", "_rng", "ground"):
             assert f"sheet.{key}" in marks, (name, key)

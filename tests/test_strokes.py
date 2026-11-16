@@ -314,7 +314,8 @@ def test_a_number_is_the_same_all_along(medium):
     one, other = _sheet(papers.CARTRIDGE), _sheet(papers.CARTRIDGE)
     laid = one.stroke(path, medium, **numbers)
     assert laid > 0 and laid == other.stroke(path, medium, **profiles)
-    for name in ("press", "dent", "cover", "held", "under", "loose", "ink"):
+    worked = ("crush", "polish", "dent", "cover", "held", "under", "loose", "ink")
+    for name in worked:
         assert np.array_equal(getattr(one, name), getattr(other, name)), name
 
 

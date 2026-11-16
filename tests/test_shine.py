@@ -446,7 +446,12 @@ def test_the_gloss_of_wax_grows_with_how_hard_it_is_pressed(make, width):
     assert gloss[0] < 1e-3
     assert all(a < b for a, b in itertools.pairwise(gloss))
     assert all(a < b for a, b in itertools.pairwise(press))
-    assert gloss[1] < 0.05 and gloss[3] > 0.25
+    # (fusain-2z5: two layers of a coloured pencil at full pressure, 0.18;
+    # of a crayon and an oil pastel, 0.72 and 0.75. A film is polished as
+    # far as it is slick and no further, and a coloured pencil's is thin
+    # after two layers: 0.37 while its overlapping strokes each added to
+    # the polish, past how slick the film was; 0.81 and 0.85)
+    assert gloss[1] < 0.05 and gloss[3] > (0.12 if make is pencils.coloured else 0.5)
     # it is the polish that shines: no more gloss than the tooth is pressed
     assert all(g <= p + 1e-6 for g, p in zip(gloss, press, strict=True))
 
@@ -455,11 +460,11 @@ def test_the_gloss_is_the_polish_of_the_wax_that_is_there():
     sheet = _burnished()
     gloss = _gloss(sheet)
     rough = sheet.copy()
-    rough.press[:] = 0.0
+    rough.polish[:] = 0.0
     assert not rough.shine("wax").any()
     # (a film half polished still scatters most of the light)
     half = sheet.copy()
-    half.press *= 0.5
+    half.polish *= 0.5
     assert _gloss(half) == pytest.approx(0.25 * gloss, rel=1e-5)
     # a tooth pressed flat by a hard pencil has no wax on it to shine
     assert not _shaded(pencils.H4, 1.0, 4).shine("wax").any()
@@ -473,7 +478,9 @@ def test_wax_shines_where_it_lies_on_dust_as_on_the_paper():
         sheet.shade(BOX, crayons.wax(RED), 0.9, 9, angle=30 + 55 * layer)
     assert float(sheet.film[..., 1][INSIDE].mean()) > 0.05  # a film, on the dust
     gloss = _gloss(sheet)
-    assert gloss > 0.1
+    # (fusain-2z5: 0.077, the wax polished by 0.28; 0.15 and 0.37 while the
+    # two layers' overlapping strokes each added to the polish)
+    assert gloss > 0.05
     # were that film dust like the charcoal under it, it would hide the
     # gloss of the wax the paper holds
     buried = sheet.copy()

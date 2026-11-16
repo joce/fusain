@@ -7,11 +7,13 @@ wears less, stays on the peaks of the tooth and leaves a paler grey. Graphite
 mirrors the light, so a heavy layer of a soft lead shines under a lamp. A
 hard lead pressed firmly flattens the tooth instead: what is shaded over it
 lies evenly, the paper bites it less, and the little graphite there has a
-sheen. A
+sheen. (A lead flattens it as far as its hardness and its pressure can, in
+one layer or in many: a 4H flat, an HB by two fifths at most.) A
 coloured lead is pigment in wax: translucent, so that layers of two colours
 mix to the eye, and waxy, so that the tooth turns slick as it fills. Laid
-lightly, ten or so layers go on building; a layer pressed hard fills and
-polishes the tooth, little takes over it, and it has a soft gloss under a
+lightly, ten or so layers go on building, and fill the tooth without
+polishing it; a layer pressed hard fills and polishes the tooth, as far as
+it is pressed, little takes over it, and it has a soft gloss under a
 lamp. The colourless blender pressed hard burnishes what it goes over: the
 white flecks of the paper close, and the colour is deeper and smoother; a
 white or a pale pencil pressed hard does too, nearly as well the paler it

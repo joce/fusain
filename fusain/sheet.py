@@ -102,9 +102,12 @@ class Sheet:
         Random seed for the paper's tooth and for the marks.
 
     Per pixel the sheet holds the height of the tooth (``tooth``, 0 valley to
-    1 peak), how far it has been flattened or polished (``press``, 0 to 1:
-    a firm hard tip levels the tooth, its peaks coming down towards its
-    valleys, and a tip that comes after touches all of it), how far it has
+    1 peak), how far it has been pressed flat, in two parts, each 0 to 1:
+    how far a firm dry tip has crushed the paper's own tooth (``crush``:
+    its peaks come down towards its valleys, and stay there until the
+    paper is cut) and how far the wax that lies on it has been polished
+    level (``polish``, which goes with the wax); a tip that comes after
+    touches all of what is level (:attr:`press`). And how far it has
     been indented (``dent``: the depth of a groove below the peaks of the
     tooth, in depths of the tooth of a paper of depth 1), the pigment fixed
     to the paper (``held``) and the pigment lying on it, in two layers,
@@ -114,7 +117,7 @@ class Sheet:
     holds how much of each layer is not: dust that is set (:attr:`fixed`), a
     film laid over the dust (:attr:`film`) and greasy paste
     (:attr:`paste`). ``cover`` is the share of the pixel that carries
-    pigment: the rest shows bare paper. Memory: about 0.37 KB per pixel.
+    pigment: the rest shows bare paper. Memory: about 0.38 KB per pixel.
 
     Raises ValueError or TypeError unless ``width`` and ``height`` are whole
     numbers above 0.
@@ -133,7 +136,8 @@ class Sheet:
         H, W = self.height, self.width
         self.ground = self.paper.reflectance()
         self.tooth = self.paper.tooth(H, W, self._rng)
-        self.press = np.zeros((H, W), np.float32)
+        self.crush = np.zeros((H, W), np.float32)
+        self.polish = np.zeros((H, W), np.float32)
         self.dent = np.zeros((H, W), np.float32)
         self.cover = np.zeros((H, W), np.float32)
         self.held = np.zeros((H, W, HELD), np.float32)
@@ -159,14 +163,33 @@ class Sheet:
         new.__dict__.update(self.__dict__)
         new._rng = np.random.default_rng()
         new._rng.bit_generator.state = self._rng.bit_generator.state
-        names = ("tooth", "press", "dent", "cover", "held", "under", "loose")
-        for name in (*names, "_fresh", "bonded"):
+        names = ("tooth", "crush", "polish", "dent", "cover", "held", "under")
+        for name in (*names, "loose", "_fresh", "bonded"):
             setattr(new, name, getattr(self, name).copy())
         if self.ink is not None and self.inked is not None:
             new.ink, new.inked = self.ink.copy(), self.inked.copy()
         return new
 
     # ------------------------------------------------------------------
+    @property
+    def press(self) -> np.ndarray:
+        """How far the tooth is level to a tip, 0..1, (H, W): crushed
+        (``crush``), polished (``polish``), or both, the wax levelling its
+        share of the relief that the crush left
+        (``crush + polish - crush * polish``). A tip touches all of a
+        tooth pressed flat, a dry medium is bitten less by it, graphite
+        lies flat on it, and in the relief its peaks have come down by
+        that share of their height. Worked out from the two, which are
+        what the sheet holds: it cannot be written to (an array that
+        refuses it, with ValueError: write to ``crush`` or ``polish``)."""
+        pressed = self._pressed()
+        pressed.flags.writeable = False
+        return pressed
+
+    def _pressed(self) -> np.ndarray:
+        """:attr:`press`, as an array of its own that can be written to."""
+        return self.crush + self.polish - self.crush * self.polish
+
     @property
     def fixed(self) -> np.ndarray:
         """Volume of the dust that is set, (H, W, 2): in the layer underneath
@@ -214,8 +237,8 @@ class Sheet:
         matte.
 
         ``"wax"``: where a film of wax has been polished: as far as the wax
-        is thick enough to be slick and the surface is pressed flat
-        (``press``; half pressed, it has a quarter of its gloss), wherever
+        is thick enough to be slick and it has been polished
+        (``polish``; half polished, it has a quarter of its gloss), wherever
         the wax lies, on the paper or as a film over dust, and the less the
         more dust lies over it. A coloured pencil burnished, a crayon or an
         oil pastel pressed hard.
@@ -247,7 +270,8 @@ class Sheet:
         of dust as well (:meth:`_film_sheen`), and the shine of all of it
         together is no more than the covered share of the pixel."""
         cover = np.maximum(self.cover, np.float32(1e-6))
-        full = np.float32(SHEEN_FULL) * (1.0 - np.float32(SHEEN_FLAT) * self.press)
+        flat = np.float32(SHEEN_FLAT) * self._pressed()
+        full = np.float32(SHEEN_FULL) * (1.0 - flat)
         film = np.minimum(self.held[..., IX] / cover / full, 1.0)
         dust = self.under[..., IV] + self.loose[..., IV]
         matte = np.maximum(dust - self.under[..., IX] - self.loose[..., IX], 0.0)
@@ -294,7 +318,7 @@ class Sheet:
             self.loose,
             self.bonded,
             self.cover,
-            self.press,
+            self._pressed(),
             shine,
             how,
         )
@@ -313,7 +337,7 @@ class Sheet:
             over = np.minimum(film / cover / np.float32(eng.COVERS), 1.0)
             seen *= np.exp(-dust / cover / np.float32(SHEEN_HIDE))
             seen = over + (1.0 - over) * seen
-        return self.cover * slick * self.press ** np.float32(WAX_POLISH) * seen
+        return self.cover * slick * self.polish ** np.float32(WAX_POLISH) * seen
 
     def _ink_bronze(self) -> np.ndarray:
         """The bronze of heavy ink; see :meth:`shine`."""
@@ -448,10 +472,15 @@ class Sheet:
         gathers no more).
 
         A dry tip pressed firmly (harder than about 0.6, setting in by
-        degrees from 0.4) flattens the tooth (``press``), the more the
+        degrees from 0.4) flattens the tooth (``crush``), the more the
         harder the tip: a hard pencil does, a soft one hardly, charcoal and
         pastel next to not at all. What is drawn there afterwards lies
-        evenly, and the paper bites it less.
+        evenly, and the paper bites it less. Any tip pressed firmly on a
+        film of wax polishes it (``polish``). Each goes as far as the
+        pressure can, and no further for being gone over again: a firmer
+        stroke over a lighter one presses the tooth flatter, a lighter one
+        over a firmer one leaves it as it is, and light layers, however
+        many, do not burnish.
         Where the paper is indented, a tip lays only what it reaches down
         to (:meth:`indent`): it rests on the highest of the paper it covers,
         so one narrower than a groove goes down into it.
@@ -520,7 +549,8 @@ class Sheet:
         laid = float(
             eng.lay_stroke(
                 self.tooth,
-                self.press,
+                self.crush,
+                self.polish,
                 self.dent,
                 self.cover,
                 self.held,
@@ -588,7 +618,8 @@ class Sheet:
         return float(
             eng.roll_stroke(
                 self.tooth,
-                self.press,
+                self.crush,
+                self.polish,
                 self.dent,
                 self.cover,
                 self.held,
@@ -667,8 +698,8 @@ class Sheet:
 
     def surface_height(self, relief: float = 1.0) -> np.ndarray:
         """Height of the paper's surface in pixels, (H, W), as it is lit: its
-        tooth, brought down where it has been flattened or polished (by
-        ``press`` of its height: pressed flat, it is level with the valleys,
+        tooth, brought down where it has been crushed or its wax polished (by
+        :attr:`press` of its height: pressed flat, it is level with the valleys,
         and a valley the tip never reached is not left a pit), and no
         higher than the floor of a groove where it has been indented. The
         peaks of an untouched tooth are at ``TOOTH_HEIGHT`` times the
@@ -680,7 +711,7 @@ class Sheet:
         if depth <= 0.0:  # (a level paper: nothing but its grooves)
             return -self.dent * np.float32(TOOTH_HEIGHT * grain * relief)
         # (the peaks come down towards the valleys)
-        ground = self.tooth * (1.0 - self.press)
+        ground = self.tooth * (1.0 - self._pressed())
         ground = np.minimum(ground, 1.0 - self.dent / np.float32(depth))
         return ground * np.float32(TOOTH_HEIGHT * grain * depth * relief)
 
@@ -857,11 +888,13 @@ class Sheet:
         fine line back to the paper), rub it out with a sand eraser
         (``tools.SAND_ERASER``), or keep it from the start by leaving the
         paper or by indenting it (:meth:`indent`).
-        Burnished wax levels the tooth: where the wax is taken off, the
-        tooth is there again for what is drawn next (but for what a hard
-        tip crushed, which a sand eraser or a knife cuts away with the
-        surface of the paper). Those two take the ink of a ballpoint with
-        it, which is a stain in the paper; no rubber eraser touches it.
+        Burnished wax levels the tooth: where the wax is taken off, its
+        polish goes with it and the tooth is there again for what is drawn
+        next, but for what a hard tip crushed of the paper itself, under
+        the wax or through it (``crush``), which only a sand eraser or a
+        knife cuts away, with the surface of the paper. Those two take the
+        ink of a ballpoint with it, which is a stain in the paper; no rubber
+        eraser touches it.
 
         ``path`` and ``pressure`` are as for :meth:`stroke`; ``width`` is the
         width of the eraser in pixels (by default the tool's own; a
@@ -1031,7 +1064,8 @@ class Sheet:
             inked = np.zeros((0, 0), np.float32)
         eng.rub_stroke(
             self.cover,
-            self.press,
+            self.crush,
+            self.polish,
             self.held,
             self.under,
             self.loose,

@@ -82,21 +82,41 @@ def test_a_firm_hard_pencil_flattens_the_tooth_and_a_soft_one_hardly():
         for name in ("4H", "HB", "2B", "6B")
     ]
     assert all(a > b for a, b in itertools.pairwise(pressed))
-    assert pressed[0] > 0.8 and pressed[1] > 0.6
-    assert 0.2 < pressed[2] < 0.5
+    # (fusain-2z5) each crushes the tooth to the level of its load, and a
+    # softer lead gives before the paper does: 0.89, 0.34, 0.16 and 0.013.
+    # (They were 0.88, 0.74, 0.37 and 0.03 while every pass added to what
+    # the passes before had crushed, and six layers of HB made 0.99)
+    assert pressed[0] > 0.8
+    assert 0.25 < pressed[1] < 0.45
+    assert 0.1 < pressed[2] < 0.25
     assert pressed[3] < 0.05
 
 
-def test_the_firmer_and_the_more_often_the_flatter():
-    # a light touch: next to none (where its lead bears hardest, a trace: it
-    # sets in by degrees)
+def test_the_firmer_the_flatter_and_no_flatter_than_its_load_presses():
+    # a light touch: none (a tip crushes by the pressure it bears with, the
+    # streaks of its lead aside, and that sets in above 0.4)
     assert _pressed(_shaded(pencils.HB, 0.4, 3)) < 0.005
+    # (at 0.3 the firmest stroke of a hand bears with 0.35: nothing at all,
+    # where the hardest bands of its lead left a trace, a thousandth here
+    # and there)
+    assert not _shaded(pencils.HB, 0.3, 3).crush.any()
     firm = [_pressed(_shaded(pencils.HB, p)) for p in (0.7, 0.85, 1.0)]
     assert 0.0 < firm[0] < firm[1] < firm[2] < 0.3
+    # (fusain-2z5) going over it again closes what is left of the gap to
+    # the level of its load, 0.38 for an HB at full pressure, and goes no
+    # further: 0.24, 0.34 and 0.37 after one, three and six layers (0.22,
+    # 0.74 and 0.99 while every pass added)
     often = [_pressed(_shaded(pencils.HB, 1.0, n)) for n in (1, 3, 6)]
     assert often[0] < often[1] < often[2]
-    assert often[2] > 0.95
-    assert _shaded(pencils.H4, 1.0, 8).press.max() <= 1.0
+    level = eng.FLATTEN * (1.0 - pencils.HB.softness) ** 3 * pencils.HB.binding**2
+    assert level == pytest.approx(0.384, abs=0.001)
+    assert 0.9 * level < often[2] < level
+    assert often[2] - often[1] < 0.4 * (often[1] - often[0])
+    assert _shaded(pencils.HB, 1.0, 6).crush.max() <= level + 1e-6
+    # a harder lead's is more than flat: it crushes the tooth flat
+    hard = _shaded(pencils.H4, 1.0, 8)
+    assert hard.crush.max() == 1.0 and hard.press.max() <= 1.0
+    assert _pressed(hard) > 0.9
 
 
 def test_charcoal_and_pastel_next_to_do_not_flatten_it():
@@ -122,7 +142,7 @@ def test_what_flattens_is_a_tip_that_is_hard_dry_and_all_of_a_piece():
 def test_a_flattened_tooth_is_level_and_touched_all_over():
     sheet = _shaded(pencils.HB, 1.0, 3)
     rough = sheet.copy()
-    rough.press[:] = 0.0  # the same graphite, on a tooth that kept its shape
+    rough.crush[:] = 0.0  # the same graphite, on a tooth that kept its shape
     assert sheet.surface_height()[INSIDE].std() < 0.8 * (
         rough.surface_height()[INSIDE].std()
     )
@@ -132,7 +152,7 @@ def test_a_flattened_tooth_is_level_and_touched_all_over():
     # quarter of the depth of the tooth below that, 0.85 on average
     flat = _shaded(pencils.H4, 1.0, 6)
     kept = flat.copy()
-    kept.press[:] = 0.0
+    kept.crush[:] = 0.0
     top = TOOTH_HEIGHT * flat.paper.grain * flat.paper.depth
     level = flat.surface_height()[INSIDE] / top
     untouched = kept.surface_height()[INSIDE] / top
@@ -159,39 +179,45 @@ def test_a_flattened_tooth_is_level_and_touched_all_over():
 
 
 def test_a_flattened_tooth_bites_a_dry_medium_less():
-    """One stroke along a strip pressed flat and along one left alone."""
-    laid = {}
-    for press in (0.0, 1.0):
-        for medium in (pencils.B4, crayons.wax("#c0392b")):
-            sheet = _sheet(Paper(depth=0.0))  # (level: all of it is touched)
-            sheet.press[:] = press
-            laid[press, medium.name] = sheet.stroke(LINE, medium, 0.5, 6)
+    """One stroke along a strip pressed flat and along one left alone:
+    crushed, or levelled by polish (as wax polished flat levels it)."""
     dry, waxy = pencils.B4.name, crayons.wax("#c0392b").name
-    # (a little more than the share it bites: the tooth fills more slowly)
-    assert 1 - eng.FLAT_BITE < laid[1.0, dry] / laid[0.0, dry] < 0.5
-    assert laid[1.0, waxy] == pytest.approx(laid[0.0, waxy])
+    for flattened in ("crush", "polish"):
+        laid = {}
+        for press in (0.0, 1.0):
+            for medium in (pencils.B4, crayons.wax("#c0392b")):
+                sheet = _sheet(Paper(depth=0.0))  # (level: all of it is touched)
+                getattr(sheet, flattened)[:] = press
+                assert sheet.press.max() == press
+                laid[press, medium.name] = sheet.stroke(LINE, medium, 0.5, 6)
+        # (a little more than the share it bites: the tooth fills more slowly)
+        assert 1 - eng.FLAT_BITE < laid[1.0, dry] / laid[0.0, dry] < 0.5
+        assert laid[1.0, waxy] == pytest.approx(laid[0.0, waxy])
 
 
 def test_graphite_shines_more_and_more_evenly_on_a_flattened_tooth():
     for name, more in (("4H", 2.0), ("HB", 1.2)):
         sheet = _shaded(pencils.grade(name), 1.0, 3)
         rough = sheet.copy()
-        rough.press[:] = 0.0
+        rough.crush[:] = 0.0
         flat_shine = float(sheet.shine("graphite")[INSIDE].mean())
         assert flat_shine > more * float(rough.shine("graphite")[INSIDE].mean())
-    # six firm layers of HB under the default lamp: the light it mirrors
+    # six firm layers of HB under the default lamp: the light it mirrors.
+    # (fusain-2z5: 0.62 as unevenly as on a tooth left alone, the tooth
+    # being crushed by 0.37; a third as unevenly while six layers crushed
+    # it by 0.99, as only a hard lead does)
     sheet = _shaded(pencils.HB, 1.0, 6)
     rough = sheet.copy()
-    rough.press[:] = 0.0
+    rough.crush[:] = 0.0
     uneven = []
     for target in (sheet, rough):
         glint = _light(target.render()) - _light(target.render(gloss=0))
         uneven.append(float(glint.std() / glint.mean()))
-    assert uneven[0] < 0.5 * uneven[1]
+    assert uneven[0] < 0.7 * uneven[1]
     # a soft lead shines by how much it lays, flattened or not
     soft = _shaded(pencils.B6, 1.0, 3)
     rough = soft.copy()
-    rough.press[:] = 0.0
+    rough.crush[:] = 0.0
     assert float(soft.shine("graphite")[INSIDE].mean()) == pytest.approx(
         float(rough.shine("graphite")[INSIDE].mean()), rel=0.02
     )

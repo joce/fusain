@@ -48,7 +48,9 @@ Per pixel, all `float32`:
 | Field | What it holds |
 | --- | --- |
 | `tooth` | Height of the paper surface, 0 (valley) to 1 (peak). Set once from the paper's texture. |
-| `press` | How far the tooth has been flattened or polished here (0 to 1): by a hard tip pressed firmly, and by burnishing wax. A tooth pressed flat is level: a tip touches all of it, as it would its peaks, and in the relief its peaks have come down to its valleys. Polished, it is the wax that is level, and the tooth comes back as the wax that filled it is taken off; what a hard tip crushed stays, unless a blade or grit cuts it away. |
+| `crush` | How far the paper's own tooth has been crushed here (0 to 1), its peaks pressed down towards its valleys: by a dry tip pressed firmly, the more the harder the tip. It is the paper's: it stays whatever is laid or lifted afterwards, until a blade or grit cuts the surface of the paper away. |
+| `polish` | How far the wax that lies here has been polished level (0 to 1): by any tip pressed firmly on a film of wax, and by a blender. It is the wax's: it goes as the wax that filled the tooth is taken off. |
+| (`press`) | Not stored: what a tip meets, worked out from the two (`Sheet.press`, `crush + polish - crush * polish`). A tooth pressed flat is level: a tip touches all of it, as it would its peaks, and in the relief its peaks have come down to its valleys. |
 | `dent` | How far the paper has been indented here: the depth of a groove below the peaks of the tooth, in depths of the tooth of a paper of depth 1. By a stylus, and by the ball of a pen. |
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
 | `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. The wax counts all the wax at the pixel, wherever it lies: in what the paper holds, in a film or in paste. |
@@ -56,7 +58,8 @@ Per pixel, all `float32`:
 | `under`, `loose` | Pigment lying on what the paper holds: K, S, volume and sheen, in two layers. `loose` is on top; what a new pass covers goes `under`. Most of it is dust. |
 | `bonded` | Of what lies in each of the two layers, the volume that is not loose dust, of three kinds: `fixed`, dust that is set, by fixative or under a film; `film`, what a medium laid on the dust and not on the paper, a waxy one wherever dust lay and a dry one on a bed of it; `paste`, what the paper does not hold of a greasy medium. |
 
-That is about 0.37 KB per pixel, a little more than oilpaint. As there, storing summed
+That is about 0.38 KB per pixel (95 numbers of four bytes; 94 while one
+`press` stood for `crush` and `polish` both), a little more than oilpaint. As there, storing summed
 absorption and scattering lets any number of pigments mix correctly at a fixed
 cost.
 
@@ -181,8 +184,9 @@ each is not. The rule is that a medium lies on what it meets:
   is set, and a greasy tip ploughs up a little of what it is laid over, so
   that a light oil pastel only half covers a dark one. Fixative sets paste.
 
-The surface has two fields because a tip meets it in two ways. Where a
-whole area has been pressed flat, the tip that comes next rides on it: what
+A tip meets the surface in two ways. Where a whole area has been pressed
+flat (its tooth crushed, its wax polished, or both: `press`, below), the
+tip that comes next rides on it: what
 matters is that it is level, so to a tip `press` raises the low ground to
 the peaks, and the tip touches all of it. A groove is often narrower than
 the tip, which then rides on the paper either side of it: what matters
@@ -205,6 +209,194 @@ tooth: six firm layers of 4H left a twentieth of the patch more than a
 quarter of a tooth below the rest, and under a raking light the patch
 looked as rough as the paper left alone; now none, and a seventh as rough.)
 A groove is a line of shadow under a raking light.
+
+### Pressed flat: the paper's crush and the wax's polish
+
+Two things level a tooth, and they are not the same thing, so the sheet
+keeps them apart.
+
+`crush` is the paper's own. A dry tip pressed firmly crushes the fibres:
+the peaks of the tooth come down towards its valleys. A tip crushes as far
+as it is hard, dry and all of a piece (`FLATTEN`, in "One step of a
+stroke"), and it does so whatever lies on the paper: a hard lead crushes
+the tooth through a layer of coloured pencil as it does through its own
+graphite. Nothing that is laid or lifted afterwards changes it. No stroke,
+stump, finger, rubber eraser or fixative gives a crushed tooth back; only
+what cuts the surface of the paper does, a sand eraser or the point of a
+knife, by the share of the surface it cuts.
+
+`polish` is the wax's. Any tip pressed firmly on a film of wax polishes it
+level, as far as the film is slick (`WAX_FULL` thick) or the tip melts
+into it (a blender, a pale pencil): a waxy tip its own film, and a dry one
+too, which raises both where it is pressed hard on wax, the polish of the
+wax and the crush of the paper under it. The polish goes with the wax.
+Polished wax keeps the tooth level as far as it fills it, `WAX_FAST` thick:
+where a tool takes wax off, the polish left is at most what the wax left
+is thick over that, and with the wax gone it is gone. A blade takes it
+with the surface it cuts. Fixative leaves both as they are.
+
+Each is read for what it is:
+
+| What reads it | Which |
+| --- | --- |
+| The tooth a later tip meets, and the ball of a pen | Both: `press = crush + polish - crush * polish`. Polished wax levels its share of the relief that the crush left. |
+| How little a level tooth bites a dry medium (`FLAT_BITE`) | Both, as `press`: wax polished level and paper crushed level have as little to scrape a stick with. |
+| The relief the lamp lights | Both: the peaks come down by `press` of their height. |
+| The sheen of graphite, which lies flat on a level tooth (`SHEEN_FLAT`) | Both, as `press`: it lies on what the tip met. |
+| The gloss of wax | `polish` alone: wax laid lightly on a tooth that a hard lead crushed is not polished. |
+| How wax holds against an eraser (`POLISH_HOLDS`) | `polish` alone. |
+| What a rubber eraser gives back as it takes the wax | `polish`, and never `crush`. |
+
+`Sheet.press` is what a tip meets, worked out from the two; it is read,
+not written.
+
+(There was one `press` for both, and where a pixel held wax it was taken
+for the wax's polish. So the crush of a hard lead under or over coloured
+pencil went with the wax when that was erased, wax laid lightly over a
+crushed tooth shone and held against an eraser as if it had been
+burnished, and where a blender had polished further than thin wax holds
+up, the rest stayed when the wax was gone. The second number costs four
+bytes a pixel, a hundredth of the sheet.) Measured on cartridge paper:
+three firm layers of 4H crush the tooth by 0.92; three layers of a dark
+coloured pencil over them, rubbed out with a vinyl eraser, leave the crush
+as it was to the bit, and a light layer of HB shaded there touches 0.94 of
+the pixels, as it does on the crushed tooth alone (the crush fell to 0.05
+with the wax, and the HB touched 0.69; fresh paper 0.68). Six light layers
+of crayon over such a tooth have no gloss, and a rub of a vinyl eraser
+leaves 0.26 of them, as of the same layers on fresh paper, 0.30 (they had
+0.64 of the gloss of polished wax, and a rub left 0.69). After a blender
+pressed hard over a very light layer and six rubs of the eraser, no pixel
+keeps more polish than the wax left on it holds up, to within the 0.002
+that the eraser drags off after it has lifted (a fifth of them kept 0.01
+or more beyond it).
+
+**Each goes to a level set by the load.** A pressure flattens wax and
+fibres as far as that pressure can, however often it is repeated. A tip
+that bears with firmness `f` (`firmness`: nothing up to a pressure of 0.4,
+1 at full pressure, as burnishing sets in) has a level for each:
+
+- for the polish, `min(BURNISH * f, 1)` of how slick the film is: a slick
+  film is polished flat from a pressure of 0.87 on, to 0.75 at 0.8, 0.42 at
+  0.7, 0.19 at 0.6 and 0.05 at 0.5;
+- for the crush, `min(crush * f, 1)`, where `crush` is what the tip's
+  hardness makes of `FLATTEN`: at full pressure a 4H crushes the tooth
+  flat (from 0.88 on), an HB to 0.38, a 2B to 0.18 and a 6B to 0.014. A
+  softer tip gives before the paper does, however long it is rubbed.
+
+These are the numbers that `BURNISH` and `FLATTEN` already were: what one
+pass's worth of sliding under that bearing added to `press`, which is now
+where the bearing stops. A pass brings the press towards its level: each
+part of it closes a share of what is left of the gap, `SETTLE` (2) times
+the share of a pass that it is (and as many times more as `BURNISH * f` or
+`crush * f` exceeds 1: the hardest leads are there at once). So the first
+of a pass over a tooth left alone raises it twice as fast as it did, and
+the nearer its level, the less: a whole pass ends about where it ended
+when `press` added up, a second closes most of what is left, and a third
+changes next to nothing. A firmer pass over a lighter one raises the
+press to its own level; a lighter one over a firmer one leaves it as it
+is. What a firm tip smears of the wax (`BURNISH_LIFT`) is work done on
+every pass, and is as it was.
+
+What presses flat is the tip, not the grain of its lead. A lead bears up
+to a third more or less in bands along the stroke (`STREAK`), another way
+in every stroke, which is the grain of its line; a tip is one hard thing,
+and what it presses flat it presses as far as it is itself pressed, at
+that place of its face (its pressure, less towards its rim). So the level
+goes by the tip's bearing with its streaks aside, and so does how fast a
+pass gets there. Were the level that of the streaks, every stroke would
+leave bands polished from a fifth to all the way under one pressure, and
+each further pass would raise the paper under its hardest bands: going
+over it again would go on polishing, which is what a level is there to
+end. (Measured so: one stroke of the blender at 0.7 polished by 0.13, two
+by 0.22, three by 0.51.) What the tip smears and what it lays go by the
+streaks, as before.
+
+One pass, measured: a tip 6 wide drawn once along each of eight lines, and
+the press under its middle (three rows), on cartridge paper; before, when
+every pass added, and now:
+
+| Pressure | 0.6 | 0.7 | 0.8 | 0.9 | 1.0 |
+| --- | --- | --- | --- | --- | --- |
+| The blender, on six light layers of red | 0.19, 0.11 | 0.40, 0.29 | 0.60, 0.55 | 0.77, 0.81 | 0.88, 0.92 |
+| A coloured pencil, on the same (a film two fifths slick) | 0.10, 0.06 | 0.21, 0.15 | 0.33, 0.28 | 0.45, 0.42 | 0.54, 0.50 |
+| 4H, on bare paper | 0.07, 0.06 | 0.17, 0.16 | 0.31, 0.35 | 0.44, 0.58 | 0.56, 0.72 |
+| HB | 0.03, 0.03 | 0.07, 0.07 | 0.13, 0.13 | 0.17, 0.21 | 0.22, 0.29 |
+| 2B | 0.017, 0.014 | 0.037, 0.035 | 0.063, 0.066 | 0.087, 0.103 | 0.107, 0.141 |
+
+From 0.7 up a pass does what it did to within a third either way, and
+with one rate it cannot do better than that. At full pressure the weak
+bands of a lead crushed less than the tip does, so a dry pass crushes a
+third more. Near where a tip begins to press, the streaks took the
+hardest bands of a lead past 0.4 where the tip's own pressure is not yet
+there: a pass of the blender polishes a quarter less at 0.7, two fifths
+less at 0.6, and at 0.5 a third of what it did (0.02 for 0.06). A second
+and a third pass of the blender at 0.7
+bring 0.29 to 0.37 and 0.40, and three more to 0.41, the level of 0.7
+being 0.42 (they made 0.66, 0.87 and 0.96); of an HB at 0.9, 0.21 to 0.26,
+0.28 and 0.29 (0.37, 0.55 and 0.97). The blender at 0.7 over the blender
+at full pressure leaves 0.928 at 0.929 (it took 0.913 to 0.957); at full
+pressure over 0.7 it takes 0.30 to 0.95.
+
+(Before, `press` was the sum of what every pass added, up to 1. Where the
+strokes of a shading overlap, a pixel has two or three passes for its
+neighbour's one, and was polished two or three times as far. And any
+pressure above 0.4 flattened the tooth in the end: six firm layers of HB
+crushed it by 0.99, as a 4H does, and twelve layers of a coloured pencil
+at 0.6 polished it by 0.82.)
+
+**How evenly a shading is polished.** The spread of the polish over an
+area, smoothed over the grain (a box of 3 pixels), as a share of its mean;
+one layer at 0.7 and at full pressure on cartridge paper, before and now:
+
+| | Coloured pencil | Wax crayon | Oil pastel | The blender, over three light layers |
+| --- | --- | --- | --- | --- |
+| Ruled strokes, all alike (`hand=0`), at 0.7 | 0.35, 0.13 | | 0.42, 0.12 | 0.28, 0.06 |
+| at full pressure | 0.21, 0.08 | | 0.24, 0.06 | 0.07, 0.01 |
+| The hand as it is, at 0.7 | 0.44, 0.35 | 0.60, 0.49 | 0.65, 0.63 | 0.45, 0.40 |
+| at full pressure | 0.28, 0.20 | 0.39, 0.29 | 0.44, 0.38 | 0.19, 0.16 |
+
+Two crossed layers at 0.6, the measure of the soft onset: a dark coloured
+pencil 0.58, now 0.41; an oil pastel 0.73, now 0.57; at full pressure 0.18
+and 0.15, now 0.13 and 0.17.
+
+Under strokes all alike, a layer is now polished about evenly, to within
+0.13 at 0.7 and 0.08 at full pressure (it was 0.35 to 0.42 and 0.21 to
+0.24: the passes that overlapped added up). What is left with the hand as it is, is the hand's, and it is most of
+what there was. Its strokes are firm by 15% either way (`FIRMNESS`), and
+near where a tip begins to polish that is the difference between a little
+and a lot: at 0.7 the levels of such strokes run from 0.18 to 0.77, a
+spread of 0.39 of their mean before anything is drawn (0.49 at 0.6, 0.20
+at 0.85, none at full pressure, where all are flat). They are lighter at
+their ends (`LANDING`), and they stray (`STRAY_ACROSS`), so that some
+paper lies under the rim of a tip and never under its flat, and is
+pressed less. With every stroke as firm, an oil pastel at 0.7 comes down
+from 0.63 to 0.47; as firm at its ends, to 0.43; and in its place, to
+0.13. And for one layer of a medium that does not melt into its film,
+the film itself is not yet slick all over: a quarter to three quarters
+as slick as it gets, uneven by 0.11 to 0.24, and polished no further than
+it is slick. A level does not even out the hand; it stops
+the count of passes from adding to it. More layers do even it out, since
+each place keeps the level of the firmest pass that went over it: twelve
+layers at 0.7 are uneven by 0.10 where one is by 0.35.
+
+**Many light layers fill the tooth; they do not polish it.** Coloured
+pencil is built in light layers, which keep the tooth, and it is burnished
+at the end, by pressing hard: with the pencil itself, with a pale one, or
+with the colourless blender. The model now says the same. Twelve layers of
+a coloured pencil at 0.5 polish the wax by 0.05 and have 0.002 of the gloss
+of polished wax; at 0.6, 0.20 and 0.03; at 0.7, 0.49 and 0.18: no further
+than the firmest of their strokes press a film that is thickening. (They
+polished it by 0.29, 0.82 and 0.97, with 0.09, 0.54 and 0.73 of the gloss:
+twelve layers at 0.6 were burnished as by a firm one.) What the layers add
+is wax, and the thicker the film, the slicker it is and the further a firm
+pass then polishes it: one firm layer of the blender over those twelve
+polishes them by 0.85 to 0.91, with 0.55 to 0.64 of the gloss. A layer
+pressed hard, or the blender, polishes at once what no number of light
+layers does. And a layer polishes no further than its film is slick: two
+layers of a coloured pencil at full pressure, whose film is thin yet,
+are polished by 0.55 (0.77 when their passes added up past that), with
+0.18 of the gloss (0.37); a crayon's and an oil pastel's, which are
+thicker, by 0.83 and 0.85, with 0.72 and 0.75.
 
 Sizes are in pixels, and the paper's grain sets the scale of a drawing: the
 tooth of a drawing paper is finer than a pencil line, which is two or three
@@ -314,13 +506,16 @@ A tool is a tip plus, usually, a medium.
   and what is set there) an eraser lifts `WAX_HOLDS` less where the wax is
   `WAX_FAST` thick or more and has kept its tooth, less in proportion where
   it is thinner, and `POLISH_HOLDS` less where it has been polished flat
-  (`press`). One rub to and fro of a vinyl eraser at 0.9 takes nine tenths
-  of one light layer of a dark coloured pencil, two thirds of three layers
-  at 0.5, and a third of four firm layers, burnished or not; three rubs
-  leave three tenths of the firm layers, lighter by then (a fifth of the
-  paper's tone), and two fifths of the burnished ones, as dark as they
-  were. A kneaded eraser takes a quarter of the light layer in a rub and a
-  fourteenth of the burnished ones. (Before, a vinyl eraser took nine
+  (`polish`). One rub to and fro of a vinyl eraser at 0.9 takes five sixths
+  of one light layer of a dark coloured pencil, four fifths of three layers
+  at 0.5, over half of four firm layers and a third of those burnished;
+  three rubs leave a twentieth of the firm layers, lighter by then (under
+  half of the paper's tone), and a third of the burnished ones, as dark as
+  they were. (Four firm layers held as the burnished ones do, a rub taking
+  over a third and three leaving a quarter, while their passes added up to
+  a polish of 0.84; at 0.8 they polish the wax by half, and hold as wax
+  that has half kept its tooth.) A kneaded eraser takes over a quarter of
+  the light layer in a rub and a fourteenth of the burnished ones. (Before, a vinyl eraser took nine
   tenths of anything in a rub, and a kneaded one a third.) A tool with
   `scrape` cuts through the wax by that share: a sand eraser
   (`tools.SAND_ERASER`, 0.8) takes nine tenths of the burnished dark in a
@@ -330,18 +525,16 @@ A tool is a tip plus, usually, a medium.
   they take off is on the tool, as for any eraser. The lights of a coloured
   pencil drawing are therefore kept (bare paper, or a line indented first)
   or scratched out, as they are in life. Where wax has been polished it is
-  the wax that is level, not the paper: the sheet keeps one `press`, and
-  where a pixel holds wax that press is taken to be its polish (a waxy tip
-  does not crush the tooth, a dry one does). Polished wax keeps the tooth
-  level as far as it fills it, `WAX_FAST` thick: as a tool thins it below
-  that, the polish goes, and with the wax all gone the tooth is as the
-  paper's own, but for what a dry tip crushed beyond what the wax held up
-  (that stays, as it does under an eraser on graphite). A sand eraser or a
-  knife cuts the surface of the paper as far as it scrapes, and takes the
-  crush with it. Storing the two apart would cost a float a pixel and an
-  argument through every stroke kernel, for a crush under or over wax that
-  is then taken off. So a light layer of HB shaded over a burnished dark
-  scraped back with a sand eraser or a knife touches 0.73 and 0.64 of the
+  the wax that is level, not the paper, and the sheet keeps the wax's
+  `polish` apart from the paper's `crush` (see "Pressed flat"). Polished
+  wax keeps the tooth level as far as it fills it, `WAX_FAST` thick: as a
+  tool thins it below that, the polish goes (it is at most what the wax
+  left is thick over `WAX_FAST`), and with the wax all gone the tooth is as
+  the paper's own, but for what a dry tip crushed, under the wax or
+  through it: that stays, as it does under an eraser on graphite. A sand
+  eraser or a knife cuts the surface of the paper as far as it scrapes,
+  and takes the crush with it. So a light layer of HB shaded over a burnished dark
+  scraped back with a sand eraser or a knife touches 0.69 and 0.67 of the
   pixels there, where it touches 0.68 of fresh paper, and is as grainy;
   it touched 0.96 and 0.998 of them, and lay three or four times as
   evenly, the tooth having stayed level. A vinyl eraser leaves most of the
@@ -353,9 +546,9 @@ A tool is a tip plus, usually, a medium.
   each of its widths, on what is beside it and after it; wax sticks
   wherever it is laid. A vinyl eraser rubbed to and fro out of four firm
   layers of a near-black pencil, burnished, over the bare paper leaves a
-  grey halo 15 from the paper's colour (CIE 1976) within a width of the
-  dark, 8 at three to five widths and 2.6 at six to nine; not burnished,
-  13, 5 and 1.4; of a red, 6. (It left the paper clean.) What it drags is
+  grey halo 14 from the paper's colour (CIE 1976) within a width of the
+  dark, 6 at three to five widths and 1.4 at six to nine; not burnished,
+  11, 4 and 1.1; of a red, 5. (It left the paper clean.) What it drags is
   on the tool until it is laid, and counted with what it carries.
 - **Wax stains the paper** (built). A waxy medium carries its pigment into
   the fibres of the paper: of what the paper holds of it, `STAIN` thick on
@@ -519,7 +712,8 @@ At each step, for each pixel under the tip:
    coloured pencil build; but a dry medium has no tooth left to scrape it
    off as soon as the wax covers the tooth, which is the thickness at which
    any layer covers what is under it (`COVERS`). One firm line of crayon is
-   that thick, so charcoal shaded over it skips it: wax resist. Pressed hard, the tip polishes the film: it raises `press`,
+   that thick, so charcoal shaded over it skips it: wax resist. Pressed hard, the tip polishes the film: it raises `polish`
+   towards the level its pressure reaches (see "Pressed flat"),
    which levels the tooth so that every part of the pixel is touched, and it
    drags some of the waxy layer along and lays it back down, valleys
    included. That closes the white specks (burnishing). A film that lies
@@ -540,8 +734,9 @@ At each step, for each pixel under the tip:
    began sharply at 0.6, and the strokes of a shading near there, each a
    little firmer or lighter than the next, polished or did not, which left
    the area polished in streaks: over two layers of a dark coloured pencil
-   at 0.6, `press` smoothed over the grain spread by 0.78 of its mean, and
-   now by 0.58; of an oil pastel 1.08, now 0.73.) How much a tip polishes
+   at 0.6, the polish smoothed over the grain spread by 0.78 of its mean,
+   and then by 0.58; of an oil pastel 1.08, then 0.73; 0.41 and 0.57 now
+   that each stroke polishes to the level of its pressure.) How much a tip polishes
    goes with how slick the film is, and it takes up `BURNISH_LIFT`
    times its polish of what the paper holds. A colourless blender is made
    for this: soft clear wax and nothing else, it melts into the film
@@ -550,17 +745,17 @@ At each step, for each pixel under the tip:
    width: one firm layer of it stirs about half of what is under it into an
    even film. On three layers of red at 0.5 on cartridge paper,
    a tenth of the pixels still show the paper; one layer of the blender at
-   full pressure leaves a fifth of those (two layers a twenty-fifth), the
-   chroma of the patch goes from 34 to 59 (69), its lightness from 67 to 57
-   (54), it is half as grainy, and it has 0.48 (0.80) of the gloss of
+   full pressure leaves a sixth of those (two layers a thirtieth), the
+   chroma of the patch goes from 34 to 61 (70), its lightness from 67 to 57
+   (54), it is half as grainy, and it has 0.45 (0.76) of the gloss of
    polished wax. A pale coloured pencil is mostly wax and white filler, and
    melts the more the paler it is (`pencils.melts_of`: a white one 0.75 as
    far as the blender, a cream 0.54, a pale blue 0.31, a pink or a mid grey
    hardly, a strong colour not at all; assumed, not measured): one firm
-   layer of white over the red leaves a quarter of the flecks (two fifths
-   before, when it melted no more than the red), 0.29 of gloss (0.17), and
-   a paler tint of the red as light as it was (L* 65.6, chroma 40, where
-   the blender takes it to 57 and 59). At a pressure of 0.7 the blender closes two fifths of the
+   layer of white over the red leaves a fifth of the flecks (two fifths
+   before, when it melted no more than the red), 0.24 of gloss (0.17), and
+   a paler tint of the red as light as it was (L* 65.5, chroma 41, where
+   the blender takes it to 57 and 61). At a pressure of 0.7 the blender closes two fifths of the
    flecks, and at 0.5 a twentieth. (In the first build the blender was a
    coloured pencil without colour: one firm layer left two fifths of the
    flecks.) Two colours laid over each other are stirred into one, and
@@ -576,14 +771,20 @@ At each step, for each pixel under the tip:
    over half. There the darks go first.
 7. **The tooth.** A dry tip pressed hard (harder than `BURNISH_FROM`, and
    setting in by degrees, as burnishing does) flattens the tooth itself,
-   and raises `press` too: the hardest lead by `FLATTEN` in a pass at full
-   pressure, a softer one as the cube of its hardness (it gives before the
-   paper does), and one that crumbles to dust as the square of its binding
+   and raises `crush`, towards a level that goes with how hard it is: the
+   hardest lead's is `FLATTEN` at full
+   pressure (more than flat: it crushes the tooth flat from far less), a
+   softer one's less as the cube of its hardness (it gives before the
+   paper does), and that of one that crumbles to dust as the square of its binding
    (it bears on the paper only with what holds together). Three firm layers
-   leave the tooth flattened by 0.88 under
-   a 4H, 0.74 under an HB, 0.37 under a 2B and 0.03 under a 6B; compressed
+   leave the tooth flattened by 0.89 under
+   a 4H, 0.34 under an HB, 0.16 under a 2B and 0.013 under a 6B, and six
+   layers by little more (0.95, 0.37, 0.18 and 0.014: their levels are 1,
+   0.38, 0.18 and 0.014); compressed
    charcoal and hard pastel flatten it by a few hundredths, vine charcoal and
-   soft pastel next to not at all. A flattened tooth is touched all over, and bites
+   soft pastel next to not at all. (While every pass added to what the
+   passes before had crushed, three layers of HB made 0.74 and six 0.99: any
+   lead flattened the tooth as a hard one does, given layers enough.) A flattened tooth is touched all over, and bites
    less: a dry medium lays `FLAT_BITE` less on it in a pass (the tooth is
    what scrapes it off its stick). So a light layer of a soft pencil over a
    patch a hard one flattened lies on four fifths of it where it marks half
@@ -776,10 +977,10 @@ raking one; it is added to what the pigment sends back.
   the lamp, the more the thicker it is (a heavy layer of a soft lead shines
   fully, a light layer of HB hardly at all), and matte dust lying over it
   hides it. On a tooth pressed flat the graphite lies flat, and a film two
-  fifths as thick shines as much: three firm layers of 4H shine 2.5 times as
+  fifths as thick shines as much: three firm layers of 4H shine 2.4 times as
   much as the same graphite would on a tooth that had kept its shape (0.31
-  against 0.12 of the most), and of HB 1.4 times; six of HB shine a third as
-  unevenly. A soft lead shines by how much it lays, a hard one by how flat
+  against 0.13 of the most), and of HB, which crush it by a third, 1.25
+  times; six of HB shine three fifths as unevenly. A soft lead shines by how much it lays, a hard one by how flat
   it has pressed the paper. The light is white, in a broad lobe, since
   graphite is satin and not a mirror. Under the default lamp, three firm
   layers of 6B reflect about 0.10 of what the paper does, against 0.06
@@ -816,10 +1017,10 @@ raking one; it is added to what the pigment sends back.
   and what they spread is dust, with no film, and shines as it did.
 - **Wax** has no sheen of its own: it is its polish that shines. The gloss is
   how slick the film of wax is at the pixel (as for the resist) times the
-  square of how far the surface is pressed flat (a film half polished still
+  square of how far the wax is polished (`polish`; a film half polished still
   scatters most of the light), so a coloured pencil laid lightly has
-  none, one burnished with a blender eight tenths of the most, and two
-  layers of crayon from none at a pressure of 0.3 to three quarters at full
+  none, one burnished with a blender three quarters of the most, and two
+  layers of crayon from none at a pressure of 0.3 to seven tenths at full
   pressure. It counts
   wherever the wax lies: a film laid over dust is on top and shines; what
   the paper holds shines through whatever dust lies over it, as graphite
@@ -831,7 +1032,7 @@ raking one; it is added to what the pigment sends back.
   burnished wax shines, a soft white gloss, and under the default lamp a
   burnished dark stays deep, as it does in life away from the glare: four
   firm layers of a dark coloured pencil burnished with the blender go from
-  L* 7 to 10 under it and to 19 overhead, and the gloss that the firm
+  L* 7 to 10 under it and to 18 overhead, and the gloss that the firm
   layers alone show varies from place to place by a third of what it did.
   (In the lobe it had first, wider than graphite's, the gloss greyed that
   dark to 18 under the default lamp, and followed the polish stroke by

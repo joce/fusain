@@ -159,8 +159,15 @@ what it reaches down to: indent whiskers, grass or a highlight firmly before
 shading and they stay white; a groove indented lightly fills in under a soft
 pencil pressed hard. A point narrower than the groove follows it down and
 marks its floor. A firm ballpoint line is such a groove too. And a hard pencil
-pressed firmly flattens the tooth (`Sheet.press`): what is shaded over it
-afterwards lies evenly, without the grain, and the paper bites it less.
+pressed firmly flattens the tooth (`Sheet.crush`): what is shaded over it
+afterwards lies evenly, without the grain, and the paper bites it less. The
+paper stays crushed whatever is drawn over it or erased from it, until a
+knife or a sand eraser cuts its surface away. Wax pressed firmly is
+polished level instead (`Sheet.polish`), which goes when the wax is taken
+off; `Sheet.press` is what a tip meets of the two. Each goes as far as the
+pressure can and no further for being gone over again: a 4H at full
+pressure crushes the tooth flat, an HB by two fifths at most and a 2B by
+a fifth, however many layers.
 
 ```python
 from fusain import Smudger, charcoal, tools
@@ -219,8 +226,11 @@ sheet.stroke([(100, 300), (400, 320)], pastels.soft("#f4f1ea"), pressure=0.8, wi
 A colourless blender (`pencils.BLENDER`), pressed hard, burnishes coloured
 pencil: it presses the wax into the valleys of the tooth, so that the white
 flecks of the paper close and the colour is deeper, more saturated, smoother
-and a little glossy. One firm layer of it leaves a fifth of the flecks, two
-next to none; pressed lightly it does nothing. It stirs what it goes over,
+and a little glossy. One firm layer of it leaves a sixth of the flecks, two
+next to none; pressed lightly it does nothing. Light layers of the pencils
+themselves, however many, fill the tooth with wax and do not polish it:
+what burnishes is pressing hard, as far as the pressure goes (a film is
+polished flat from a pressure of about 0.87, and by two fifths at 0.7). It stirs what it goes over,
 so two colours laid over each other become one, and an edge it is drawn
 across is dragged out by a tip's width or so. Coloured pencil or crayon laid
 over pastel or charcoal lies on the dust as a film, and the blender works
