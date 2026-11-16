@@ -2276,7 +2276,24 @@ def rub_under(
     To what it has lifted (its load) the tool adds the less the fuller it
     is, and it gives the dust of it to bare tooth only (:func:`hunger`).
     What is on its face it shares out among the pixels under it in each
-    step (:func:`face_gives`)."""
+    step (:func:`face_gives`).
+
+    Lift, push along, lay, spread, press in and stir each go over the parts
+    of a pixel by themselves: two fifths of a rub's time, which going over
+    them once does not win back (measured: fusain-czc). One pass for all of
+    them, by shares worked out from the volumes first, comes out bit for
+    bit if it rounds each part to float32 wherever a step stores it, so it
+    saves loads and stores and no arithmetic; and it works every step out
+    for every part, also the steps that a tool or a pixel skips. It is a
+    twentieth to a tenth slower for a finger, no quicker for a stump and a
+    third slower for an eraser. Spread, press and stir in one pass, and the
+    two loops of :func:`push_along` in one, are a twentieth to a tenth
+    quicker compiled for a processor with AVX-512 and a twentieth to a
+    seventh slower compiled for one without: with it LLVM makes the loops
+    that touch only the sheet (press, stir) 512 bits wide, which costs a
+    rub a tenth, and such a pass only happens to keep them at 256. Time
+    what is compiled for both (``NUMBA_CPU_NAME=haswell``) before
+    believing a gain here."""
     height, width = cover.shape
     x, y, tx, ty, pressure = now[0], now[1], now[2], now[3], now[4]
     at_x, at_y = now[5], now[6]
