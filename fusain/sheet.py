@@ -180,7 +180,14 @@ class Sheet:
         tooth pressed flat, a dry medium is bitten less by it, graphite
         lies flat on it, and in the relief its peaks have come down by
         that share of their height. Worked out from the two, which are
-        what the sheet holds: writing to it changes nothing."""
+        what the sheet holds: it cannot be written to (an array that
+        refuses it, with ValueError: write to ``crush`` or ``polish``)."""
+        pressed = self._pressed()
+        pressed.flags.writeable = False
+        return pressed
+
+    def _pressed(self) -> np.ndarray:
+        """:attr:`press`, as an array of its own that can be written to."""
         return self.crush + self.polish - self.crush * self.polish
 
     @property
@@ -263,7 +270,8 @@ class Sheet:
         of dust as well (:meth:`_film_sheen`), and the shine of all of it
         together is no more than the covered share of the pixel."""
         cover = np.maximum(self.cover, np.float32(1e-6))
-        full = np.float32(SHEEN_FULL) * (1.0 - np.float32(SHEEN_FLAT) * self.press)
+        flat = np.float32(SHEEN_FLAT) * self._pressed()
+        full = np.float32(SHEEN_FULL) * (1.0 - flat)
         film = np.minimum(self.held[..., IX] / cover / full, 1.0)
         dust = self.under[..., IV] + self.loose[..., IV]
         matte = np.maximum(dust - self.under[..., IX] - self.loose[..., IX], 0.0)
@@ -310,7 +318,7 @@ class Sheet:
             self.loose,
             self.bonded,
             self.cover,
-            self.press,
+            self._pressed(),
             shine,
             how,
         )
@@ -468,7 +476,11 @@ class Sheet:
         harder the tip: a hard pencil does, a soft one hardly, charcoal and
         pastel next to not at all. What is drawn there afterwards lies
         evenly, and the paper bites it less. Any tip pressed firmly on a
-        film of wax polishes it (``polish``).
+        film of wax polishes it (``polish``). Each goes as far as the
+        pressure can, and no further for being gone over again: a firmer
+        stroke over a lighter one presses the tooth flatter, a lighter one
+        over a firmer one leaves it as it is, and light layers, however
+        many, do not burnish.
         Where the paper is indented, a tip lays only what it reaches down
         to (:meth:`indent`): it rests on the highest of the paper it covers,
         so one narrower than a groove goes down into it.
@@ -699,7 +711,7 @@ class Sheet:
         if depth <= 0.0:  # (a level paper: nothing but its grooves)
             return -self.dent * np.float32(TOOTH_HEIGHT * grain * relief)
         # (the peaks come down towards the valleys)
-        ground = self.tooth * (1.0 - self.press)
+        ground = self.tooth * (1.0 - self._pressed())
         ground = np.minimum(ground, 1.0 - self.dent / np.float32(depth))
         return ground * np.float32(TOOTH_HEIGHT * grain * depth * relief)
 

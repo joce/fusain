@@ -69,8 +69,11 @@ def test_pressing_harder_reaches_the_valleys_and_darkens():
     assert all(a > b + 0.03 for a, b in pairwise(tones))
     assert all(a < b for a, b in pairwise(covers))
     # an HB pressed as hard as it goes still leaves white specks in the
-    # valleys; only the softest leads reach them all
-    assert covers[0] < 0.3 and 0.85 < covers[-1] < 0.97
+    # valleys; only the softest leads reach them all. (fusain-2z5: 0.029 of
+    # the pixels, where it left 0.044: a pass crushes the tooth as far as
+    # its load does while it is over it, and the strokes of the same layer
+    # that overlap it then touch more of a tooth already crushed)
+    assert covers[0] < 0.3 and 0.85 < covers[-1] < 0.98
     assert _shaded(pencils.B8, 1.0).cover[INSIDE].mean() > 0.99
     assert tones[0] > 0.93 and tones[-1] < 0.5
 

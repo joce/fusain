@@ -228,17 +228,35 @@ PASTY = 0.5
 #: on top that a pass of paste would bury, this share stays on top and mixes
 #: with it, so a light oil pastel only half covers a dark one.
 PLOUGH = 0.12
-#: Pressed harder than BURNISH_FROM, a tip polishes a waxy layer flat: one
-#: pass at full pressure on a film as slick as it gets raises ``press`` by
-#: BURNISH, and a pressed tooth is level, so the white specks close up.
-#: It sets in by degrees: the wax (and, under a dry tip, the paper) does not
-#: give way at one pressure everywhere, but at pressures spread evenly over
-#: BURNISH_SOFT either side of BURNISH_FROM (:func:`firmness`). So of the
-#: strokes of a shading near there, each a little firmer or lighter than
-#: the next, none polishes all and none nothing.
+#: Pressed harder than BURNISH_FROM, a tip polishes a waxy layer flat
+#: (``polish``, the wax's own), and a pressed tooth is level, so the white
+#: specks close up. It sets in by degrees: the wax (and, under a dry tip,
+#: the paper) does not give way at one pressure everywhere, but at pressures
+#: spread evenly over BURNISH_SOFT either side of BURNISH_FROM
+#: (:func:`firmness`). So of the strokes of a shading near there, each a
+#: little firmer or lighter than the next, none polishes all and none
+#: nothing.
+#:
+#: A pressure polishes as far as it can, however often it is repeated: a
+#: tip at full pressure has a load of BURNISH on a film as slick as it gets
+#: (its firmness times that at a lighter pressure), and polishes the film
+#: to the level of its load, at most 1 (:func:`settled`). So anything from
+#: a pressure of 0.87 on polishes a slick film flat, 0.7 polishes it to
+#: 0.42, 0.6 to 0.19 and 0.5 to 0.05, and no number of passes further. (The
+#: load is what a pass at that pressure added to one ``press`` while every
+#: pass added to it: twelve layers at 0.6 then polished as a firm one.)
 BURNISH_FROM = 0.6
 BURNISH_SOFT = 0.2
 BURNISH = 1.5
+#: A pass brings what it presses flat towards the level of its load, and
+#: each part of the pass closes a share of the gap that is left: SETTLE
+#: times the share of a pass that it is. The paper under the flat of a tip
+#: has well under a pass's worth of the tip's full bearing (its rim bears
+#: less, and not all of a pixel is touched), so a pass over a tooth left
+#: alone ends at about three quarters of its level, which is about where
+#: it ended while every pass added its load; a second closes most of what
+#: is left, and a third changes next to nothing.
+SETTLE = 2.0
 #: Polishing also smears the waxy layer: of what the paper holds there (and
 #: of a film of wax over the dust there), the tip drags along this share at
 #: full pressure in one pass, and lays this many times what it drags back
@@ -257,15 +275,18 @@ BURNISH_LAY = 4.0
 #: is dragged out a little.
 MELT_LIFT = 1.5
 MELT_LAY = 6.0
-#: A firm dry tip flattens the tooth itself: pressed harder than
-#: BURNISH_FROM (setting in by degrees, as above), the hardest lead raises
-#: ``press`` by FLATTEN in one pass at full pressure. A softer tip gives
-#: before the paper does (it flattens as the cube of its hardness), and one
-#: that crumbles to dust bears on the paper only with what holds together
-#: (as the square of its binding). So a hard pencil pressed firmly levels
-#: the tooth, on which its graphite then lies flat and shines evenly; a soft
-#: one hardly does, and charcoal and pastel next to not at all. (A waxy tip
-#: polishes its film, as above.)
+#: A firm dry tip flattens the tooth itself (``crush``, the paper's own):
+#: pressed harder than BURNISH_FROM (setting in by degrees, as above), the
+#: hardest lead has a load of FLATTEN at full pressure, and crushes the
+#: tooth to the level of its load, at most 1, as a film is polished: flat,
+#: from far less than full pressure. A softer tip gives before the paper
+#: does (its load goes as the cube of its hardness), and one that crumbles
+#: to dust bears on the paper only with what holds together (as the square
+#: of its binding): at full pressure a 4H crushes the tooth flat, an HB to
+#: 0.38, a 2B to 0.18 and a 6B to 0.014, however long they are rubbed. So a
+#: hard pencil pressed firmly levels the tooth, on which its graphite then
+#: lies flat and shines evenly; a soft one hardly does, and charcoal and
+#: pastel next to not at all. (A waxy tip polishes its film, as above.)
 FLATTEN = 5.0
 #: The tooth is what scrapes a dry medium off its stick, and a tooth pressed
 #: flat bites less: a dry medium lays this much less on it in a pass. It
@@ -596,7 +617,9 @@ def press_dust(held, under, loose, bonded, cover, iy, ix, share):
 @_inlined
 def firmness(bearing):
     """How hard a tip bearing with ``bearing`` (0..1) polishes or flattens
-    what it bears on, 1 at full pressure: how far it bears harder than what
+    what it bears on, 1 at full pressure (its load on what it presses flat
+    is this times BURNISH or the flattening of its medium, and what it
+    smears goes by it too): how far it bears harder than what
     gives way, as a share of how far full pressure does, where what gives
     way does so at pressures spread evenly over BURNISH_SOFT either side of
     BURNISH_FROM. So it is nothing up to BURNISH_SOFT below that, then
@@ -609,6 +632,55 @@ def firmness(bearing):
     if over < BURNISH_SOFT:
         over = (over + BURNISH_SOFT) ** 2 / (4.0 * BURNISH_SOFT)
     return over / (1.0 - BURNISH_FROM)
+
+
+@_inlined
+def settled(pressed, load, slick, passing):
+    """How far a tooth is pressed flat (the crush of the paper, or the
+    polish of its wax: ``pressed``, 0..1) after the share ``passing`` of a
+    pass of a tip whose load is ``load`` (the flattening of its medium, or
+    BURNISH, times its :func:`firmness`), on a film that is ``slick`` (1
+    for the paper).
+
+    A load presses to a level and no further: ``load``, at most 1, of how
+    slick the film is. What is flatter than that already stays as it is: a
+    lighter pass over a firmer one changes nothing. What is not goes
+    towards it, by the share of the gap that is left that SETTLE times this
+    part of the pass is (and as many times more as the load exceeds 1: the
+    hardest leads are there at once). So the first of a pass over a tooth
+    left alone raises it SETTLE times as fast as a pass did while every
+    pass added its load to what was there, and the nearer the level, the
+    less."""
+    level = min(load, 1.0) * slick
+    if level <= pressed:
+        return pressed
+    return pressed + (level - pressed) * min(SETTLE * max(load, 1.0) * passing, 1.0)
+
+
+@_inlined
+def press_flat(
+    crush, polish, iy, ix, crushed, polished, bearing, flattens, slick, passing
+):
+    """Press a pixel flat as a tip that bears on it with ``bearing`` (its
+    pressure there, the streaks of its lead aside) does in the share
+    ``passing`` of a pass: a dry tip crushes the paper (``crush``; its load
+    at full pressure is ``flattens``), and any tip polishes a film of wax
+    as far as it is ``slick`` (``polish``), each towards the level of its
+    load (:func:`settled`). ``crushed`` and ``polished`` are what the pixel
+    holds of the two. Returns how level the tooth then is to a tip.
+
+    (A tip that bears too lightly here, a waxy one on the paper and any
+    tip where no wax is slick would leave what they do not press as it
+    is: nothing is written of it.)"""
+    steady = firmness(bearing)
+    for _ in once(steady > 0.0):
+        if flattens > 0.0:
+            crush[iy, ix] = settled(crushed, flattens * steady, 1.0, passing)
+            crushed = crush[iy, ix]
+        if slick > 0.0:
+            polish[iy, ix] = settled(polished, BURNISH * steady, slick, passing)
+            polished = polish[iy, ix]
+    return crushed + polished - crushed * polished
 
 
 @_inlined
@@ -635,7 +707,7 @@ def burnish(held, under, loose, bonded, drag, iy, ix, polish, lift, lay):
     of what it holds onto the tip (``drag``, packed as the held layer is),
     and of a film that lies over the dust there (``bonded``), and lay the
     share ``lay`` of what the tip drags back down on it, in the tooth. (How
-    far the wax is polished level is the kernel's to say: :func:`bear`.)
+    far the wax is polished level is :func:`press_flat`'s to say.)
 
     Wax is wax wherever it lies, and the tip shears a film on dust as it
     shears one in the tooth: the wax of a film is counted with what the
@@ -1023,12 +1095,15 @@ def within_ends(px, py, ends):
 def bear_on_row(row, now, iy, xa, count, ends, streaks, salt):
     """How a tip at ``now`` (see :func:`bear`) bears on ``count`` pixels of
     the row ``iy``, from ``xa`` on, which depends on nothing the sheet holds:
-    for each, in the four rows of ``row`` (counted from ``xa``), how far inside
+    for each, in the five rows of ``row`` (counted from ``xa``), how far inside
     the edge of the tip it is (0 if the tip does not mark it), how hard the
     tip bears on it, where it does mark it the level in the tooth it
-    reaches there in this pass, and how far that part of the tip slides
-    over the paper for each pixel its middle goes: 1, but where the stroke
-    turns (``now[14]``, the turn per pixel, which way the tip's left goes).
+    reaches there in this pass, how far that part of the tip slides
+    over the paper for each pixel its middle goes (1, but where the stroke
+    turns: ``now[14]``, the turn per pixel, which way the tip's left goes),
+    and how hard the tip bears on it but for the streaks of its lead: its
+    pressure, as that part of its face has it (what presses the tooth flat:
+    :func:`settled`).
 
     It is worked out for the whole row before anything is laid, in loops
     that do one thing each: the processor then works on several pixels at
@@ -1048,6 +1123,7 @@ def bear_on_row(row, now, iy, xa, count, ends, streaks, salt):
             edge = 0.0
         row[0, at] = edge
         row[1, at] = pressure * share * streak_at(dx, dy, tx, ty, streaks, salt)
+        row[4, at] = pressure * share
         # (where the stroke turns, the side of the tip on the outside of the
         # turn slides further than its middle, and the inside less)
         row[3, at] = abs(1.0 - turn * (dy * tx - dx * ty))
@@ -1097,20 +1173,21 @@ def bear(
     thickness that fills the tooth, how much less a film of wax takes of it
     because it is dry and because it is waxy, how far what the paper holds
     of it is a film, binding, scattering, sheen, wax, how many depths of
-    this paper's tooth one of a paper of depth 1 is, how far one pass of it
-    at full pressure flattens the tooth, how much less of it a flattened
-    tooth takes, how far it melts into a film of wax it polishes, the
+    this paper's tooth one of a paper of depth 1 is, its load on the tooth
+    at full pressure, which crushes it (:func:`settled`), how much less of
+    it a flattened tooth takes, how far it melts into a film of wax it polishes, the
     crumbs its mark has for each part of it that the paper holds, how far
     it meets a bed in dust beyond those (:func:`bed_of`)]. ``ends``
     is as for :func:`within_ends` and ``streaks`` as for :func:`streak_at`;
-    ``row`` is room to work in, four rows as wide as the sheet
+    ``row`` is room to work in, five rows as wide as the sheet
     (:func:`bear_on_row`). ``now`` goes on with [whether the tip is the side
     of a stick laid flat (:func:`side_bearing`), how fast the stroke turns
     (:func:`turning`)].
 
     The tooth it meets is level as far as the paper has been crushed
     (``crush``) and the wax on it polished (``polish``); pressed firmly, a
-    dry tip raises the one and any tip on wax the other.
+    dry tip raises the one and any tip on wax the other, each towards the
+    level that its load reaches and no further (:func:`settled`).
 
     Returns the volume laid and what of it is left to settle on top."""
     height, width = tooth.shape
@@ -1132,6 +1209,9 @@ def bear(
     # (a tip narrower than a groove goes down into it)
     down = sunk_into(dent, now, x0, x1, y0, y1, lean, half, top) * sunk
     dragging = anything(drag)  # (most tips never drag anything)
+    # (a tip that bears too lightly to press anything flat under its middle
+    # presses nothing flat anywhere: most strokes of a light drawing)
+    presses = firmness(min(now[8], 1.0)) > 0.0
     laid = 0.0
     lying = 0.0
     for iy in range(y0, y1):
@@ -1178,23 +1258,35 @@ def bear(
             passing = per_pass * slide * touch
             waxed = held[iy, ix, IW] / covered
             waxy = min(waxed / WAX_FULL, 1.0)
+            # (a blender melts into the film, however thin it is)
+            slick = waxy + (1.0 - waxy) * melts
+            # what is pressed flat is pressed by the tip, not by the grain of
+            # its lead: as firmly as the tip bears here, its streaks aside (a
+            # hard tip crushes the tooth, whatever lies on it, and any tip
+            # polishes a film of wax: each as far as its load can)
+            if presses:
+                flat = press_flat(
+                    crush,
+                    polish,
+                    iy,
+                    ix,
+                    crushed,
+                    polished,
+                    min(row[4, at], 1.0),
+                    flattens,
+                    slick,
+                    passing,
+                )
             firm = firmness(bearing)
             if firm > 0.0:
-                # (a hard tip crushes the tooth, whatever lies on it)
-                crush[iy, ix] = min(crushed + flattens * firm * passing, 1.0)
-                # (a blender melts into the film, however thin it is)
-                slick = waxy + (1.0 - waxy) * melts
                 work, lay_back = firm * slick * passing, dragged * slide * touch
-                # (a tip that polishes nothing here and drags nothing would
+                # (a tip that smears nothing here and drags nothing would
                 # leave the pixel as it is: a dry tip on paper without wax)
                 if work > 0.0 or dragging:
                     dragging = True
-                    polish[iy, ix] = min(polished + BURNISH * work, 1.0)
                     burnish(
                         held, under, loose, bonded, drag, iy, ix, work, stir, lay_back
                     )
-                crushed, polished = crush[iy, ix], polish[iy, ix]
-                flat = crushed + polished - crushed * polished
             # the tip presses some of the dust under it into the paper
             pressed = min(PRESS_IN * bearing, 1.0) * passing
             press_dust(held, under, loose, bonded, cover, iy, ix, pressed)
@@ -1587,7 +1679,7 @@ def lay_stroke(
     # path at every sample, for each end that is cut square)
     near = np.zeros(2 + 10 * (count if tip[4] > 0.0 or tip[5] > 0.0 else 0))
     streaks = streaks_of(salt)
-    row = np.empty((4, tooth.shape[1]))
+    row = np.empty((5, tooth.shape[1]))
     reached = 0.0  # the furthest the tip has been from its path
     # what a tip that polishes drags along
     drag = np.zeros(HELD)
