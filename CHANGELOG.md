@@ -193,6 +193,17 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A partly polished tooth no longer glints pixel by pixel under the default
+  lamp (fusain-419). In two layers of a dark crayon at 0.7 the peaks of the
+  tooth were polished all the way (11% of the pixels past 0.8), and a peak
+  whose facet leaned towards the lamp lifted the dark by up to 10.5 L*:
+  1.4% of the pixels gained over 6. It is the rework of press that clears
+  it (fusain-2z5): a tip polishes only as far as its pressure can, here
+  0.66 at most, and the brightest pixel now adds 3.6 L*, the top
+  thousandth 2.7, and none over 6. A lamp with a width, which was built to
+  spread the gloss, took 0.5 L* off the brightest before that rework and
+  0.08 after it, and is not in: the lamp stays a point.
+
 - A tool rubbed over an area stays inside it (fusain-soe). `Sheet.rub` laid
   its passes with the hand of a shading: the ends of a pass strayed half the
   tool's width either way, past the edge as often as short of it, the

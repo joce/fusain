@@ -570,6 +570,19 @@ def test_a_burnished_dark_stays_deep_under_the_default_lamp():
     assert added["burnished", "overhead"].mean() > 9.0
 
 
+def test_a_partly_polished_tooth_does_not_glint_under_the_default_lamp():
+    """(fusain-419) Two layers of a dark crayon at 0.7 polished the peaks of
+    the tooth all the way (11% of the pixels past 0.8), and a peak whose
+    facet leaned towards the lamp lifted the dark by up to 10.5 L*, 1.4% of
+    the pixels by over 6. A tip now polishes only as far as its pressure
+    can (fusain-2z5: 0.66 at most here), and the brightest add under 4."""
+    sheet = _shaded(crayons.wax("#141416"), 0.7, 2, 9)
+    added = _lightness(sheet) - _lightness(sheet, gloss=0.0)
+    assert sheet.polish.max() < 0.8
+    assert added.max() < 4.0 and not (added > 6.0).any()
+    assert np.percentile(added, 99.9) < 3.0
+
+
 # --------------------------------------------------------------------------
 # heavy ink
 
