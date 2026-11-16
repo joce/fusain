@@ -881,7 +881,13 @@ half its width inside the outline of the area, and its edge comes to the
 area's edge and no further: every pass runs from that line to that line,
 the outermost passes run along it, and the others lie evenly between. In
 the middle of the area the hand is as unsteady as a shading's (the passes
-stray across and wander); where the tool meets the edge it is guided by it,
+stray across and wander), but it keeps each pass within `SPREAD`, 0.6 of
+the tool's width, of the one before: passes half a width apart that each
+strayed by 0.15 of a width either way were now and then a width apart, and
+left a band between them that only the rims of the tool reached, rubbed a
+fifth as much as the rest (a row across the passes was rubbed below a
+quarter as much as the middle in one rub in twenty); where the tool meets
+the edge it is guided by it,
 as steady as anywhere along a pass: the ends of the passes and the passes
 along the edge stray only as a point of a pass wanders (`WANDER`, a tenth
 of the tool's width, where the ends of a pencil's strokes stray by
