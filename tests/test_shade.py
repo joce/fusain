@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from fusain import Paper, Sheet, pencils
+from fusain import Paper, Sheet, hatching, pencils
 
 LEVEL = Paper(depth=0)  # nothing but the strokes themselves shows
 
@@ -193,3 +193,43 @@ def test_shade_checks_its_arguments_before_it_draws(kw, error, message):
     with pytest.raises(error, match=message):
         sheet.shade(**arguments)
     assert not sheet.pigment().any()
+
+
+def _stubs(width, length, hand, seeds=200, angle=0.0):
+    """The strokes of a shading of a rectangle ``length`` long across the
+    strokes' direction that are shorter than a width (stubs), as the angles
+    in degrees of their segments off that direction."""
+    off = []
+    for seed in range(seeds):
+        rng = np.random.default_rng(seed)
+        outline = hatching.as_outline((0, 0, length, 60))
+        for path, _, _ in hatching.strokes(
+            outline, angle, width, 0.55 * width, hand, rng, width, (0.5, 0.5)
+        ):
+            if np.hypot(*(path[-1] - path[0])) < width:
+                steps = np.diff(path, axis=0)
+                off += list(np.abs(np.degrees(np.arctan2(steps[:, 1], steps[:, 0]))))
+    return np.array(off)
+
+
+@pytest.mark.parametrize("length", [6, 8, 10, 12])
+def test_a_stub_cut_short_by_a_corner_keeps_the_direction_of_the_hatching(length):
+    off = _stubs(8.0, length, 1.0)
+    assert len(off) > 100
+    # (it was bent through as much as a right angle and more)
+    assert off.max() < 45.0
+
+
+def test_a_stub_wanders_by_the_same_draws_as_a_long_stroke(monkeypatch):
+    """A short stroke wanders less but costs the generator what it did, so
+    that what is drawn after a shading does not depend on it."""
+
+    def after():
+        rng = np.random.default_rng(4)
+        outline = hatching.as_outline((0, 0, 30, 60))
+        list(hatching.strokes(outline, 0.0, 8.0, 4.4, 1.0, rng))
+        return rng.bit_generator.state
+
+    short = after()
+    monkeypatch.setattr(hatching, "WANDER_SHARE", 1e9)
+    assert after() == short
