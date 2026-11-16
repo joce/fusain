@@ -1,14 +1,14 @@
 # Handoff: the open issues, 16 November 2026
 
-Where the issues stand after the pass of 15 and 16 November (pull requests
-#49 to #60 here, #7 and #8 in murex), and what can be picked up next. The
-issues themselves are in Beads: `bd show <id>` has the description and the
-measurements of each, and `bd ready` what is open. This file only sorts them;
-delete it once they are done or sorted again.
+Where the issues stand after the two passes of 15 and 16 November (pull
+requests #49 to #66 here, #7 and #8 in murex), and what can be picked up
+next. The issues themselves are in Beads: `bd show <id>` has the
+description and the measurements of each, and `bd ready` what is open. This
+file only sorts them; delete it once they are done or sorted again.
 
-## What the pass did
+## What the passes did
 
-Sixteen issues closed, twenty open.
+The first pass (#49 to #60): sixteen issues closed, twenty open.
 
 - The ten that could go: `fusain-2n6`, `fusain-9dg`, `fusain-js5`,
   `fusain-45t`, `fusain-q5k`, `fusain-238`, `fusain-6z7`, `fusain-hay`,
@@ -27,9 +27,21 @@ Sixteen issues closed, twenty open.
 - New in the library: a `seed=` on `Sheet.stroke`, `shade`, `smudge`,
   `erase` and `rub`.
 
+The second pass (#61 to #66): five closed, fifteen open, none of them able
+to go without the owner.
+
+The five that could go are closed: `fusain-hn4` (#61), `fusain-5sj` (#62),
+`fusain-dpx` (#63), `fusain-92i` (#64) and `fusain-lir` (#66). A fault found
+on the way was fixed rather than filed (#65): a rub's passes could stray a
+width apart and leave a band rubbed a fifth as much as the middle.
+`fusain-lir` found that `NUMBA_CPU_NAME=haswell` alone keeps AVX-512: the
+benchmark's `--cpu` now empties `NUMBA_CPU_FEATURES`, and the README says
+how to compile without AVX-512 (shading about 0.95 of the time, a stump rub
+0.88; fusain does not force it).
+
 ## For the owner to look at
 
-Three results of the pass that the numbers cannot settle:
+Results of the passes that the numbers cannot settle:
 
 - A rubbed patch keeps a rim of grain that is not rubbed, 3 to 5 pixels
   wide along its sides, now that a tool stays inside its area
@@ -41,6 +53,12 @@ Three results of the pass that the numbers cannot settle:
   a pencil no longer add up (three of HB flatten 0.34 of the tooth; it was
   0.74). Both are in `fusain-dhx`, with the constants that would change
   them.
+- New grain moved test bounds that held for one sample only. In #64 nine
+  were widened to the spread measured over several sheets, the values in
+  comments. In #65 a rub's rim is only asked to be rubbed at all (0.04 of
+  the middle failed in 17% of samples, before the fix as after), and an
+  eraser's rows from the rim in to 0.5 of the middle: its ±15% of
+  firmness leaves it short even with a steady hand.
 - Neither library has been released since. murex's requirement of NumPy 2
   reaches users only with its next release.
 
@@ -54,17 +72,6 @@ Three results of the pass that the numbers cannot settle:
 - `murex-ant` (in murex): waits on oilpaint.
 
 ## The fifteen open issues
-
-### Done on 16 November, second pass (pull requests #61 to #66)
-
-The five that could go are closed: `fusain-hn4` (#61), `fusain-5sj` (#62),
-`fusain-dpx` (#63), `fusain-92i` (#64) and `fusain-lir` (#66). A fault found
-on the way was fixed rather than filed (#65): a rub's passes could stray a
-width apart and leave a band rubbed a fifth as much as the middle.
-`fusain-lir` found that `NUMBA_CPU_NAME=haswell` alone keeps AVX-512: the
-benchmark's `--cpu` now empties `NUMBA_CPU_FEATURES`, and the README says
-how to compile without AVX-512 (shading about 0.95 of the time, a stump rub
-0.88; fusain does not force it).
 
 ### Can go on a default, if the owner accepts it (1, and 1 in murex)
 
@@ -113,7 +120,7 @@ The owner's eye:
   did), so they can be redrawn without the rest of the bird changing. Ask
   before calling the legs done.
 
-## How the pass was run, for the next one
+## How the passes were run, for the next one
 
 - One agent to a lane, each in its own git worktree. Pull requests go
   through one branch, one at a time: a lane is rebased on main with
@@ -139,6 +146,13 @@ The owner's eye:
 - A git worktree under a checkout that has `node_modules` or a warm cache
   hides what a fresh clone shows: reproduce such a fault in a clone
   outside it.
-- The review bot raised one finding over twelve pull requests, and it was
+- The squash merges leave a lane's base commit off main: bring a lane
+  across as the difference between its head and its base, not with a merge
+  (`git diff --binary <base> <lane> | git apply --index`, or
+  `git read-tree -u --reset <lane>` when its base has the tree of main).
+- A lane that finds a fault fixes it, as a lane of its own after the one
+  that found it, rather than filing it; a test that holds for one seed is
+  made to hold over several.
+- The review bot raised one finding over eighteen pull requests, and it was
   a real fault (the still life under NumPy 1.x). Reproduce a finding
   before acting on it.
