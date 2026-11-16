@@ -314,6 +314,18 @@ def test_a_white_pencil_pressed_hard_burnishes_nearly_as_the_blender_and_lighten
 # where a tip begins to polish
 
 
+def test_firmness_is_exactly_nothing_at_the_onset():
+    from fusain._engine import BURNISH_ONSET
+
+    assert pytest.approx(BURNISH_FROM - BURNISH_SOFT) == BURNISH_ONSET
+    assert firmness(0.4) == 0.0
+    assert firmness(BURNISH_FROM - BURNISH_SOFT) == 0.0
+    assert firmness(0.0) == 0.0
+    just = firmness(np.nextafter(0.4, 1.0))
+    assert 0.0 <= just < 1e-12
+    assert 0.0 < firmness(0.4 + 1e-6) < firmness(0.4 + 1e-3)
+
+
 def test_a_tip_begins_to_polish_by_degrees():
     pressures = np.linspace(0.0, 1.0, 401)
     firm = np.array([firmness(p) for p in pressures])
