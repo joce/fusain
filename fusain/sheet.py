@@ -1145,11 +1145,16 @@ class Sheet:
         with ``"flat"`` every stroke stops square at the edge of the area.
 
         Shade again at another angle to cross-hatch or to build tone.
-        Given a ``seed`` (an integer from 0 to 2**31 - 1) the shading takes
-        nothing from the sheet's generator: it has a generator of its own,
-        from which it draws the unsteadiness of the hand and the grain of
-        every stroke, so that its grain does not depend on what was drawn
-        before and what is drawn after does not depend on it.
+        A shading takes one number from the sheet's generator, however many
+        strokes it takes (a stick that has worn more or less takes fewer or
+        more), so what is drawn after it has the grain it would have had: it
+        seeds a generator of the shading's own, from which it draws the
+        unsteadiness of the hand, and the grain of each stroke follows from
+        it and from the stroke's place in the shading. Given a ``seed`` (an
+        integer from 0 to 2**31 - 1) the shading takes nothing from the
+        sheet's generator and uses that number instead, so that its grain
+        does not depend on what was drawn before and what is drawn after does
+        not depend on it.
         Returns the volume of medium laid.
 
         Raises ValueError or TypeError, before anything is drawn, unless
@@ -1182,17 +1187,26 @@ class Sheet:
         gap = _apart(medium, width, broad) if spacing is None else spacing
         _check_hatching(width, gap, angle, hand)
         laid = 0.0
-        rng = self._rng if seed is None else np.random.default_rng(seed)
-        for path, firm, tip in hatching.strokes(
-            outline, angle, width, gap, hand, rng, broad, inset
+        # (one draw from the sheet's generator for the whole shading, however
+        # many strokes it takes: a stick's width follows its wear, so how many
+        # strokes a shading takes follows what was drawn before, and what is
+        # drawn after should not; the hand is drawn from a generator of the
+        # shading's own, and each stroke has the seed of its place in it)
+        base = self._seed(seed)
+        rng = np.random.default_rng(base)
+        for k, (path, firm, tip) in enumerate(
+            hatching.strokes(outline, angle, width, gap, hand, rng, broad, inset)
         ):
             along = hatching.bearing(pressure, path, firm, hand)
-            # (a stick's tip is as wide as it has worn, whatever the hand; the
-            # grain of a stroke is drawn from the sheet's generator by default
-            # and from the shade's own if it has one)
-            mark = {} if seed is None else {"seed": int(rng.integers(1 << 31))}
+            # (a stick's tip is as wide as it has worn, whatever the hand)
             laid += self.stroke(
-                path, medium, along, None if own else tip, tilt, ends, **mark
+                path,
+                medium,
+                along,
+                None if own else tip,
+                tilt,
+                ends,
+                seed=_seed_of(base, k),
             )
         return laid
 
@@ -1284,7 +1298,8 @@ def _check_hatching(width: float, gap: float, angle: float, hand: float) -> None
         raise ValueError(f"hand must be 0 (ruler-straight) or more, got {hand!r}")
 
 
-#: What a seed steps by from one run of a rub to the next: odd, so that no two
+#: What a seed steps by from one run of a rub, or one stroke of a shading, to
+#: the next: odd, so that no two
 #: of fewer than 2**31 steps give the same seed, and far from 1, so that two
 #: seeds are not neighbours (a kernel's noise is salted with a seed and the
 #: seeds next to it).

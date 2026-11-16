@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from fusain import Paper, Sheet, hatching, pencils
+from fusain import Paper, Sheet, Stick, hatching, pencils
 
 LEVEL = Paper(depth=0)  # nothing but the strokes themselves shows
 
@@ -170,6 +170,40 @@ def test_spacing_sets_how_many_strokes_there_are():
         )
 
     assert laid(4.0) > 1.7 * laid(8.0)
+
+
+def test_what_a_shading_draws_from_the_generator_does_not_depend_on_wear(
+    monkeypatch,
+):
+    """A stick worn more or less shades with more or fewer strokes, and what
+    is drawn after has the grain it would have had (fusain-92i)."""
+
+    def worn_by(pressure: float) -> Stick:
+        stick = Stick(pencils.B2, width=2)
+        scrap = Sheet(200, 150, seed=9)
+        for y in range(10, 140, 10):
+            scrap.stroke([(10, y), (190, y)], stick, pressure)
+        return stick
+
+    def shaded_then_drawn(stick: Stick) -> tuple[Sheet, int]:
+        sheet = _sheet()
+        strokes = []
+        draw = sheet.stroke
+        monkeypatch.setattr(
+            sheet, "stroke", lambda *a, **kw: strokes.append(1) or draw(*a, **kw)
+        )
+        sheet.shade((20, 20, 180, 80), stick, 0.5)
+        monkeypatch.undo()
+        sheet.stroke([(20, 120), (180, 125)], pencils.HB, 0.6)
+        return sheet, len(strokes)
+
+    (light, few), (hard, many) = (shaded_then_drawn(worn_by(p)) for p in (0.1, 0.9))
+    assert many != few  # (the sticks wore differently, the shadings differ)
+    assert light._rng.bit_generator.state == hard._rng.bit_generator.state
+    # (the stroke drawn after lies where the shadings did not reach)
+    assert light.pigment()[100:, :].sum() > 0
+    np.testing.assert_array_equal(light.held[100:], hard.held[100:])
+    np.testing.assert_array_equal(light.cover[100:], hard.cover[100:])
 
 
 @pytest.mark.parametrize(
