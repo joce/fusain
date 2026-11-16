@@ -8,6 +8,17 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `tools/benchmark.py` times processor time, not the wall clock, and shows
+  the best of N runs (`-n`, 7 by default) with how far they spread. With
+  `--against CHECKOUT` it runs another checkout of fusain alongside this
+  one, each in a process of its own, takes each workload turn about with it,
+  run by run, and shows the ratio of the best times, so that a busy machine
+  falls on both alike; `--cpu` and `--cpu-against` set `NUMBA_CPU_NAME` for
+  both and for the other alone (`--against . --cpu-against haswell`
+  compares one checkout compiled two ways), and `--save FILE` writes the
+  times for a later `--against FILE`. A new workload draws 2000 short
+  strokes with flat ends (fusain-5sj).
+
 - A mark can be given a seed of its own (fusain-ny8): `Sheet.stroke`,
   `shade`, `smudge`, `erase` and `rub` take an optional keyword-only
   `seed`, an integer from 0 to 2**31 - 1 (anything else, a `bool` included,

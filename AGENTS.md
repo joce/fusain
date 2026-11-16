@@ -24,7 +24,7 @@ uv sync --group dev --frozen   # install the package and the development tools
 uv run pytest                  # run the tests (the first run compiles the numba kernels)
 make pre-push                  # what CI runs: tox (black, ruff, pyright, pytest), coverage (80% required), spelling
 uv run python tools/fingerprint.py   # whether the picture has changed: hashes of a suite of drawings
-uv run python tools/benchmark.py     # how long strokes, rubs and renders take
+uv run python tools/benchmark.py     # how long strokes, rubs and renders take, in processor time; --against CHECKOUT compares with another checkout, run by run
 uv run python tools/refcounts.py     # whether a kernel counts references as it works (it must not)
 ```
 
