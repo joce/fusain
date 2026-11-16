@@ -2390,13 +2390,17 @@ def rub_under(
     for every part, also the steps that a tool or a pixel skips. It is a
     twentieth to a tenth slower for a finger, no quicker for a stump and a
     third slower for an eraser. Spread, press and stir in one pass, and the
-    two loops of :func:`push_along` in one, are a twentieth to a tenth
-    quicker compiled for a processor with AVX-512 and a twentieth to a
-    seventh slower compiled for one without: with it LLVM makes the loops
-    that touch only the sheet (press, stir) 512 bits wide, which costs a
-    rub a tenth, and such a pass only happens to keep them at 256. Time
-    what is compiled for both (``NUMBA_CPU_NAME=haswell``) before
-    believing a gain here."""
+    two loops of :func:`push_along` in one, were a twentieth to a tenth
+    quicker compiled for a machine with AVX-512 and a twentieth to a
+    seventh slower compiled with ``NUMBA_CPU_NAME=haswell`` alone (which
+    keeps the machine's AVX-512, and makes more loops 512 bits wide): for
+    the machine, LLVM makes the loops that touch only the sheet (press,
+    stir) 512 bits wide, and such a pass only happens to keep them at 256.
+    Compiled without AVX-512, a stump rubs in a tenth less time, a finger
+    in a twentieth less and an eraser in a twentieth more (fusain-lir; the
+    README says how). Time a change compiled both ways
+    (``tools/benchmark.py --cpu-against haswell``) before believing a gain
+    here."""
     height, width = cover.shape
     x, y, tx, ty, pressure = now[0], now[1], now[2], now[3], now[4]
     at_x, at_y = now[5], now[6]

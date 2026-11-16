@@ -403,6 +403,21 @@ The papers of `fusain.papers` under a raking light: cartridge, printer paper,
 Bristol, newsprint, Ingres, charcoal paper; cold-pressed, rough, sanded card,
 toned grey, toned tan, black.
 
+## Speed on a processor with AVX-512
+
+There numba compiles some loops of a stroke and a rub 512 bits wide, which
+makes them slower, not quicker. Compiled without AVX-512, shading and
+rubbing with a finger take about a twentieth less time, rubbing with a stump
+a tenth less and erasing a twentieth more, and the picture is the same to the
+bit. Numba reads it from the environment when it is first
+imported; fusain does not set it, since it would hold for all the numba code
+in the process. The first run compiles the kernels again (numba keeps them
+apart for each set of instructions):
+
+```bash
+export NUMBA_CPU_FEATURES="$(python -c 'import llvmlite.binding as ll; print(ll.get_host_cpu_features().flatten())'),-avx512f"
+```
+
 ## Development
 
 ```bash
