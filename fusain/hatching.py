@@ -18,6 +18,12 @@ SPACING = 0.55
 STRAY_ACROSS = 0.15
 STRAY_ALONG = 0.5
 WANDER = 0.1
+#: Neighbouring passes of a rub are no further apart than this (in widths
+#: of the tool), however the hand strays, so that the tool covers the paper
+#: between them with more than its rim: two passes that strayed a width
+#: apart left a band between them that only the rims reached, rubbed a
+#: fifth as much as the rest.
+SPREAD = 0.6
 #: A stroke does not wander by more than this share of its own length, so
 #: that a stub cut short by a corner of the area stays near the hatching's
 #: direction (a stroke of two widths or more wanders as far as ever).
@@ -135,7 +141,10 @@ def passes(
     that line, the outermost passes run along it, and the others lie evenly
     between, no more than ``spacing`` apart. In the middle of the area the
     hand is as unsteady as in a shading (each pass strays across and wanders
-    as a stroke does); where the tool meets the edge it is guided by it, as
+    as a stroke does), but it keeps each pass within ``SPREAD`` of a width
+    of the one before (or as far apart as they are meant to be, if that is
+    further), so that it leaves no band between two passes that only the
+    rim of the tool reaches; where the tool meets the edge it is guided by it, as
     steady as anywhere along a pass: the ends of a pass and the passes along
     the edge stray only as a point of a pass wanders (``WANDER``, a fifth of
     how far the ends of a pencil's strokes stray), and only inwards. Where
@@ -150,10 +159,18 @@ def passes(
     if hi < lo:
         lo = hi = 0.5 * (lo + hi)
     count = int(math.ceil((hi - lo) / spacing)) + 1
+    # (no two neighbours further apart than this, nor than they are meant
+    # to be, if that is further)
+    apart = max(SPREAD * width, (hi - lo) / max(count - 1, 1))
+    last = lo
     for k, offset in enumerate(np.linspace(lo, hi, count)):
         if 0 < k < count - 1:  # (the outermost passes go along the edge)
             offset += rng.normal(0.0, STRAY_ACROSS * width * hand)
-            offset = min(max(offset, lo), hi)
+            # (it strays no further from the pass before it than ``apart``,
+            # and leaves the passes after it near enough to reach the last)
+            offset = min(offset, hi, last + apart)
+            offset = max(offset, lo, hi - (count - 1 - k) * apart)
+        last = offset
         cuts = _crossings(outline, across, offset)
         for start, end in zip(cuts[0::2], cuts[1::2], strict=True):
             length = float((end - start) @ along)

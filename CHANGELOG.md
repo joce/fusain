@@ -329,6 +329,33 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   rubbed a fifth as much as the middle; and two tests that stand in for
   `Sheet.stroke` pass on the seed a shading now gives it.
 
+- An unsteady hand leaves no band between two passes of a rub. The passes
+  of `hatching.passes` lie half a width apart, and each strayed across by
+  0.15 of a width either way, so that two neighbours were now and then a
+  width apart, and the band between them was reached only by the rims of
+  the tool: a stump rubbed a row there 0.17 as much as the middle of the
+  area, an eraser 0.10. Over 200 rubs of a vine charcoal tone (a stump, a
+  finger and a light eraser, ten sheets, twenty seeds each), the least
+  rubbed row across the passes was 0.07, 0.01 and 0.01 as rubbed as the
+  middle at worst, and below a quarter one rub in twenty. A pass now keeps
+  within `hatching.SPREAD`, 0.6 of a width, of the one before (or as far
+  as the passes are meant to be apart, if that is further), and leaves
+  those after it room to reach the last: 0.69, 0.66 and 0.50 at worst, where
+  a steady hand leaves 0.81, 0.83 and 0.66. It draws the same numbers as
+  before, so a rub moves only where a pass would have strayed too far.
+  `tests/test_rub.py` checks the gaps over 200 samples of the hand, and the
+  rows of a rub and its edge over five: the edge test took one sample, which
+  had passed by luck (its bounds failed on other samples, before and after);
+  its outermost pixels are now asked to be rubbed at all (the rim of a tool
+  reaches them as little as a few thousandths as much as the middle), and
+  a light eraser, which takes as each pass bears, half as much as the
+  middle from the rim in. Five of the thirteen drawings of
+  `tools/fingerprint.py` have new hashes (`dust/charcoal paper/4`,
+  `dust/rough/5`, `wax/cartridge/7`, `wax/cold-pressed/8`, `drawing/toned
+  grey/13`); `pastel/sanded card/6` rubs but no pass of it strayed too far.
+  Of `examples/output/`, `charcoal.png`, `crayons.png` and `lake.png`
+  change.
+
 - A drop of ballpoint ink inks a pixel as far as it is ink (fusain-9dg).
   A drop inked a pixel as far as all the ink there would cover a firm pass
   thick, its own and the line's: any drop, however small, inked all of a

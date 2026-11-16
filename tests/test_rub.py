@@ -95,28 +95,48 @@ def test_a_tool_rubbed_over_a_tone_leaves_nothing_past_its_edge(tool, angle):
 
 
 @pytest.mark.parametrize(
-    ("tool", "pressure", "rim"),
-    [(tools.STUMP, 0.6, 4), (tools.FINGER, 0.6, 7), (tools.ERASER, 0.15, 5)],
+    ("tool", "pressure", "rim", "inside"),
+    [
+        (tools.STUMP, 0.6, 4, 0.75),
+        (tools.FINGER, 0.6, 7, 0.75),
+        (tools.ERASER, 0.15, 5, 0.5),
+    ],
 )
-def test_a_rub_works_its_area_up_to_the_edge(tool, pressure, rim):
+def test_a_rub_works_its_area_up_to_the_edge(tool, pressure, rim, inside):
     # a tone wider than the area, so that it is even across the edge. The
-    # outermost pixels of the area are rubbed, and from the rounded rim of
-    # the tool in (about a third of its width, ``rim`` pixels) the area is
-    # rubbed at the ends of the passes (left and right) and along their
-    # sides (top and bottom) as at its middle. (A stump or a finger smooths
-    # the grain; an eraser pressed lightly takes a share of the tone. Where
-    # the ends of the passes strayed either way and lightened, a light
-    # eraser took 0.4 to 0.75 as much as in the middle over a width in.)
-    # The rub has a seed of its own: the passes of a hand as unsteady as
-    # this stray across by 0.15 of a width either way, half a width apart,
-    # and two of them now and then stray a width apart and leave a band
-    # between them that only the rims of the tool reach, rubbed a fifth as
-    # much as the middle, which this test is not about.
+    # outermost pixels of the area are rubbed, if only by the rim of the
+    # tool (the outermost row along a pass as little as a few thousandths
+    # as much as the middle, over two hundred samples), and from the
+    # rounded rim of the tool in (about a third of its width, ``rim``
+    # pixels) the area is rubbed at the ends of the passes (left and right)
+    # and along their sides (top and bottom) as at its middle. (A stump or
+    # a finger smooths the grain; an eraser pressed lightly takes a share
+    # of the tone. Where the ends of the passes strayed either way and
+    # lightened, a light eraser took 0.4 to 0.75 as much as in the middle
+    # over a width in.) Over several samples of the hand, each rubbed over
+    # the same tone. (Over thirty, from the rim in: 0.82 at worst for a
+    # stump, 0.77 for a finger; a light eraser takes as each pass bears,
+    # firmer or lighter by 0.15, and a row of it 0.57.)
     sheet = Sheet(300, 200, paper=papers.CARTRIDGE, seed=1)
     for a in (30, -40):
         sheet.shade((10, 10, 290, 190), charcoal.VINE, 0.6, 9.0, angle=a)
     before, light = sheet.pigment().astype(np.float64), _luminance(sheet)
-    sheet.rub((40, 40, 260, 160), Smudger(tool), pressure, seed=4)
+    for seed in range(5):
+        rubbed = _rubbed_share(sheet.copy(), tool, pressure, seed, before, light)
+        middle = rubbed(slice(70, 130), slice(90, 210))
+        assert middle > 0.4
+        for k in range(14):
+            ends = (rubbed(slice(65, 135), 40 + k), rubbed(slice(65, 135), 259 - k))
+            sides = (rubbed(40 + k, slice(80, 220)), rubbed(159 - k, slice(80, 220)))
+            least = 0.0 if k < rim else inside
+            assert min(ends) > least * middle, (seed, k, ends)
+            assert min(sides) > least * middle, (seed, k, sides)
+
+
+def _rubbed_share(sheet, tool, pressure, seed, before, light):
+    """How much of the tone (an eraser) or of its grain (a stump, a finger)
+    a rub of ``sheet`` takes, as a function of rows and columns."""
+    sheet.rub((40, 40, 260, 160), Smudger(tool), pressure, seed=seed)
     after, dark = sheet.pigment().astype(np.float64), _luminance(sheet)
 
     def rubbed(rows, cols) -> float:
@@ -124,14 +144,58 @@ def test_a_rub_works_its_area_up_to_the_edge(tool, pressure, rim):
             return 1.0 - after[rows, cols].sum() / before[rows, cols].sum()
         return 1.0 - dark[rows, cols].std() / light[rows, cols].std()
 
-    middle = rubbed(slice(70, 130), slice(90, 210))
-    assert middle > 0.4
-    for k in range(14):
-        ends = (rubbed(slice(65, 135), 40 + k), rubbed(slice(65, 135), 259 - k))
-        sides = (rubbed(40 + k, slice(80, 220)), rubbed(159 - k, slice(80, 220)))
-        least = 0.04 if k < rim else 0.75
-        assert min(ends) > least * middle, (k, ends)
-        assert min(sides) > least * middle, (k, sides)
+    return rubbed
+
+
+@pytest.mark.parametrize(
+    ("tool", "pressure", "least"),
+    [(tools.STUMP, 0.6, 0.6), (tools.FINGER, 0.6, 0.6), (tools.ERASER, 0.15, 0.45)],
+)
+def test_an_unsteady_hand_leaves_no_band_between_two_passes(tool, pressure, least):
+    # (two passes that strayed a width apart left a band between them that
+    # only the rims of the tool reached: the least rubbed row across the
+    # passes, from the rim in, was 0.17 as rubbed as the middle for a stump
+    # and 0.10 for an eraser; over 200 samples 0.07 and 0.01 at worst, 0.01
+    # for a finger, and below 0.25 one time in twenty. Now 0.69, 0.50 and
+    # 0.66 for a finger at worst; a steady hand leaves 0.81, 0.66 and 0.83,
+    # the grain of the tone, the tool's own and how each pass bears)
+    sheet = Sheet(300, 200, paper=papers.CARTRIDGE, seed=1)
+    for a in (30, -40):
+        sheet.shade((10, 10, 290, 190), charcoal.VINE, 0.6, 9.0, angle=a)
+    before, light = sheet.pigment().astype(np.float64), _luminance(sheet)
+    for seed in range(5):
+        rubbed = _rubbed_share(sheet.copy(), tool, pressure, seed, before, light)
+        middle = rubbed(slice(70, 130), slice(90, 210))
+        rows = [rubbed(y, slice(80, 220)) for y in range(47, 153)]
+        assert min(rows) > least * middle, (seed, int(np.argmin(rows)) + 47)
+
+
+def test_neighbouring_passes_are_never_further_apart_than_the_hand_allows(
+    monkeypatch,
+):
+    outline = hatching.as_outline((40, 40, 260, 160))
+
+    def drawn(seed: int):
+        rng = np.random.default_rng(seed)
+        across = [
+            float(np.mean(path[:, 1]))
+            for path, _ in hatching.passes(outline, 0.0, 10.0, 5.0, 1.0, rng)
+        ]
+        return np.diff(across), rng.bit_generator.state
+
+    # (the passes kept to their lines, which they otherwise wander about by
+    # WANDER of a width: it draws the same numbers either way)
+    monkeypatch.setattr(hatching, "WANDER", 0.0)
+    for seed in range(200):
+        gaps, state = drawn(seed)
+        assert gaps.max() <= hatching.SPREAD * 10.0 + 1e-9, seed
+        with monkeypatch.context() as free:  # (and a hand left to stray)
+            free.setattr(hatching, "SPREAD", 1e9)
+            loose, loose_state = drawn(seed)
+        # draws the same numbers, whether or not it strays too far
+        assert state == loose_state
+        if seed == 20:  # (which, left to stray, opens a gap of over a width)
+            assert loose.max() > 10.0
 
 
 def test_the_passes_of_a_rub_keep_the_tool_inside_the_area():
