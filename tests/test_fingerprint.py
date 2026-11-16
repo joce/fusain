@@ -42,8 +42,12 @@ def test_the_suite_is_the_recorded_one():
     assert len(thorough) > 10 * len(RECORDED["marks"])
 
 
+# (named by the drawing alone: an id that held a function's address would
+# differ from one process to the next, and pytest-xdist needs every worker to
+# collect the same tests)
 @pytest.mark.parametrize(
-    ("name", "scene", "paper", "seed"), list(fp.runs()), ids=lambda v: str(v)[:40]
+    ("name", "scene", "paper", "seed"),
+    [pytest.param(*run, id=run[0]) for run in fp.runs()],
 )
 def test_a_drawing_gives_the_recorded_hashes(name, scene, paper, seed):
     marks = fp.draw(scene, paper, seed)

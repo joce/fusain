@@ -423,7 +423,8 @@ export NUMBA_CPU_FEATURES="$(python -c 'import llvmlite.binding as ll; print(ll.
 ```bash
 uv sync --group dev --frozen   # install the package and the development tools
 uv run pytest                  # run the tests (the first run compiles the numba kernels)
-make pre-push                  # what CI runs: tox, coverage, spelling
+make pre-push                  # lint, types, the tests under coverage, spelling
+make tox                       # every Python version and the built wheel, as CI runs them
 uv run python tools/fingerprint.py   # whether a change has altered the picture
 uv run python tools/benchmark.py     # how long strokes, rubs and renders take (--against CHECKOUT: compared with another)
 uv run python tools/refcounts.py     # whether a kernel counts references as it works (it must not)
