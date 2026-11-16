@@ -687,6 +687,31 @@ def press_flat(
 
 
 @_inlined
+def polish_kept(polish, held, iy, ix, polished, holding, covered, melts):
+    """Leave the polish of a pixel as far as the wax a tip leaves there holds
+    it up, once the tip has done all it does there. Polish is the wax's,
+    and goes with it. Where no wax is left, the polish is as it was when the
+    tip came (``polished``): a tip that melts into the film (``melts``)
+    polishes what it bears on as if it were slick, however thin the film,
+    but over a tooth so full of a dry medium that it lays nothing there, it
+    polished nothing. And where a tip that does not melt has dragged wax off
+    (it found ``holding`` there), the polish left is at most what the wax
+    left is thick over WAX_FAST on the covered share (``covered``), as under
+    a tool (:func:`bare_tooth`). (A tip that melts keeps the thin film it
+    polishes as polished as it made it.)"""
+    wax, now = held[iy, ix, IW], polish[iy, ix]
+    holds = wax / covered / WAX_FAST
+    raised = wax <= 0.0 and now > polished
+    dragged = melts <= 0.0 and wax < holding and now > holds
+    for _ in once(raised or dragged):
+        if raised:
+            now = polished
+        if dragged:
+            now = min(now, holds)
+        polish[iy, ix] = now
+
+
+@_inlined
 def drag_film(layer, bonded, drag, iy, ix, which, up):
     """Take the share ``up`` of the film in one of the two layers at a pixel
     (``which``: 0 underneath, 1 on top) onto a tip that polishes it
@@ -1259,7 +1284,8 @@ def bear(
                 thick -= freed
             bearing = min(local, 1.0)
             passing = per_pass * slide * touch
-            waxed = held[iy, ix, IW] / covered
+            holding = held[iy, ix, IW]
+            waxed = holding / covered
             waxy = min(waxed / WAX_FULL, 1.0)
             # (a blender melts into the film, however thin it is)
             slick = waxy + (1.0 - waxy) * melts
@@ -1294,28 +1320,31 @@ def bear(
             pressed = min(PRESS_IN * bearing, 1.0) * passing
             press_dust(held, under, loose, bonded, cover, iy, ix, pressed)
             room = full * (FILL_LIGHT + (1.0 - FILL_LIGHT) * bearing) - thick
-            if room <= 0.0:
-                continue
-            # (a light pass takes less, but not in proportion: the lead
-            # still slides over all it touches)
-            dv = lay * math.sqrt(bearing * min(above / SPAN, 1.0)) * (room / full)
-            # (to a dry medium wax is slick as soon as it covers the tooth)
-            dv *= 1.0 - dry * min(waxed / COVERS, 1.0) - slides * waxy
-            # (and a flattened tooth bites it less, as does the floor of a
-            # groove, which the point that pressed it left as flat)
-            levelled = min(max((raised - floor) / MICRO, 0.0), 1.0)
-            dv *= 1.0 - smooth * max(flat, levelled)
-            # (and dust scrapes less off a tip that rides on it)
-            dv *= 1.0 - BED_BITE * rides
-            dv = min(dv * per_pass * slide, room) * touch
-            # the share of what is held that lies on what it met and not in
-            # the tooth, a film: all that a waxy tip lays over dust, and
-            # what a dry one lays where it rides on a bed
-            over = rides
-            if filmy > 0.0:
-                over += filmy * lying_share(under, loose, bonded, covered, iy, ix)
-            lying += deposit(held, fresh, iy, ix, dv, binding, over, k, s, sheen, wax)
-            laid += dv
+            if room > 0.0:
+                # (a light pass takes less, but not in proportion: the lead
+                # still slides over all it touches)
+                dv = lay * math.sqrt(bearing * min(above / SPAN, 1.0)) * (room / full)
+                # (to a dry medium wax is slick as soon as it covers the tooth)
+                dv *= 1.0 - dry * min(waxed / COVERS, 1.0) - slides * waxy
+                # (and a flattened tooth bites it less, as does the floor of a
+                # groove, which the point that pressed it left as flat)
+                levelled = min(max((raised - floor) / MICRO, 0.0), 1.0)
+                dv *= 1.0 - smooth * max(flat, levelled)
+                # (and dust scrapes less off a tip that rides on it)
+                dv *= 1.0 - BED_BITE * rides
+                dv = min(dv * per_pass * slide, room) * touch
+                # the share of what is held that lies on what it met and not in
+                # the tooth, a film: all that a waxy tip lays over dust, and
+                # what a dry one lays where it rides on a bed
+                over = rides
+                if filmy > 0.0:
+                    over += filmy * lying_share(under, loose, bonded, covered, iy, ix)
+                lying += deposit(
+                    held, fresh, iy, ix, dv, binding, over, k, s, sheen, wax
+                )
+                laid += dv
+            # (the polish goes no further than the wax the tip leaves)
+            polish_kept(polish, held, iy, ix, polished, holding, covered, melts)
     return laid, lying
 
 
@@ -2163,21 +2192,21 @@ def lift(held, under, loose, bonded, load, iy, ix, lifts, share):
 
 
 @_inlined
-def bare_tooth(crush, polish, held, cover, iy, ix, waxed, cut):
-    """Give a pixel back the tooth that a tool has bared there, now that its
-    wax has gone from ``waxed`` to what it holds. The polish of the wax
-    (``polish``) goes with the wax: polished wax keeps the tooth level as
-    far as it is thick enough to fill it, WAX_FAST thick, so the polish
-    left is at most what the wax left is thick over that, and with all the
-    wax gone, none. What a dry tip crushed of the paper itself (``crush``)
-    stays, whatever is taken off it. But where a tool cuts the surface of
-    the paper (``cut``, the share of it: a blade or grit), it takes the
-    crush with it, and the polish of what lay there."""
+def bare_tooth(crush, polish, held, cover, iy, ix, cut):
+    """Give a pixel back the tooth that a tool has bared there, once it has
+    done all it does there. The polish of the wax (``polish``) goes with
+    the wax: polished wax keeps the tooth level as far as it is thick
+    enough to fill it, WAX_FAST thick on the share of the pixel that is
+    covered, so the polish left is at most what the wax left is thick over
+    that, and with all the wax gone, none. What a dry tip crushed of the
+    paper itself (``crush``) stays, whatever is taken off it. But where a
+    tool cuts the surface of the paper (``cut``, the share of it: a blade
+    or grit), it takes the crush with it, and the polish of what lay
+    there."""
     crushed, polished = crush[iy, ix], polish[iy, ix]
     for _ in once(crushed > 0.0 or polished > 0.0):
-        if waxed > held[iy, ix, IW]:
-            covered = max(cover[iy, ix], 1e-6)
-            polished = min(polished, held[iy, ix, IW] / covered / WAX_FAST)
+        covered = max(cover[iy, ix], 1e-6)
+        polished = min(polished, held[iy, ix, IW] / covered / WAX_FAST)
         crush[iy, ix] = crushed * (1.0 - cut)
         polish[iy, ix] = polished * (1.0 - cut)
 
@@ -2472,11 +2501,9 @@ def rub_under(
             lifts[5] = tool[8] - load[IV]  # (the room it has left)
             lifts[6] = stained(held, cover, iy, ix, scrape)
             adrift = lift(held, under, loose, bonded, load, iy, ix, lifts, share)
-            # (the tooth comes back as the wax that levelled it goes, and
-            # what the paper itself was crushed by as far as a blade or grit
-            # cuts it, with the ink stained into it)
+            # (as far as a blade or grit cuts the paper, the ink stained
+            # into it goes too)
             cut = scrape * min(lifts[1] * share, 1.0)
-            bare_tooth(crush, polish, held, cover, iy, ix, waxed, cut)
             scrape_ink(ink, inked, load, iy, ix, cut, tool[8] - load[IV])
             pushed = push_along(
                 held,
@@ -2502,18 +2529,24 @@ def rub_under(
             )
             laid += given
             after = before + laid - taken
+            # (the tooth comes back as the wax that levelled it goes, and
+            # what the paper itself was crushed by as far as a blade or grit
+            # cuts it: last, once the wax at the pixel and the share of it
+            # that is covered are what the tool leaves, for it drags wax off,
+            # and lays it and dust, after it has lifted)
             if after <= 1e-9:
                 cover[iy, ix] = 0.0  # rubbed clean
-                continue
-            bare = 1.0 - cover[iy, ix]
-            cover[iy, ix] += bare * min((laid + pushed) / after, 1.0)
-            # press in; stir up what is underneath; and push what is
-            # loose into the low ground
-            spent = min(press * share, 1.0)
-            press_dust(held, under, loose, bonded, cover, iy, ix, spent)
-            stirred = min(smear * share, 1.0) * reach
-            dusty = stir_up(under, loose, bonded, iy, ix, stirred) / after
-            cover[iy, ix] += (1.0 - cover[iy, ix]) * stirred * dusty
+            else:
+                bare = 1.0 - cover[iy, ix]
+                cover[iy, ix] += bare * min((laid + pushed) / after, 1.0)
+                # press in; stir up what is underneath; and push what is
+                # loose into the low ground
+                spent = min(press * share, 1.0)
+                press_dust(held, under, loose, bonded, cover, iy, ix, spent)
+                stirred = min(smear * share, 1.0) * reach
+                dusty = stir_up(under, loose, bonded, iy, ix, stirred) / after
+                cover[iy, ix] += (1.0 - cover[iy, ix]) * stirred * dusty
+            bare_tooth(crush, polish, held, cover, iy, ix, cut)
 
 
 @njit(cache=True, error_model="numpy")

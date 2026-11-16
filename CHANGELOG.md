@@ -223,6 +223,35 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Polish no longer outlasts the wax that holds it up (fusain-979). A tool
+  cut the polish of a pixel to what the wax left there holds up (`WAX_FAST`
+  thick on the covered share) as it lifted, before it dragged wax off the
+  pixel, spread it and laid dust that covered more of it: until a tool
+  next lifted there the polish went beyond that by up to 0.0033 under a
+  vinyl eraser on a burnished dark (0.0020 on a light layer the blender
+  had polished, 0.0008 under a finger, 0.0002 under a chamois; 0.0003 at
+  the worst in the thorough fingerprint suite). It is now worked out once
+  the tool has done all it does at the pixel, from what it leaves, and
+  goes beyond it nowhere (by 3e-8 at most, the rounding of float32). And a
+  tip that melts into the film (the blender, a white or pale pencil),
+  which polishes wax however thin, polished a tooth so full of graphite,
+  charcoal or pastel that it laid no wax there: 145 pixels to up to 0.83
+  under the blender over three layers of 6B, up to 0.91 in the thorough
+  suite, polish that had no wax to go with and stayed. A tip now raises
+  the polish only where it leaves wax; no pixel without wax has any. And
+  a tip that does not melt, pressed hard on polished wax, smears it and
+  drags some off a pixel, whose polish stayed: the side of a 4B over a
+  burnished layer an eraser had left polished as far as its wax holds up
+  left 8 pixels up to 0.040 beyond it (0.050 at the worst in the thorough
+  suite). Its polish now goes with the wax it drags, as under a tool; a
+  tip that melts keeps the thin film it polishes as polished as before. The
+  gloss of a burnished dark is as it was (L* added under the default
+  lamp, blurred by 2, varies by 0.153 from place to place). Four of the
+  thirteen fingerprint drawings change (the two `surface` ones, `drawing`
+  and the polish alone of `wax` on cartridge), and of the examples only
+  `colour.png`, 15 pixels by one level. Rubbing is up to 3% slower in
+  processor time, within the spread of the runs.
+
 - A partly polished tooth no longer glints pixel by pixel under the default
   lamp (fusain-419). In two layers of a dark crayon at 0.7 the peaks of the
   tooth were polished all the way (11% of the pixels past 0.8), and a peak
