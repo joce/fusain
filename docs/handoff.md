@@ -53,22 +53,18 @@ Three results of the pass that the numbers cannot settle:
   open on 15 November, not to be measured or pinned again for now.
 - `murex-ant` (in murex): waits on oilpaint.
 
-## The twenty open issues
+## The fifteen open issues
 
-### Can go now (5)
+### Done on 16 November, second pass (pull requests #61 to #66)
 
-No decision is needed: the fault and the fix are both stated.
-
-| Issue | What it is | The picture |
-|---|---|---|
-| `fusain-92i` | `Sheet.shade` with a `Stick` draws a number of strokes that follows the stick's wear, so every later mark's grain follows the pressure of what was drawn before | changes once: the grain after such a shading |
-| `fusain-dpx` | a stub of a shading at a corner of its area wanders as far as a long stroke, and bends through a right angle | changes: the stubs |
-| `fusain-hn4` | `firmness(0.4)` is not exactly 0 and leaves a vanishing number in the press arrays | by a bit at most |
-| `fusain-5sj` | `tools/benchmark.py` times wall clock and has no stroke with flat ends | unchanged |
-| `fusain-lir` | kernel loops over single-precision arrays are compiled 512 bits wide on AVX-512 machines, which costs a rub a tenth: measure strokes too | unchanged; the fix, if any, must be an option numba documents |
-
-`fusain-5sj` comes before `fusain-lir`: it gives the benchmark the
-processor time and the two code generations that `fusain-lir` needs.
+The five that could go are closed: `fusain-hn4` (#61), `fusain-5sj` (#62),
+`fusain-dpx` (#63), `fusain-92i` (#64) and `fusain-lir` (#66). A fault found
+on the way was fixed rather than filed (#65): a rub's passes could stray a
+width apart and leave a band rubbed a fifth as much as the middle.
+`fusain-lir` found that `NUMBA_CPU_NAME=haswell` alone keeps AVX-512: the
+benchmark's `--cpu` now empties `NUMBA_CPU_FEATURES`, and the README says
+how to compile without AVX-512 (shading about 0.95 of the time, a stump rub
+0.88; fusain does not force it).
 
 ### Can go on a default, if the owner accepts it (1, and 1 in murex)
 
@@ -137,8 +133,9 @@ The owner's eye:
 - After any change to a kernel or a helper, `tools/refcounts.py`.
 - Timings on a machine that does anything else: processor time, the two
   versions as live processes taking each workload turn about, best of
-  many; and on an AVX-512 machine again with `NUMBA_CPU_NAME=haswell`
-  (`fusain-lir` nearly gave `fusain-czc` a false gain).
+  many (`tools/benchmark.py --against`); and on an AVX-512 machine again
+  compiled without it, `--cpu-against haswell` (`NUMBA_CPU_NAME=haswell`
+  alone keeps the host's AVX-512 features).
 - A git worktree under a checkout that has `node_modules` or a warm cache
   hides what a fresh clone shows: reproduce such a fault in a clone
   outside it.

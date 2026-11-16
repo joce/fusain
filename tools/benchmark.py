@@ -19,10 +19,13 @@ the other's: below 1, this one is quicker::
     git worktree add ../fusain-base origin/main
     python tools/benchmark.py --against ../fusain-base
 
-``--cpu NAME`` sets ``NUMBA_CPU_NAME`` for the kernels of both (on an AVX-512
-machine, repeat a comparison with ``--cpu haswell``: numba then compiles for
-a CPU without those wide registers), and ``--cpu-against NAME`` for the other
-side alone, so one checkout can be compared with itself compiled two ways::
+``--cpu NAME`` compiles the kernels of both for the processor NAME, with the
+instructions it has and no others (``NUMBA_CPU_NAME``, and an empty
+``NUMBA_CPU_FEATURES``: numba otherwise keeps those of this machine, and
+``haswell`` alone still has AVX-512), and ``--cpu-against NAME`` the other
+side's alone, so one checkout can be compared with itself compiled two ways.
+On an AVX-512 machine, repeat a comparison with ``--cpu haswell``: a change
+can gain there and lose without those wide registers, or the other way::
 
     python tools/benchmark.py --against . --cpu-against haswell
 
@@ -175,8 +178,9 @@ def _serve() -> int:
 
 class Worker:
     """A worker process importing the fusain of one checkout, its kernels
-    compiled for ``cpu`` (numba's ``NUMBA_CPU_NAME``; None for the machine's
-    own, or what the environment already says)."""
+    compiled for ``cpu`` (numba's ``NUMBA_CPU_NAME``, with that processor's
+    own instructions; None for this machine, or what the environment already
+    says)."""
 
     def __init__(self, root: Path, cpu: str | None) -> None:
         env = dict(os.environ)
@@ -185,6 +189,7 @@ class Worker:
         )
         if cpu:
             env["NUMBA_CPU_NAME"] = cpu
+            env["NUMBA_CPU_FEATURES"] = ""  # (the named processor's own)
         self.root = root
         self.cpu = env.get("NUMBA_CPU_NAME", "native")
         self.process = subprocess.Popen(
@@ -264,12 +269,12 @@ def _arguments(arguments: Sequence[str]) -> argparse.Namespace:
         "or a file written by --save",
     )
     parser.add_argument(
-        "--cpu", metavar="NAME", help="NUMBA_CPU_NAME for the kernels (e.g. haswell)"
+        "--cpu", metavar="NAME", help="compile the kernels for this CPU (e.g. haswell)"
     )
     parser.add_argument(
         "--cpu-against",
         metavar="NAME",
-        help="NUMBA_CPU_NAME for the other checkout alone (default: --cpu)",
+        help="the CPU for the other checkout alone (default: --cpu)",
     )
     parser.add_argument("--save", metavar="FILE", help="write the times to a file")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)

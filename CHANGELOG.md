@@ -13,9 +13,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   `--against CHECKOUT` it runs another checkout of fusain alongside this
   one, each in a process of its own, takes each workload turn about with it,
   run by run, and shows the ratio of the best times, so that a busy machine
-  falls on both alike; `--cpu` and `--cpu-against` set `NUMBA_CPU_NAME` for
-  both and for the other alone (`--against . --cpu-against haswell`
-  compares one checkout compiled two ways), and `--save FILE` writes the
+  falls on both alike; `--cpu` and `--cpu-against` compile the kernels for
+  a named processor, with its own instructions and no others, for both and
+  for the other alone (`--against . --cpu-against haswell` compares one
+  checkout compiled with AVX-512 and without), and `--save FILE` writes the
   times for a later `--against FILE`. A new workload draws 2000 short
   strokes with flat ends (fusain-5sj).
 
@@ -33,6 +34,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   it, so that a drawing in which one part changes keeps the grain of every
   mark that does not. Without a seed everything is as it was, to the bit
   (every hash of `tools/fingerprint.py`, the thorough one too).
+
+- The README says how to compile the kernels without AVX-512 on a processor
+  that has it (`NUMBA_CPU_FEATURES`, the machine's own and `-avx512f`),
+  where numba makes some loops 512 bits wide: shading takes a twentieth
+  less time, rubbing with a stump a tenth less (erasing a twentieth more),
+  and the picture is the same to the bit (fusain-lir).
 
 ### Changed
 
