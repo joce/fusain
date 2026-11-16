@@ -36,6 +36,18 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- A stub of a shading wanders less (fusain-dpx): a stroke that a corner of
+  the area cuts short is kept if it is half a tip long, and each of its
+  knots wandered by a tenth of the tip's width however short it was, so
+  that a stub 3 to 5 pixels long of a tip 8 wide was bent through up to a
+  right angle (180 degrees at the worst) and ran across the hatching. No
+  stroke now wanders by more than `hatching.WANDER_SHARE` (a twentieth) of
+  its own length, so that a stub keeps within about 35 degrees of the
+  hatching's direction; a stroke two tips long or more is as it was, and
+  the generator is drawn from as often as before, so that what is drawn
+  after a shading is not moved. The hashes of the fingerprint suite and
+  the pictures of nine examples change (the drawings with stubs).
+
 - The sheet keeps the paper's crush and the wax's polish apart
   (fusain-dq2): `Sheet.crush`, how far a firm dry tip has crushed the
   paper's own tooth, and `Sheet.polish`, how far the wax that lies there

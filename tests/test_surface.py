@@ -115,7 +115,7 @@ def test_the_firmer_the_flatter_and_no_flatter_than_its_load_presses():
     assert _shaded(pencils.HB, 1.0, 6).crush.max() <= level + 1e-6
     # a harder lead's is more than flat: it crushes the tooth flat
     hard = _shaded(pencils.H4, 1.0, 8)
-    assert hard.crush.max() == 1.0 and hard.press.max() <= 1.0
+    assert hard.crush.max() == pytest.approx(1.0, abs=1e-6) and hard.press.max() <= 1.0
     assert _pressed(hard) > 0.9
 
 

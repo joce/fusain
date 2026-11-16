@@ -18,6 +18,10 @@ SPACING = 0.55
 STRAY_ACROSS = 0.15
 STRAY_ALONG = 0.5
 WANDER = 0.1
+#: A stroke does not wander by more than this share of its own length, so
+#: that a stub cut short by a corner of the area stays near the hatching's
+#: direction (a stroke of two widths or more wanders as far as ever).
+WANDER_SHARE = 0.05
 FIRMNESS = 0.15
 WIDTH = 0.1
 #: A stroke is lighter where the pencil lands and where it lifts: the share
@@ -100,7 +104,11 @@ def strokes(
             end = end - min(inset[1] * width, 0.25 * length) * along
             knots = max(int(length / BEND), 2)
             path = start + (end - start) * np.linspace(0.0, 1.0, knots + 1)[:, None]
-            path += rng.normal(0.0, WANDER * width * hand, path.shape)
+            # (a short stroke wanders less, from the same draws)
+            wander = min(
+                WANDER * width * hand, WANDER_SHARE * float((end - start) @ along)
+            )
+            path += rng.normal(0.0, wander, path.shape)
             firm = rng.uniform(1.0 - FIRMNESS * hand, 1.0 + FIRMNESS * hand)
             # (however unsteady the hand, a tip keeps some width)
             tip = width * max(rng.uniform(1.0 - WIDTH * hand, 1.0 + WIDTH * hand), 0.25)
