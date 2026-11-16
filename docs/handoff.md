@@ -1,7 +1,7 @@
 # Handoff: the open issues, 16 November 2026
 
 Where the issues stand after the two passes of 15 and 16 November (pull
-requests #49 to #66 here, #7 and #8 in murex), and what can be picked up
+requests #49 to #68 here, #7 to #9 in murex), and what can be picked up
 next. The issues themselves are in Beads: `bd show <id>` has the
 description and the measurements of each, and `bd ready` what is open. This
 file only sorts them; delete it once they are done or sorted again.
@@ -27,7 +27,7 @@ The first pass (#49 to #60): sixteen issues closed, twenty open.
 - New in the library: a `seed=` on `Sheet.stroke`, `shade`, `smudge`,
   `erase` and `rub`.
 
-The second pass (#61 to #66): five closed, fifteen open, none of them able
+The second pass (#61 to #68): six closed, fourteen open, none of them able
 to go without the owner.
 
 The five that could go are closed: `fusain-hn4` (#61), `fusain-5sj` (#62),
@@ -71,18 +71,18 @@ Results of the passes that the numbers cannot settle:
   open on 15 November, not to be measured or pinned again for now.
 - `murex-ant` (in murex): waits on oilpaint.
 
-## The fifteen open issues
+## The fourteen open issues, and `murex-krb`
 
-### Can go on a default, if the owner accepts it (1, and 1 in murex)
+### Done on the owner's defaults (#68 here, #9 in murex)
 
-- `fusain-979`, polish exceeds what the wax holds by up to 0.004 until the
-  next lift, and a melting tip can polish a pixel where it lays no wax.
-  Default: call `bare_tooth` after `push_along` in `rub_under`, and let a
-  tip raise polish only where the pixel holds wax when it leaves.
-- `murex-krb` (in murex), `spectral`'s numbers follow NumPy's own
-  arithmetic to the last bit. Default: store `_BASIS` and
-  `SPECTRUM_TO_RGB` as constants, and pin a few reflectances to the bit in
-  a test. It is a change to `spectral`, so it needs oilpaint checked.
+- `fusain-979` is closed: polish goes with the wax wherever a tool or a tip
+  leaves, a dry tip's drag included (#68).
+- `murex-krb` is half done and stays open: `spectral`'s tables are stored,
+  and `tests/test_bits.py` pins its numbers on x86-64 (murex #9). On ARM
+  eight of those pins differ in the last bits. The owner has decided to make
+  spectral's arithmetic the same everywhere (a breaking change: fusain and
+  oilpaint recorded again), but only after oilpaint's later engine changes
+  are brought into murex and oilpaint depends on murex.
 
 ### Need the owner's view (14)
 
