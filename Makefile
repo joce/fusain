@@ -8,7 +8,7 @@ help:
 	@echo "  make coverage      - Run tox coverage env with HTML report"
 	@echo "  make pre-push      - Run tox, coverage, and spell-changed before pushing"
 
-tox:
+tox: node_modules/.bin/cspell
 	@command -v uv >/dev/null 2>&1 || { echo >&2 "uv not found. Install from: https://docs.astral.sh/uv/getting-started/installation/"; exit 1; }
 	@uv run tox --version >/dev/null 2>&1 || { echo "Installing tox group..."; uv sync --group tox --frozen; }
 	uv run tox
