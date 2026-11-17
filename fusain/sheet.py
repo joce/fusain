@@ -249,6 +249,8 @@ class Sheet:
         """Volume of pigment at each pixel, (H, W): what the paper holds,
         the dust and the paste of the two layers, and the films."""
         lying = self.under[..., IV] + self.loose[..., IV]
+        if not self.film.any():  # (most drawings in dry media: no film)
+            return self.held[..., IV] + lying
         return self.held[..., IV] + lying + self.films[..., IV].sum(axis=-1)
 
     def shine(self, of: str | None = None) -> np.ndarray:
@@ -302,7 +304,7 @@ class Sheet:
         film = np.minimum(self.held[..., IX] / cover / full, 1.0)
         dust = self.under[..., IV] + self.loose[..., IV]
         matte = np.maximum(dust - self.under[..., IX] - self.loose[..., IX], 0.0)
-        if not self.films[..., IV].any():
+        if not self.film.any():
             # (no film: the shine of what the paper holds, as it was)
             return self.cover * film * np.exp(-matte / cover / np.float32(SHEEN_HIDE))
         matte += self._film_matte()
@@ -387,7 +389,7 @@ class Sheet:
         films = self.films[rows]
         # (whether a film lies on the dust underneath, and on top, in these
         # rows: none, in most drawings of dry media)
-        filmed = [bool(films[..., which, IV].any()) for which in (0, 1)]
+        filmed = [bool(self.film[rows][..., which].any()) for which in (0, 1)]
         out = np.empty((*layers[0].shape[:2], N))
         out[:] = self.ground
         stained = self._stain(out, rows)
@@ -658,6 +660,7 @@ class Sheet:
                 self.under,
                 self.loose,
                 self.films,
+                self.bonded,
                 self.ink,
                 self.inked,
                 xs,
@@ -785,7 +788,8 @@ class Sheet:
         )
         for kind, part, sheen, shininess in lobes:
             # (graphite also shines as a film on a bed of dust)
-            if not (self.held[..., part].any() or self.films[..., part].any()):
+            filmed = self.film.any() and self.films[..., part].any()
+            if not (self.held[..., part].any() or filmed):
                 continue
             mirrored = self.shine(kind) * facing**shininess * (sheen * gloss)
             white = mirrored if white is None else white + mirrored

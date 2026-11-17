@@ -831,10 +831,13 @@ def take_films(films, bonded, onto, iy, ix, low, high):
     gone = below * low + above * high
     for _ in once(gone > 0.0):
         share = min(gone / (below + above), 1.0)
-        for part in range(LOOSE):
+        # (each of the two only where some of it goes: a tool that spreads
+        # takes of the one on top alone, and often only one lies there)
+        for part in range(LOOSE if below * low > 0.0 else 0):
             taken = films[iy, ix, 0, part] * low
             films[iy, ix, 0, part] -= taken
             onto[part] += taken
+        for part in range(LOOSE if above * high > 0.0 else 0):
             taken = films[iy, ix, 1, part] * high
             films[iy, ix, 1, part] -= taken
             onto[part] += taken
@@ -993,6 +996,7 @@ def settle_row(
     for ix in range(x0, x1):
         if fresh[iy, ix, 0] <= 0.0 and fresh[iy, ix, 1] <= 0.0:
             continue  # (nothing, or settled already)
+        on_top = bonded[iy, ix, 1, FILM]  # (as it was: most often none)
         rest, film, covers = settle_pixel(
             fresh, cover, bonded, under, loose, pasty, binds, iy, ix
         )
@@ -1010,7 +1014,9 @@ def settle_row(
             films[iy, ix, 1, IV] += film
             films[iy, ix, 1, IX] += film * sheen
             films[iy, ix, 1, IW] += film * wax
-        for part in range(HELD if covers > 0.0 else 0):
+        # (not where no film lay on top and none came: most pixels of a
+        # drawing in dry media, whose films are never read)
+        for part in range(HELD if covers > 0.0 and on_top + film > 0.0 else 0):
             moved = films[iy, ix, 1, part] * covers
             films[iy, ix, 1, part] -= moved
             films[iy, ix, 0, part] += moved
@@ -2332,17 +2338,17 @@ def lift(held, under, loose, films, bonded, load, iy, ix, lifts, share):
     lift_loose, lift_held, greasy = lifts[0], lifts[1], min(lifts[2], 1.0)
     grip, reach, room, reached = lifts[3], lifts[4], lifts[5], lifts[6]
     paper, waxed = held[iy, ix, IV], held[iy, ix, IW]
-    wax_below, wax_top = films[iy, ix, 0, IW], films[iy, ix, 1, IW]
     below = layer_at(under, bonded, iy, ix, 0)
     on_top = layer_at(loose, bonded, iy, ix, 1)
     up_held = min(lift_held * grip * share, 1.0)
     up_loose = min(lift_loose * share, 1.0)
     up_under = min(UNDER_LIFT * lift_loose * share, 1.0) * reach
     drift_below, drift_top = 0.0, 0.0  # (how far each film goes with its dust)
-    if below[2] + on_top[2] > 0.0:  # (else there is no film)
+    # (else there is no film, and the films are not read: most pixels)
+    for _ in once(below[2] + on_top[2] > 0.0):
         afloat = loose_ground(below, on_top)
-        drift_below = afloat * dry_film(below[2], wax_below)
-        drift_top = afloat * dry_film(on_top[2], wax_top)
+        drift_below = afloat * dry_film(below[2], films[iy, ix, 0, IW])
+        drift_top = afloat * dry_film(on_top[2], films[iy, ix, 1, IW])
     if room < math.inf:  # (a tool that holds only so much)
         fits = room_for(
             paper,
@@ -2493,13 +2499,14 @@ def reach_under(bonded, films, cover, iy, ix):
     dry medium left on a bed of dust: it is not slick, and seals nothing."""
     fixed = bonded[iy, ix, 1, SET] + bonded[iy, ix, 1, BOUND]
     film, covered = bonded[iy, ix, 1, FILM], cover[iy, ix]
-    filmed, film_wax = films[iy, ix, 1, IV], films[iy, ix, 1, IW]
-    sealed = fixed + film
-    if sealed <= 0.0:
-        return 1.0
-    if film > 0.0:
-        sealed = fixed + film * (1.0 - dry_film(filmed, film_wax))
-    return 1.0 - min(sealed / max(covered, 1e-6) / COVERS, 1.0)
+    sealed = fixed
+    # (the film is read only where one lies on top: no ``if`` here, and no
+    # early ``return``; see the top of the file)
+    for _ in once(film > 0.0):
+        dry = dry_film(films[iy, ix, 1, IV], films[iy, ix, 1, IW])
+        sealed = fixed + film * (1.0 - dry)
+    reach = 1.0 - min(sealed / max(covered, 1e-6) / COVERS, 1.0)
+    return reach if sealed > 0.0 else 1.0
 
 
 @_inlined
@@ -2562,14 +2569,16 @@ def dry_share(packed):
 
 
 @_inlined
-def hunger(cover, held, under, loose, films, iy, ix):
+def hunger(cover, held, under, loose, films, bonded, iy, ix):
     """How bare the tooth at a pixel is, 0..1: 1 where it carries nothing,
     less where pigment lies on it, none where that covers it (``COVERS``
     thick on the share of the pixel that is covered). Bare tooth takes the
     dust off a loaded tool readily; paper whose tooth is covered, none."""
     covered = cover[iy, ix]
     there = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
-    there += films[iy, ix, 0, IV] + films[iy, ix, 1, IV]
+    # (the films are read only where one lies: on most pixels, none)
+    for _ in once(bonded[iy, ix, 0, FILM] + bonded[iy, ix, 1, FILM] > 0.0):
+        there += films[iy, ix, 0, IV] + films[iy, ix, 1, IV]
     if covered <= 0.0:
         return 1.0
     thick = there / covered
@@ -2759,7 +2768,7 @@ def rub_under(
                 slides = glides * takes
             down = sticks
             if sticks > 0.0:  # (not an eraser, which lays nothing)
-                takes *= hunger(cover, held, under, loose, films, iy, ix)
+                takes *= hunger(cover, held, under, loose, films, bonded, iy, ix)
                 down = sticks * (1.0 - (1.0 - takes) * dry_share(load))
             reach = reach_under(bonded, films, cover, iy, ix)
             # (the fuller it is, the less it takes)
@@ -2792,7 +2801,8 @@ def rub_under(
             )
             # lay, as dust all over the pixel
             before = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
-            before += films[iy, ix, 0, IV] + films[iy, ix, 1, IV]
+            if bonded[iy, ix, 0, FILM] + bonded[iy, ix, 1, FILM] > 0.0:
+                before += films[iy, ix, 0, IV] + films[iy, ix, 1, IV]
             laid = lay_load(load, held, loose, bonded, iy, ix, down, sticks)
             # spread, from grain to grain
             rate = min(SPREADS * smear * share, 1.0)
@@ -3082,12 +3092,14 @@ def rub_stroke(
 
 
 @_inlined
-def ball_grip(cover, held, under, loose, films, iy, ix):
+def ball_grip(cover, held, under, loose, films, bonded, iy, ix):
     """The share of its ink a ball lays at a pixel: all of it on bare paper,
     less where it skids on a film of pigment or of wax."""
     covered, wax = cover[iy, ix], held[iy, ix, IW]
     there = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
-    there += films[iy, ix, 0, IV] + films[iy, ix, 1, IV]
+    # (the films are read only where one lies: on most pixels, none)
+    for _ in once(bonded[iy, ix, 0, FILM] + bonded[iy, ix, 1, FILM] > 0.0):
+        there += films[iy, ix, 0, IV] + films[iy, ix, 1, IV]
     if covered <= 0.0:
         return 1.0
     thick = there / covered
@@ -3123,7 +3135,21 @@ def stain(ink, iy, ix, dv, k, pen):
 
 @_inlined
 def blot(
-    cover, held, under, loose, films, ink, inked, x, y, volume, radius, full, k, pen
+    cover,
+    held,
+    under,
+    loose,
+    films,
+    bonded,
+    ink,
+    inked,
+    x,
+    y,
+    volume,
+    radius,
+    full,
+    k,
+    pen,
 ):
     """Leave a drop of ink of this ``volume`` at (``x``, ``y``): a round dot
     of this ``radius``, thickest at its middle. It lies in the valleys of
@@ -3151,7 +3177,7 @@ def blot(
             dx, dy = ix + 0.5 - x, iy + 0.5 - y
             share = max(1.0 - (dx * dx + dy * dy) / (radius * radius), 0.0)
             dv = volume * share / weight
-            dv *= ball_grip(cover, held, under, loose, films, iy, ix)
+            dv *= ball_grip(cover, held, under, loose, films, bonded, iy, ix)
             if dv <= 0.0:
                 continue
             stain(ink, iy, ix, dv, k, pen)
@@ -3179,6 +3205,7 @@ def roll_over(
     under,
     loose,
     films,
+    bonded,
     ink,
     inked,
     k,
@@ -3229,7 +3256,11 @@ def roll_over(
             touch = min(max(above / (2.0 * MICRO), 0.0), 1.0) * edge
             if touch <= 0.0:
                 continue
-            dv = rate * touch * ball_grip(cover, held, under, loose, films, iy, ix)
+            dv = (
+                rate
+                * touch
+                * ball_grip(cover, held, under, loose, films, bonded, iy, ix)
+            )
             if dv <= 0.0:
                 continue  # (it skids: no ink, and no more paper inked)
             inked[iy, ix] = max(inked[iy, ix], touch)
@@ -3249,6 +3280,7 @@ def roll_stroke(
     under,
     loose,
     films,
+    bonded,
     ink,
     inked,
     xs,
@@ -3363,6 +3395,7 @@ def roll_stroke(
                 under,
                 loose,
                 films,
+                bonded,
                 ink,
                 inked,
                 x,
@@ -3396,6 +3429,7 @@ def roll_stroke(
             under,
             loose,
             films,
+            bonded,
             ink,
             inked,
             k,
@@ -3424,6 +3458,7 @@ def roll_stroke(
                     under,
                     loose,
                     films,
+                    bonded,
                     ink,
                     inked,
                     k,

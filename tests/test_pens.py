@@ -428,6 +428,7 @@ def _drops(sheet, volume, xs=range(80, 120, 4), y=20.0) -> float:
             sheet.under,
             sheet.loose,
             sheet.films,
+            sheet.bonded,
             sheet.ink,
             sheet.inked,
             x + 0.5,
