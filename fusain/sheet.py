@@ -1052,7 +1052,7 @@ class Sheet:
         ``seed`` (by default one drawn from the sheet's generator). Returns
         the volume it took off the sheet, less what it laid back."""
         tool, width = smudger.tool, smudger.width
-        line, points, u, knot, spacing, pace = _sample(path, width)
+        line, points, u, knot, spacing, pace = _sample(path, width, RUB_STEPS)
         bearing = _profile("pressure", pressure, line, u, knot)
         xs, ys, bearing, steps = eng.as_kernel_arrays(
             points, np.clip(bearing, 0.0, 1.0), spacing
@@ -1103,9 +1103,10 @@ class Sheet:
         return int(self._rng.integers(1 << 31)) if seed is None else int(seed)
 
     def _sampled(self, path, pressure: Profile, width: float):
-        """``path`` sampled for a tip of ``width``: what the kernels take (see
-        :func:`fusain._engine.as_kernel_arrays`), or ValueError."""
-        line, points, u, knot, spacing, _ = _sample(path, width)
+        """``path`` sampled for the point of a stylus of ``width``, at
+        :data:`RUB_STEPS` (at four its groove ripples): what the kernels take
+        (see :func:`fusain._engine.as_kernel_arrays`), or ValueError."""
+        line, points, u, knot, spacing, _ = _sample(path, width, RUB_STEPS)
         bearing = _profile("pressure", pressure, line, u, knot)
         return eng.as_kernel_arrays(points, np.clip(bearing, 0.0, 1.0), spacing)
 
@@ -1224,6 +1225,15 @@ Ends = str | tuple[str, str]
 ENDS = ("round", "flat")
 
 
+#: How many steps a tip takes to its width: a stroke lays what it lays at
+#: each, and four are as fine as eight but for a slightly darker tone where
+#: the paper fills up (a 4B pressed hard 0.5 L*) and for half the time.
+STEPS = 4.0
+#: A tool rubs at each of its steps, and at four it leaves beads along its
+#: way, a step apart; a stylus's groove ripples. They take eight.
+RUB_STEPS = 8.0
+
+
 def _square(ends: Ends) -> tuple[float, float]:
     """Whether a stroke is cut square at its start and at its end (1.0) or
     not (0.0), or ValueError."""
@@ -1236,9 +1246,10 @@ def _square(ends: Ends) -> tuple[float, float]:
     return float(start == "flat"), float(end == "flat")
 
 
-def _sample(path, width: Profile):
+def _sample(path, width: Profile, per: float = STEPS):
     """``path`` sampled finely enough for a tip of ``width`` (a number, or a
-    profile along it, for which the narrowest counts): the path, the points,
+    profile along it, for which the narrowest counts), ``per`` steps to its
+    width and no more than ``2 / per`` apart: the path, the points,
     where they are along it (u, and as knots), how far apart they are, and
     how far apart they would be on a path long enough (the pace of the tip
     where it lands and lifts). ValueError unless the width is a finite
@@ -1251,7 +1262,7 @@ def _sample(path, width: Profile):
         narrowest = float(np.min(_profile("width", width, line, u, knot)))
     if not (math.isfinite(narrowest) and narrowest > 0):
         raise ValueError(f"width must be a number of pixels above 0, got {width!r}")
-    pace = spacing = max(0.25, narrowest / 8.0)
+    pace = spacing = max(2.0 / per, narrowest / per)
     points, _, u, knot = line.sample(spacing)
     if len(points) > 1:
         spacing = line.length / (len(points) - 1)

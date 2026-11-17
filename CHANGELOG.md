@@ -43,6 +43,29 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Strokes are twice as fast, and the picture changes a little
+  (fusain-6ru). A tip lays at samples a quarter of its width apart, not an
+  eighth: shading takes 0.54 to 0.59 of the time, 2000 short strokes and a
+  ballpoint pen 0.65 to 0.69. How far a tip reaches into the tooth for its
+  pressure (the pressure to the power 0.6) is read off a table, within
+  0.003 of it, and the share of graphite that slides under a stump is
+  worked out by products, not a power: with them shading takes 0.47 to
+  0.53 of its time (compiled for this machine with AVX-512 or for haswell),
+  and a stump rubs in 0.85 to 0.90. The tone is a little darker where the
+  paper fills up (mean L* 0.14 lower for an HB shade, 0.45 for a 4B or vine
+  charcoal pressed hard; a wax crayon 0.5 to 0.7 lighter, with a few more
+  flecks of paper), the grain a little coarser (the spread of L* 0.1 to 0.4
+  more), and along a line on a paper with no tooth the tone ripples by 2%
+  of itself a step apart (a third of an L*; on a paper with a tooth, ten
+  times less than its grain). A flat end that a stroke curves sharply into
+  lets 0.93 of a pixel past its cut, not 0.75. A firm pencil line over
+  pastel lies on it as a film for 0.77 to 0.80 of what it would have held
+  on the paper, not 0.88 to 0.90, and shines as much less. A worn stick
+  wears a little wider, so a shading drawn with it next spaces its passes a
+  little differently. Rubbing, smudging, erasing and a stylus keep samples
+  an eighth apart: at a quarter a rub leaves beads along its way, a step
+  apart, and a groove ripples.
+
 - A stub of a shading wanders less (fusain-dpx): a stroke that a corner of
   the area cuts short is kept if it is half a tip long, and each of its
   knots wandered by a tenth of the tip's width however short it was, so
@@ -222,6 +245,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   of HB at 0.4 crushed the tooth by 0.004, and now by 0.0005).
 
 ### Fixed
+
+- A sand eraser over coloured pencil no longer makes NaN (fusain-6ru): where
+  rounding had left a trace of wax at a pixel with nothing to hold it, an
+  eraser that drags wax divided nothing by nothing, and the NaN spread over
+  the whole sheet. Today's drawings never reached it; samples a quarter of
+  the tip apart did.
 
 - Shading with the side of a stick leaves no streaks of bare paper between
   its bands (fusain-cyl). The bands of charcoal, pastel or crayon laid

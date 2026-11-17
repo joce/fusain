@@ -106,8 +106,8 @@ def test_a_path_sampled_once_gives_what_it_gave():
     for path in (points, points[:2], points[:1], spline.as_path(points)):
         plain = spline.as_path(path)
         _, sampled, u, _, spacing, pace = _sample(path, 6.0)
-        want = plain.sample(0.75)
+        want = plain.sample(1.5)  # (a quarter of the tip's width)
         assert np.array_equal(sampled, want[0]) and np.array_equal(u, want[2])
-        assert pace == 0.75
+        assert pace == 1.5
         if len(sampled) > 1:
             assert spacing == plain.length / (len(sampled) - 1)

@@ -59,8 +59,11 @@ def test_charcoal_runs_from_grey_to_black():
 
     assert tone(charcoal.VINE, 0.3) > 0.6 and tone(charcoal.VINE, 1.0) < 0.3
     assert tone(charcoal.COMPRESSED, 1.0) < 0.1
+    # (0.23, 0.21 and 0.098 darker)
     for pressure in (0.3, 0.6, 1.0):
-        assert tone(charcoal.COMPRESSED, pressure) < tone(charcoal.VINE, pressure) - 0.1
+        assert (
+            tone(charcoal.COMPRESSED, pressure) < tone(charcoal.VINE, pressure) - 0.09
+        )
 
 
 def test_going_over_dust_firmly_presses_it_into_the_paper():

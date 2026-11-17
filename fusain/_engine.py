@@ -110,6 +110,13 @@ REACH_SOFT = 1.13
 #: A light touch reaches further than in proportion (the paper gives and the
 #: tip rides on its fibres): the reach goes as the pressure to this power.
 REACH_POWER = 0.6
+#: That curve, as a table over bearings from 0 to REACH_TOP in REACH_STEPS
+#: steps, read between its entries (:func:`reach_curve`): the power was a
+#: quarter of a shade's time. The table is within 0.003 of it at the
+#: lightest bearings, where it bends hardest, and within 2e-6 from 0.05 up.
+REACH_TOP = 2.0
+REACH_STEPS = 2048
+REACH_TABLE = np.linspace(0.0, REACH_TOP, REACH_STEPS + 1) ** REACH_POWER
 #: Share of that reach a paper with no give leaves, and what full give adds.
 GIVE_NONE = 0.6
 GIVE_FULL = 0.8
@@ -1122,6 +1129,17 @@ def within_ends(px, py, ends):
 
 
 @_inlined
+def reach_curve(bearing):
+    """``bearing ** REACH_POWER``, read off :data:`REACH_TABLE` (and worked
+    out beyond it)."""
+    at = bearing * (REACH_STEPS / REACH_TOP)
+    if at >= REACH_STEPS:
+        return bearing**REACH_POWER
+    i = int(at)
+    return REACH_TABLE[i] + (at - i) * (REACH_TABLE[i + 1] - REACH_TABLE[i])
+
+
+@_inlined
 def bear_on_row(row, now, iy, xa, count, ends, streaks, salt):
     """How a tip at ``now`` (see :func:`bear`) bears on ``count`` pixels of
     the row ``iy``, from ``xa`` on, which depends on nothing the sheet holds:
@@ -1165,7 +1183,7 @@ def bear_on_row(row, now, iy, xa, count, ends, streaks, salt):
     for at in range(count):
         ix = xa + at
         if row[0, at] > 0.0:
-            level = 1.0 - reach * row[1, at] ** REACH_POWER
+            level = 1.0 - reach * reach_curve(row[1, at])
             level += JITTER * (unit_noise(ix, iy, salt) - 0.5)
             row[2, at] = level
 
@@ -1899,7 +1917,9 @@ def slip_of(rubbed, there, sheen, barrier, covered):
     if rubbed <= 0.0 or there <= 0.0 or sheen <= 0.0:
         return 0.0
     graphite = min(sheen / there, 1.0)
-    slip = min(SLIDE * rubbed * graphite**SLIDE_POWER, 1.0)
+    # (graphite ** SLIDE_POWER, as products: the power was a tenth of a rub)
+    squared = graphite * graphite
+    slip = min(SLIDE * rubbed * squared * squared * graphite, 1.0)
     if barrier > 0.0:
         sealed = barrier / max(covered, 1e-6) / COVERS
         slip *= 1.0 - min(sealed, 1.0)
@@ -1945,7 +1965,8 @@ def push_along(
                 held[iy, ix, part] -= moved
                 loose[iy, ix, part] += moved
         elif moves:
-            gone = min(there * drag / waxy_at(held, bonded, iy, ix), 1.0)
+            # (wax a rounding left where nothing is, stays)
+            gone = min(there * drag / max(waxy_at(held, bonded, iy, ix), 1e-300), 1.0)
             wax = waxed * gone
             held[iy, ix, IW] -= wax
             slid[IC] += wax
