@@ -43,6 +43,27 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- A stump has a deep load as well as its surface (fusain-bbq). What it
+  lifts is on its surface, which it lays from; as it is rubbed that works
+  into its fibres, and back out as bare paper empties the surface, the two
+  evening out towards being as full as each other (new `Tool.deep`, a
+  volume for each pixel of the tool's face, and `Smudger.deep`; `SOAK_IN`
+  and `SOAK_OUT` in the engine). `tools.STUMP` keeps 2.0 deep in it (and
+  lifts 0.12 of the dust in a pass, from 0.04), `tools.FINGER` 0.3, and no
+  other tool any. One pass through 32 widths of vine charcoal lifts 0.26 to
+  0.32 of what a stump's surface holds (it was 0.11 to 0.13), its surface
+  keeping 0.14 to 0.17 of it, so it still carries little out of a tone (a
+  stump dragged out of charcoal drags 8.2 columns of it onto bare paper,
+  from 8.1); on bare paper it lays 0.98 of the paper's tone 24 widths on,
+  from 0.99. A stump used for long stays grey: rubbed full in 6B and drawn
+  over 28 widths of bare paper five times, it lands at 0.70, 0.90, 0.93,
+  0.96 and 0.97 of the paper's tone, where it was spent in two. Loaded on a
+  patch of 6B it lands at 0.745 of the paper's tone (from 0.73) and keeps
+  half its load after 28 widths. A clean stump fills its deep load too: a
+  bare stump takes 10.4 to 10.7% of a dark tone of 8B in eight rubs (from
+  5%), and one in the hand 1.4% before it is full (from 0.6%). The picture
+  changes wherever a stump or a finger is used.
+
 - Strokes are twice as fast, and the picture changes a little
   (fusain-6ru). A tip lays at samples a quarter of its width apart, not an
   eighth: shading takes 0.54 to 0.59 of the time, 2000 short strokes and a

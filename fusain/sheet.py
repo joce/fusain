@@ -1086,6 +1086,7 @@ class Sheet:
                     tool.smear,
                     tool.scrape,
                     tool.holds,
+                    tool.deep,
                 ],
                 dtype=np.float64,
             ),

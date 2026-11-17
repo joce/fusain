@@ -190,11 +190,13 @@ keeps its load from one pass to the next, so a tone can be worked over and
 over without being worn away, and a stump loaded on a dark patch (of the
 drawing, or of a scrap sheet) draws soft greys of its own. A stump fills
 slowly, over a hundred widths and more of rubbing, and holds only so much
-(`Tool.holds`); it gives its dust to bare paper, which takes it readily (one
-load tones thirty or so widths of the tool), and not to paper that carries a
-tone already, so a full stump leaves a tone as it is and dirties the bare
-paper it strays onto. `Sheet.rub` carries the load from pass to pass either
-way.
+(`Tool.holds`); it gives its dust to bare paper, which takes it readily, and
+not to paper that carries a tone already, so a full stump leaves a tone as it
+is and dirties the bare paper it strays onto. What it lifts works into its
+fibres as it is rubbed, and back out slowly (`Tool.deep`): one pass through a
+dark tone loads it, and a stump that has been used for long stays grey and
+tones a hundred widths and more of bare paper, lighter and lighter.
+`Sheet.rub` carries the load from pass to pass either way.
 
 Most of what a stump or a finger moves goes a short way, a fraction of the
 tool's width: it is the dust on its face, taken up and laid back as it

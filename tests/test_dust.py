@@ -400,6 +400,9 @@ def test_no_pressure_moves_nothing():
         ({"width": 0}, "width must be"),
         ({"holds": 0.0}, "holds must be"),
         ({"holds": float("nan")}, "holds must be"),
+        ({"deep": -1.0}, "deep must be"),
+        ({"deep": float("inf")}, "deep must be"),
+        ({"holds": float("inf")}, "keeps no deep load"),
     ],
 )
 def test_a_tool_checks_its_numbers(changes, message):
@@ -415,6 +418,11 @@ def test_a_tool_checks_its_numbers(changes, message):
     # a tool holds any amount unless it says how much
     assert mine.holds == float("inf") == tools.KNEADED.holds == tools.CHAMOIS.holds
     assert tools.STUMP.holds > tools.FINGER.holds > 0
+    # and keeps nothing deep in it unless it says how much: a stump much,
+    # a finger a little
+    assert mine.deep == 0.0 == tools.KNEADED.deep == tools.CHAMOIS.deep
+    assert tools.STUMP.deep > tools.STUMP.holds > tools.FINGER.holds > tools.FINGER.deep
+    assert tools.FINGER.deep > 0
 
 
 @pytest.mark.parametrize(

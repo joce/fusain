@@ -78,6 +78,17 @@ class Tool:
         so a stump or a finger fills slowly as it is rubbed in a tone and
         then leaves the tone alone. By default a tool holds whatever it
         takes, as an eraser does.
+    deep:
+        How much it holds deep in its fibres when they are full, as a volume
+        for each pixel of its face (0, by default, for a tool that keeps no
+        such load; it needs a tool that holds only so much). What it lifts
+        is on its surface, which it lays from; rubbed, it works that into
+        its fibres, which make room on the surface, and works it back out
+        as the surface empties, slowly, the two evening out towards being
+        as full as each other. So one pass through a dark tone loads a
+        stump while its surface carries little out of the tone, and a stump
+        that has been used for long stays grey and tones bare paper over a
+        long way.
     """
 
     lift_loose: float
@@ -89,6 +100,7 @@ class Tool:
     name: str = ""
     scrape: float = 0.0
     holds: float = math.inf
+    deep: float = 0.0
 
     def __post_init__(self):
         for field in ("lift_loose", "lift_held", "lay", "press", "smear"):
@@ -101,6 +113,10 @@ class Tool:
             raise ValueError(f"scrape must be between 0 and 1, got {self.scrape!r}")
         if not self.holds > 0:
             raise ValueError(f"holds must be above 0, got {self.holds!r}")
+        if not (math.isfinite(self.deep) and self.deep >= 0):
+            raise ValueError(f"deep must be 0 or more, got {self.deep!r}")
+        if self.deep > 0 and math.isinf(self.holds):
+            raise ValueError("a tool that holds whatever it takes keeps no deep load")
         if not (math.isfinite(self.width) and self.width > 0):
             raise ValueError(
                 f"width must be a number of pixels above 0: {self.width!r}"
@@ -112,17 +128,36 @@ class Tool:
 
 
 #: A paper stump: firm and pointed. It smears the dust along and rubs it in.
-#: A little of the dust stays in it at each pass: rubbed for long in a tone
-#: it is full, and tones bare paper for thirty or so of its widths.
+#: A little of the dust stays in it at each pass, and works into its paper:
+#: one pass through a dark tone loads it, rubbed for long in a tone it is
+#: full through and through, and then it tones bare paper over a hundred
+#: and more of its widths, lighter and lighter.
 STUMP = Tool(
-    0.04, 0.02, lay=0.3, press=0.5, smear=2.0, width=10.0, name="stump", holds=1.5
+    0.12,
+    0.02,
+    lay=0.3,
+    press=0.5,
+    smear=2.0,
+    width=10.0,
+    name="stump",
+    holds=1.5,
+    deep=2.0,
 )
 #: A tortillon: a small, hard stump for details.
 TORTILLON = STUMP.with_(width=5.0, name="tortillon")
 #: A finger: broad and soft. It spreads the dust and presses it in; it
-#: fills more slowly than a stump, and holds less for its size.
+#: fills more slowly than a stump, and holds less for its size. Skin is not
+#: paper: only a little works into its grain.
 FINGER = Tool(
-    0.03, 0.01, lay=0.25, press=0.8, smear=2.5, width=22.0, name="finger", holds=1.0
+    0.03,
+    0.01,
+    lay=0.25,
+    press=0.8,
+    smear=2.5,
+    width=22.0,
+    name="finger",
+    holds=1.0,
+    deep=0.3,
 )
 #: A chamois: it wipes most of the dust away and spreads the rest thin.
 CHAMOIS = Tool(1.6, 0.04, lay=0.12, press=0.1, smear=1.0, width=30.0, name="chamois")

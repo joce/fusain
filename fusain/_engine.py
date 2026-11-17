@@ -388,6 +388,21 @@ SKID_FULL = 1.0
 #: little for a stump or a finger) is carried far, and it is given back to
 #: bare tooth and to no other paper (:func:`hunger`).
 SPREAD = 16.0
+#: What a stump or a finger lifts into its load is on its surface, which it
+#: lays from and which governs how much it carries out of a tone. Rubbed,
+#: it works that load into its fibres, which keep a deep load of their own
+#: (:attr:`fusain.Tool.deep`), and the deep load works back out to the
+#: surface as that is emptied: the two even out towards being as full as
+#: each other, the gap between them closing by the share 1 - exp(-rate) for
+#: each of its widths rubbed at full pressure, at SOAK_IN as the surface
+#: loses to the deep load and at SOAK_OUT, more slowly, as it gains from it.
+#: So the surface stays shallow and leaves a tone with little of it, while
+#: the deep load fills behind it and makes room on it: one pass through a
+#: dark tone loads a stump, and a stump that has been used for long stays
+#: grey, its surface filling again from the deep load as bare paper takes
+#: its dust (:func:`soak`).
+SOAK_IN = 0.3
+SOAK_OUT = 0.08
 #: It spreads the dust this many times as readily as it stirs it.
 SPREADS = 3.0
 #: A tool that rubs reaches the dust underneath less than the dust on top:
@@ -2395,6 +2410,35 @@ def lay_load(load, held, loose, bonded, iy, ix, down, sticks):
     return laid
 
 
+@_inlined
+def soak(load, deep, room, depth, worked):
+    """Work what a tool carries on its surface (``load``, of which it holds
+    ``room`` when full) and deep in its fibres (``deep``, of which it holds
+    ``depth``) towards being as full in the one as in the other, as it is
+    rubbed for ``worked`` of its widths at full pressure: the gap between
+    how full the two are closes by the share 1 - exp(-rate * worked), at
+    the rate SOAK_IN as the surface gives to the deep load and SOAK_OUT as
+    it takes from it. What moves is a share of all that is carried, pigment,
+    paste and wax alike. Nothing moves in a tool that keeps no deep load."""
+    there, within = load[IV], deep[IV]
+    moved, out_of, into = 0.0, 0.0, 0.0
+    if depth > 0.0 and worked > 0.0:
+        gap = there / room - within / depth  # (how much fuller the surface is)
+        rate = SOAK_IN if gap > 0.0 else SOAK_OUT
+        closes = 1.0 - math.exp(-rate * worked)
+        moved = gap * closes * room * depth / (room + depth)  # (into the deep)
+        # (as a share of what it comes from, which is never more than all)
+        if moved > 0.0:
+            out_of = moved / there
+        elif moved < 0.0:
+            into = -moved / within
+    for _ in once(moved != 0.0):
+        for part in range(load.shape[0]):
+            down = load[part] * out_of - deep[part] * into
+            load[part] -= down
+            deep[part] += down
+
+
 @njit(cache=True, error_model="numpy")
 def rub_under(
     cover,
@@ -2421,8 +2465,9 @@ def rub_under(
     lays back over each of its own widths, how strongly it presses the dust
     in, how strongly it smears, how far it scrapes through wax, how its
     face bears, summed over it (:func:`face_of`), the volume it holds
-    when it is full, and the share of what it pushes along that it lays
-    back over each of its widths]; ``now`` is [x, y,
+    when it is full, the share of what it pushes along that it lays
+    back over each of its widths, and the volume it holds deep in it when
+    that is full]; ``now`` is [x, y,
     heading (x, y), its pressure, and, for a tool landing or lifting, the x
     and y of where it does so (else NaN): it rubs then only the paper it
     covers there]. ``carried``, ``crush``, ``polish``, ``ink``, ``inked`` and
@@ -2432,6 +2477,7 @@ def rub_under(
 
     To what it has lifted (its load) the tool adds the less the fuller it
     is, and it gives the dust of it to bare tooth only (:func:`hunger`).
+    As it slides, its load and its deep load even out (:func:`soak`).
     What is on its face it shares out among the pixels under it in each
     step (:func:`face_gives`).
 
@@ -2474,6 +2520,10 @@ def rub_under(
     load = carried[0]
     near = carried[1]  # the dust on the face of the tool, soon laid back
     slid = carried[2]  # held graphite it is pushing along, likewise
+    # (what it has lifted works into its fibres, and out again, as it is
+    # rubbed: for this share of its width at full pressure)
+    worked = pressure * step / (2.0 * bound)
+    soak(load, carried[3], tool[8], tool[10], worked)
     # (what its face gives in this step, and how much of it there is to give)
     gives, glide = giving[0], giving[1]
     room = face_gives(gives, near, per_near * step * pressure * tool[7])
@@ -2651,8 +2701,8 @@ def rub_stroke(
     """Rub one pass of a round tool through the points (``xs``, ``ys``),
     bearing with ``pressures`` (0..1) and moving ``steps`` pixels at each.
     ``tool`` is [its radius in pixels, ``lift_loose``, ``lift_held``,
-    ``lay``, ``press``, ``smear``, ``scrape``, ``holds``]. Where it bears
-    fully, one
+    ``lay``, ``press``, ``smear``, ``scrape``, ``holds``, ``deep``]. Where
+    it bears fully, one
     pass lifts the shares ``lift_loose`` of the dust (less of the dust
     underneath) and ``lift_held`` of the held pigment onto the tool, presses
     the share ``press`` of the dust into the paper, and stirs the share
@@ -2662,9 +2712,12 @@ def rub_stroke(
     bare; paper that carries pigment takes the less of it the more it
     carries, and none once that covers it (:func:`hunger`). The tool lifts
     the less the fuller it is, and no more once it carries ``holds`` for
-    each pixel of its face. So a stump fills slowly as it is rubbed in a
-    tone, leaves a tone as it is once it is full, whatever colour it
-    carries, and tones bare paper. As strongly as it smears, it also
+    each pixel of its face. What it has lifted works into its fibres as it
+    is rubbed, and back out as its surface empties, to keep up to ``deep``
+    for each pixel of its face (:func:`soak`). So a stump fills slowly as it
+    is rubbed in a tone, leaves a tone as it is once it is full, whatever
+    colour it carries, and tones bare paper, for long once it is full deep
+    in it too. As strongly as it smears, it also
     spreads the dust on top over the pixels around
     (:data:`SPREAD`: this, the dust on its face, is most of what it
     moves, and it goes a fraction of the tool's width), and slides the
@@ -2701,10 +2754,11 @@ def rub_stroke(
     ``inked``; arrays with no rows if no pen has drawn) comes off with it,
     onto the tool (:func:`scrape_ink`). No other tool touches the ink.
 
-    ``carried`` is what the tool carries, three rows packed as dust is with
+    ``carried`` is what the tool carries, four rows packed as dust is with
     the volume of paste and the volume of wax after ([K (N bands), S,
     volume, sheen, paste, wax]): what it has lifted, the dust on its face,
-    soon laid back, and the held graphite it is pushing along, likewise.
+    soon laid back, the held graphite it is pushing along, likewise, and
+    what it has worked deep into its fibres.
     The wax of a pixel (``held[IW]``, wherever it lies there) goes with what
     it is in: a tool that takes what the paper holds, a film or paste takes
     as much of the wax, and lays it back where it lays its paste, so the
@@ -2720,13 +2774,14 @@ def rub_stroke(
     """
     streaks = streaks_of(salt)
     count = xs.shape[0]
-    gear = np.empty(10)  # (the tool, as rub_under takes it)
+    gear = np.empty(11)  # (the tool, as rub_under takes it)
     gear[:7] = tool[:7]
     gear[7] = face_of(tool[0])
     gear[8] = tool[7] * math.pi * (tool[0] + 0.5) ** 2
     # (what it pushes along it lays back as it does the dust on its face,
     # if it smears; the wax it drags, if it does not, further on)
     gear[9] = SPREAD if tool[5] > 0.0 else DRAG_LAY
+    gear[10] = tool[8] * math.pi * (tool[0] + 0.5) ** 2  # (its deep load, full)
     now = np.empty(7)
     now[5], now[6] = math.nan, math.nan
     # what the face of the tool gives in a step, of its dust and of the

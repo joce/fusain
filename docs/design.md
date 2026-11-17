@@ -592,8 +592,9 @@ A tool is a tip plus, usually, a medium.
   and it takes less the fuller it is and nothing once it is full: a tone
   can be rubbed again and again without wearing away, no pass leaves a pale
   dot where it lands, and a stump loaded on a dark patch draws a tone on
-  bare paper, which takes the dust off it readily (one load lasts thirty or
-  so of its widths). A bare
+  bare paper, which takes the dust off it readily. What it lifts works into
+  its fibres, a deep load that comes back out slowly (`Tool.deep`), so a
+  stump that has been used for long stays grey. A bare
   `Tool` is clean each time it is put to the paper and takes away what it
   still carries; `Sheet.rub` keeps the load across its own passes either
   way.
@@ -841,34 +842,60 @@ orange and a blue pastel leaves a passage from the one to the other about
 a width and a half of the finger wide (from a quarter of the blue to three
 quarters, after 18 passes; two widths after 72), with a tenth of the other
 colour two widths out; and of what a stump drags out of a tone onto bare
-paper, two thirds lies within one width of the edge. What a tool lifts into
-its load is the small share that goes far, and a stump or a finger lifts
-little (`Tool.lift_loose`, a twenty-fifth of the dust in a pass): the trail
-of that stump is a fiftieth of the tone three widths out and goes on,
-fainter.
+paper, nearly two thirds lies within one width of the edge. What a tool
+lifts into its load is the small share that goes far, and a stump or a
+finger lifts little (`Tool.lift_loose`: an eighth of the dust in a pass for
+a stump, most of which goes deep into it, and a thirtieth for a finger):
+the trail of that stump is a fortieth of the tone three widths out and goes
+on, fainter.
 
-The load is what a tool tones with, and two rules make a stump that has
+The load is what a tool tones with, and three rules make a stump that has
 been used for long a different thing from one dragged once through a tone.
-A stump or a finger holds so much (`Tool.holds`, a volume for each pixel
-of its face) and lifts the less the fuller it is: it fills slowly, over a
-hundred widths and more of rubbing in a tone, and once full it takes
-nothing more. And it gives the dust of its load to bare tooth only
+A stump or a finger holds so much on its surface (`Tool.holds`, a volume
+for each pixel of its face) and lifts the less the fuller that is: it fills
+slowly, over a hundred widths and more of rubbing in a tone, and once full
+it takes nothing more. It gives the dust of its load to bare tooth only
 (`hunger`): where the paper carries nothing it lays `Tool.lay` of its load
 over each of its widths, less where pigment lies already, and nothing once
 that covers the tooth (`COVERS` thick, on the covered share of the pixel).
+And what it lifts works into it: a stump is paper rolled tight, and as it
+is rubbed what is on its surface works into its fibres, which keep a deep
+load of their own (`Tool.deep`, a volume for each pixel of its face, more
+than its surface holds), and works back out to the surface as bare paper
+empties that. The two even out towards being as full as each other, the gap
+between them closing by `1 - exp(-SOAK_IN)` for each width of the tool
+rubbed at full pressure as the surface gives to the deep load, and by
+`1 - exp(-SOAK_OUT)`, about a quarter as fast, as it takes from it
+(`soak`); what moves is a share of all the tool carries, pigment, paste and
+wax alike, and the deep load is part of `Smudger.load`. A finger keeps a
+little in the grain of its skin (`FINGER.deep` is three tenths of what it
+holds); an eraser, a chamois and a tool that holds whatever it takes keep
+none.
+
 So a full stump leaves a tone as it is, however often it goes over it, and
 a finger loaded with one colour leaves a tone of another clean, where an
 exchange both ways would bring its colour all over it; but on bare paper
-the same stump draws a tone of its own: loaded on a patch of 6B, 0.74 of
-the paper's tone where it lands, 0.85 eight of its widths on, 0.90 after
-sixteen and 0.94 after twenty-four, by when it has laid seven eighths of
-what it held (while the rub that loads it strayed past the patch and
-spent some of its load on the bare paper there, the stump came off it 7%
-less full and had laid 0.92 of that by then). (In the first build it laid 0.59, 0.92, 0.98 and 0.99: darker where
-it landed, and spent sooner.) A stump dragged once through a tone has
-hardly begun to fill, and leaves little beyond what was on its face. A
-full stump also lays dust on whatever bare paper it strays onto at the
-edge of a tone, as a dirty stump does. Paste sticks to any paper, bare or
+the same stump draws a tone of its own. The surface is what it lays from,
+so it governs how much the stump carries out of a tone, and it stays
+shallow: one pass through 32 widths of vine charcoal leaves 0.14 to 0.17 of
+what it holds there (it was 0.11 to 0.13 before the stump had a deep load),
+while the deep load takes nearly as much again: the stump has lifted 0.26 to
+0.32 in all (it was 0.11 to 0.13), and on bare paper it lays 0.97 and 0.98
+of the paper's tone 16 and 24 widths on (it was 0.98 and 0.99), still
+carrying half of what it lifted. Loaded on a patch of 6B, it lays 0.745 of
+the paper's tone where it lands, 0.85 eight of its widths on, 0.89 after
+sixteen and 0.92 after twenty-four, by when it has laid half of what it
+carried (with no deep load: 0.73, 0.84, 0.90 and 0.945, and seven eighths
+of it; in the first build 0.59, 0.92, 0.98 and 0.99). Rubbed for long in
+that patch it is full through and through, and drawn over 28 widths of bare
+paper again and again it lands at 0.70, 0.90, 0.93, 0.96 and 0.97 of the
+paper's tone, where with no deep load it was spent in two. The price is
+what a clean stump takes off a tone: it fills its deep load too, so a bare
+stump (clean at every rub) takes about 10% of a dark tone of 8B in eight
+rubs, where it took 5% with only its surface to fill, and a stump in the
+hand takes 1.4% of it before it is full, where it took 0.6%. A full stump
+also lays dust on whatever bare paper it strays onto at the edge of a tone,
+as a dirty stump does. Paste sticks to any paper, bare or
 not, so what a finger has taken of an oil pastel it lays back as it goes.
 Wax is as slick to the dust a tool brings as
 to a dry stick (`RESIST_DRY`, where the wax covers the tooth): a stump
