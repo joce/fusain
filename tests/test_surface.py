@@ -305,12 +305,12 @@ def test_a_light_groove_fills_under_a_firm_soft_pencil_and_a_deep_one_does_not()
             sheet.indent(LINE, stylus)
             sheet.shade(BOX, pencils.B6, pressure, angle=60)
             filled[stylus, pressure] = _in_groove(sheet)
-    # (fusain-d7v: the floor of a groove, pressed flat by the stylus, bites
-    # a dry medium less, as a flattened tooth does; the 6B reaches it as it
-    # did, and lays less there: 0.67 of what it lays beside where it laid
-    # 0.96, 0.24 where 0.43 and 0.23 where 0.58)
-    assert filled[0.3, 1.0] > 0.6
-    assert 0.15 < filled[0.3, 0.3] < 0.4
+    # (the floor of a groove, pressed flat by the stylus, bites a dry medium
+    # less, as a flattened tooth does, and the more so the deeper it is:
+    # over eight sheets 0.48 to 0.56 of what the 6B lays beside, 0.15 to
+    # 0.23 at a light touch, 0.19 to 0.23 in a groove pressed at 0.5)
+    assert filled[0.3, 1.0] > 0.4
+    assert 0.1 < filled[0.3, 0.3] < 0.3
     assert filled[0.5, 0.3] < 0.02 and filled[0.5, 1.0] > 0.15
     assert filled[0.7, 1.0] < 0.2
     # a harder lead reaches less far down
@@ -319,6 +319,22 @@ def test_a_light_groove_fills_under_a_firm_soft_pencil_and_a_deep_one_does_not()
         sheet.indent(LINE, 0.4)
         sheet.shade(BOX, pencil, 0.8, angle=60)
     assert _in_groove(hard) < 0.5 * _in_groove(soft)
+
+
+def test_paper_dented_evenly_takes_a_pencil_nearly_as_paper_crushed_as_far():
+    # (the floor of a groove bites as a tooth flattened as far as the groove
+    # is deep, as crushed paper does: at depths of 0.1, 0.2 and 0.4 it takes
+    # 1.16 to 1.24 times what paper crushed as far takes, where it took 1.23
+    # to 1.43, its valleys biting as on paper left alone; the rest is that a
+    # stylus takes the peaks off, where a crush lifts the valleys too)
+    plain = _sheet().shade(BOX, pencils.HB, 0.5, seed=9)
+    for depth in (0.1, 0.2, 0.4):
+        crushed, dented = _sheet(), _sheet()
+        crushed.crush[:] = depth
+        dented.dent[:] = depth
+        on_crushed = crushed.shade(BOX, pencils.HB, 0.5, seed=9)
+        on_dented = dented.shade(BOX, pencils.HB, 0.5, seed=9)
+        assert plain < on_crushed < on_dented < 1.3 * on_crushed
 
 
 @pytest.mark.parametrize("paper", [papers.BRISTOL, papers.ROUGH, Paper(depth=0.0)])

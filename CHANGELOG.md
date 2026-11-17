@@ -223,6 +223,39 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Shading with the side of a stick leaves no streaks of bare paper between
+  its bands (fusain-cyl). The bands of charcoal, pastel or crayon laid
+  flat meet by under half the stick's thickness, and the hand strayed
+  across by a share of each band's length (0.15 of 48 px for vine charcoal
+  6 px thick) and varied that length by a tenth: neighbouring bands parted
+  where they were meant to meet. Lined up on where each pair of bands
+  actually met, over four sheets, a natural hand left a light line there
+  of +10 to +20 in L* under compressed charcoal and soft pastel (+2 to +9
+  under vine), with the grain's own wobble ±1 to 3. The hand now lays each
+  band beside the last as steadily as for the stick's thickness, by which
+  it strays and its band varies: +2.5 at most. Where bands meet they still
+  double up into a faint dark line, −1 to −5 under a natural hand and −3
+  to −9 with ruled strokes, as before. Bands that overlap less (0.35 of
+  the thickness) would even out the pigment, but wax polishes by the firmest
+  pass and not by the sum of them, so the bands' light ends would leave a
+  dull line instead (oil pastel's polish 0.82 uneven, from 0.67). A pencil
+  on its side, whose soft bands overlap by half, strays as before.
+- The floor of a shallow groove bites a dry medium as a tooth flattened as
+  far as the groove is deep, as crushed paper does. It bit less only
+  where the stylus took the peaks off and as much as fresh paper in its
+  valleys, so that paper dented evenly 0.1 to 0.4 deep took 1.23 to 1.43
+  times what paper crushed as far takes (1.16 to 1.24 now), and an HB
+  shaded over three light layers of ballpoint hatching laid 1.10 times
+  what it lays on bare paper (1.01 now, the pencil's grain held alike). A
+  6B shaded firmly over a groove pressed at 0.3 lays 0.48 to 0.56 of what
+  it lays beside, from 0.67; firm ballpoint hatching takes an HB from 0.58
+  to 0.62 times what light hatching takes to 0.51 to 0.55, and grooves
+  deeper than the tooth are as they were.
+- `tests/test_pens.py` and `tests/test_dust.py` are pinned on what their
+  bounds mean over several sheets, not on one: the pencil over light and
+  firm ink with its grain held alike, and the bare paper left between the
+  bands of a vine stick at 0.02 (0.036 to 0.071 over twenty sheets).
+
 - Polish no longer outlasts the wax that holds it up (fusain-979). A tool
   cut the polish of a pixel to what the wax left there holds up (`WAX_FAST`
   thick on the covered share) as it lifted, before it dragged wax off the

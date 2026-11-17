@@ -199,7 +199,12 @@ into it, as far as all it covers is indented; the sheet keeps no width of
 a groove, since the dent around the tip says it, for grooves of any width,
 crossed or pressed over each other. Where the point that pressed it took
 the peaks off, the floor is flat, as a tooth pressed flat is, and bites a
-dry medium as little. Both show in the
+dry medium as little; and the whole floor of a shallow groove bites as a
+tooth flattened as far as the groove is deep, as crushed paper does (its
+valleys bit as on fresh paper, so that paper dented evenly took 1.23 to
+1.43 times what paper crushed as far takes, and 1.16 to 1.24 now, the
+rest being that a stylus takes the peaks off where a crush lifts the
+valleys too). Both show in the
 relief the lamp lights. There a flattened patch has been pressed down: its
 peaks come down towards its valleys, by `press` of their height, so that
 pressed flat it is level with them, a little below the paper around it,
@@ -474,7 +479,15 @@ A tool is a tip plus, usually, a medium.
   put down and lifted it is cut straight across, as the side of a stick
   lands and lifts all along its length at once, and a shading lays such
   bands side by side, overlapping only by their rounded ends. (It was an
-  ellipse for every medium.)
+  ellipse for every medium.) The hand lays each band beside the last as
+  steadily as for the stick's thickness, by which it strays across and its
+  band varies, not by its length: straying by a share of the length parted
+  the bands where they met, in lines of bare paper +10 to +20 in L* under
+  compressed charcoal and soft pastel, and +2.5 at most now. Where they
+  meet the bands still double up into a faint dark line (−1 to −5 in L*
+  under a natural hand, −3 to −9 with ruled strokes): a light pass lays
+  more than its share, and overlapping less would leave a dull line in
+  polished wax instead, which goes by the firmest pass.
 - **Wear** (built). A `Stick` is a medium in the hand, with the state of its
   tip. A point is a cone, which loses volume as the cube of where it is cut:
   the cube of the flat's width grows with the volume the tip has laid, up to

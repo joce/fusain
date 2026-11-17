@@ -82,6 +82,7 @@ def strokes(
     rng: np.random.Generator,
     broad: float | None = None,
     inset: tuple[float, float] = (0.0, 0.0),
+    lined: float | None = None,
 ) -> Iterator[tuple[np.ndarray, float, float]]:
     """The strokes that shade the polygon ``outline``: for each, its path
     (points, (K, 2)), how firm it is against the others (about 1) and the
@@ -91,14 +92,21 @@ def strokes(
     among the others by the second. ``inset`` is how far each stroke is
     shortened at its start and at its end, from where the hand puts it (in
     widths of the tip): half a width keeps the round end of a tip inside it.
-    Neither end is shortened by more than a quarter of the stroke."""
+    Neither end is shortened by more than a quarter of the stroke.
+    ``lined`` is what the hand lines each stroke up by against the last, and
+    strays by a share of (``broad`` by default): the edge of the band of a
+    stick laid flat, which it lays beside the last band, is the stick's
+    thickness, and so is how far the band's length varies from stroke to
+    stroke (a stray of the band's own length would part the bands or pile
+    them up, where they meet by only a share of that thickness)."""
     broad = width if broad is None else broad
+    share = 1.0 if lined is None else lined / broad
     turn = math.radians(angle)
     across = np.array([math.sin(turn), math.cos(turn)])
     along = np.array([math.cos(turn), -math.sin(turn)])
     reach = outline @ across
     for offset in np.arange(reach.min() + 0.5 * spacing, reach.max(), spacing):
-        offset += rng.normal(0.0, STRAY_ACROSS * broad * hand)
+        offset += rng.normal(0.0, STRAY_ACROSS * broad * share * hand)
         cuts = _crossings(outline, across, offset)
         for start, end in zip(cuts[0::2], cuts[1::2], strict=True):
             start = start + rng.uniform(-1.0, 1.0) * STRAY_ALONG * width * hand * along
@@ -117,7 +125,8 @@ def strokes(
             path += rng.normal(0.0, wander, path.shape)
             firm = rng.uniform(1.0 - FIRMNESS * hand, 1.0 + FIRMNESS * hand)
             # (however unsteady the hand, a tip keeps some width)
-            tip = width * max(rng.uniform(1.0 - WIDTH * hand, 1.0 + WIDTH * hand), 0.25)
+            vary = WIDTH * hand * share
+            tip = width * max(rng.uniform(1.0 - vary, 1.0 + vary), 0.25)
             yield path, firm, tip
 
 

@@ -1136,7 +1136,8 @@ class Sheet:
         (0 runs across the sheet, 90 up it). ``spacing`` is how far apart they
         are (by default a little over half a width, so that they overlap; the
         even bands of a stick laid flat side by side, overlapping only by
-        their rounded ends).
+        their rounded ends, each laid beside the last as steadily as for
+        its thickness, not its length).
         ``hand`` is how
         unsteady the hand is: 1 for a natural one, 0 for ruler-straight
         strokes, evenly spaced and all alike. ``tilt`` is as for
@@ -1185,6 +1186,8 @@ class Sheet:
         outline = hatching.as_outline(area)
         broad = _breadth(medium, width, tilt)  # how wide a stroke's mark is
         gap = _apart(medium, width, broad) if spacing is None else spacing
+        # (the hand lays the band of a stick laid flat beside the last one)
+        lined = width if _lies_flat(medium) and broad > width else None
         _check_hatching(width, gap, angle, hand)
         laid = 0.0
         # (one draw from the sheet's generator for the whole shading, however
@@ -1195,7 +1198,7 @@ class Sheet:
         base = self._seed(seed)
         rng = np.random.default_rng(base)
         for k, (path, firm, tip) in enumerate(
-            hatching.strokes(outline, angle, width, gap, hand, rng, broad, inset)
+            hatching.strokes(outline, angle, width, gap, hand, rng, broad, inset, lined)
         ):
             along = hatching.bearing(pressure, path, firm, hand)
             # (a stick's tip is as wide as it has worn, whatever the hand)
@@ -1349,10 +1352,18 @@ def _apart(medium: Medium | Stick | Pen | HeldPen, width: float, broad: float) -
     by side, and only their ends overlap, as the strokes of its point do."""
     if isinstance(medium, Pen | HeldPen):
         return PEN_SPACING * broad
-    known = medium.medium if isinstance(medium, Stick) else medium
-    if known.flat_side:
+    if _lies_flat(medium):
         return broad - width + hatching.SPACING * width
     return hatching.SPACING * broad
+
+
+def _lies_flat(medium: Medium | Stick | Pen | HeldPen) -> bool:
+    """Whether the side of ``medium`` lies flat on the paper, a band even
+    across (see :attr:`Medium.flat_side`); a pen has no side."""
+    if isinstance(medium, Pen | HeldPen):
+        return False
+    known = medium.medium if isinstance(medium, Stick) else medium
+    return known.flat_side
 
 
 def _size(name: str, value) -> int:
