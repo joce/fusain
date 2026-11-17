@@ -53,8 +53,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   of its time (compiled for this machine with AVX-512 or for haswell), and
   a stump rubs in 0.85 to 0.90. The tone is a little
   darker where the paper fills up (mean L* 0.14 lower for an HB shade, 0.45
-  for a 4B or vine charcoal pressed hard), the grain a little coarser (the
-  spread of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
+  for a 4B or vine charcoal pressed hard; a wax crayon 0.5 to 0.7 lighter,
+  with a few more flecks of paper), the grain a little coarser (the spread
+  of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
   the tone ripples by 2% of itself a step apart (a third of an L*; on a
   paper with a tooth ten times smaller than its grain). A flat end that a
   stroke curves sharply into lets 0.93 of a pixel past its cut, not 0.75.
@@ -1066,8 +1067,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   of its time (compiled for this machine with AVX-512 or for haswell), and
   a stump rubs in 0.85 to 0.90. The tone is a little
   darker where the paper fills up (mean L* 0.14 lower for an HB shade, 0.45
-  for a 4B or vine charcoal pressed hard), the grain a little coarser (the
-  spread of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
+  for a 4B or vine charcoal pressed hard; a wax crayon 0.5 to 0.7 lighter,
+  with a few more flecks of paper), the grain a little coarser (the spread
+  of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
   the tone ripples by 2% of itself a step apart (a third of an L*; on a
   paper with a tooth ten times smaller than its grain). A flat end that a
   stroke curves sharply into lets 0.93 of a pixel past its cut, not 0.75.
@@ -1363,8 +1365,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   of its time (compiled for this machine with AVX-512 or for haswell), and
   a stump rubs in 0.85 to 0.90. The tone is a little
   darker where the paper fills up (mean L* 0.14 lower for an HB shade, 0.45
-  for a 4B or vine charcoal pressed hard), the grain a little coarser (the
-  spread of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
+  for a 4B or vine charcoal pressed hard; a wax crayon 0.5 to 0.7 lighter,
+  with a few more flecks of paper), the grain a little coarser (the spread
+  of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
   the tone ripples by 2% of itself a step apart (a third of an L*; on a
   paper with a tooth ten times smaller than its grain). A flat end that a
   stroke curves sharply into lets 0.93 of a pixel past its cut, not 0.75.
@@ -1609,8 +1612,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   of its time (compiled for this machine with AVX-512 or for haswell), and
   a stump rubs in 0.85 to 0.90. The tone is a little
   darker where the paper fills up (mean L* 0.14 lower for an HB shade, 0.45
-  for a 4B or vine charcoal pressed hard), the grain a little coarser (the
-  spread of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
+  for a 4B or vine charcoal pressed hard; a wax crayon 0.5 to 0.7 lighter,
+  with a few more flecks of paper), the grain a little coarser (the spread
+  of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
   the tone ripples by 2% of itself a step apart (a third of an L*; on a
   paper with a tooth ten times smaller than its grain). A flat end that a
   stroke curves sharply into lets 0.93 of a pixel past its cut, not 0.75.
@@ -1730,8 +1734,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   of its time (compiled for this machine with AVX-512 or for haswell), and
   a stump rubs in 0.85 to 0.90. The tone is a little
   darker where the paper fills up (mean L* 0.14 lower for an HB shade, 0.45
-  for a 4B or vine charcoal pressed hard), the grain a little coarser (the
-  spread of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
+  for a 4B or vine charcoal pressed hard; a wax crayon 0.5 to 0.7 lighter,
+  with a few more flecks of paper), the grain a little coarser (the spread
+  of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
   the tone ripples by 2% of itself a step apart (a third of an L*; on a
   paper with a tooth ten times smaller than its grain). A flat end that a
   stroke curves sharply into lets 0.93 of a pixel past its cut, not 0.75.
@@ -1820,8 +1825,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   of its time (compiled for this machine with AVX-512 or for haswell), and
   a stump rubs in 0.85 to 0.90. The tone is a little
   darker where the paper fills up (mean L* 0.14 lower for an HB shade, 0.45
-  for a 4B or vine charcoal pressed hard), the grain a little coarser (the
-  spread of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
+  for a 4B or vine charcoal pressed hard; a wax crayon 0.5 to 0.7 lighter,
+  with a few more flecks of paper), the grain a little coarser (the spread
+  of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
   the tone ripples by 2% of itself a step apart (a third of an L*; on a
   paper with a tooth ten times smaller than its grain). A flat end that a
   stroke curves sharply into lets 0.93 of a pixel past its cut, not 0.75.
@@ -1988,8 +1994,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   of its time (compiled for this machine with AVX-512 or for haswell), and
   a stump rubs in 0.85 to 0.90. The tone is a little
   darker where the paper fills up (mean L* 0.14 lower for an HB shade, 0.45
-  for a 4B or vine charcoal pressed hard), the grain a little coarser (the
-  spread of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
+  for a 4B or vine charcoal pressed hard; a wax crayon 0.5 to 0.7 lighter,
+  with a few more flecks of paper), the grain a little coarser (the spread
+  of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
   the tone ripples by 2% of itself a step apart (a third of an L*; on a
   paper with a tooth ten times smaller than its grain). A flat end that a
   stroke curves sharply into lets 0.93 of a pixel past its cut, not 0.75.
