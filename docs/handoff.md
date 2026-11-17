@@ -1,7 +1,7 @@
 # Handoff: the open issues, 16 November 2026
 
 Where the issues stand after the two passes of 15 and 16 November (pull
-requests #49 to #68 here, #7 to #9 in murex), and what can be picked up
+requests #49 to #71 here, #7 to #9 in murex), and what can be picked up
 next. The issues themselves are in Beads: `bd show <id>` has the
 description and the measurements of each, and `bd ready` what is open. This
 file only sorts them; delete it once they are done or sorted again.
@@ -27,8 +27,10 @@ The first pass (#49 to #60): sixteen issues closed, twenty open.
 - New in the library: a `seed=` on `Sheet.stroke`, `shade`, `smudge`,
   `erase` and `rub`.
 
-The second pass (#61 to #68): six closed, fourteen open, none of them able
-to go without the owner.
+The second pass (#61 to #71): seven closed, thirteen open, none of them
+able to go without the owner. `fusain-9vi`, the macaw's feet, was done with
+the owner in a session of its own (#71); `make pre-push` now runs each
+check once, and `make tox` the full matrix (#70).
 
 The five that could go are closed: `fusain-hn4` (#61), `fusain-5sj` (#62),
 `fusain-dpx` (#63), `fusain-92i` (#64) and `fusain-lir` (#66). A fault found
@@ -71,7 +73,7 @@ Results of the passes that the numbers cannot settle:
   open on 15 November, not to be measured or pinned again for now.
 - `murex-ant` (in murex): waits on oilpaint.
 
-## The fourteen open issues, and `murex-krb`
+## The thirteen open issues, and `murex-krb`
 
 ### Done on the owner's defaults (#68 here, #9 in murex)
 
@@ -84,7 +86,7 @@ Results of the passes that the numbers cannot settle:
   oilpaint recorded again), but only after oilpaint's later engine changes
   are brought into murex and oilpaint depends on murex.
 
-### Need the owner's view (14)
+### Need the owner's view (13)
 
 What the right behaviour is, which the code cannot tell:
 
@@ -112,13 +114,6 @@ New modelling, each at a cost:
 
 Waiting since before, as said above: `fusain-6ru`, `fusain-fdh`,
 `fusain-cyl`.
-
-The owner's eye:
-
-- `fusain-9vi`: the macaw's feet and legs. Since `fusain-ny8` a change to
-  the feet stays in the feet (2.6% of the drawn pixels move, where 82%
-  did), so they can be redrawn without the rest of the bird changing. Ask
-  before calling the legs done.
 
 ## How the passes were run, for the next one
 
