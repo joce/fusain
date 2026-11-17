@@ -415,6 +415,32 @@ def test_a_white_pencil_pressed_hard_burnishes_nearly_as_the_blender_and_lighten
         pencils.BLENDER.with_(melts=1.5)
 
 
+def test_a_softer_pencil_of_the_same_colour_melts_and_burnishes_more():
+    # (fusain-6uj) a soft waxy core melts into the film more than a hard one
+    cream = pencils.coloured("#f4f1ea")
+    assert cream.melts == pytest.approx(cream.pale)
+    soft, hard = cream.with_(softness=0.8), cream.with_(softness=0.3)
+    assert hard.melts < cream.melts < soft.melts <= 1.0
+    assert soft.melts == pytest.approx(cream.melts * 0.8 / pencils.COLOURED_SOFTNESS)
+    assert pencils.coloured("#ffffff").with_(softness=1.0).melts == 1.0
+    assert cream.with_(softness=pencils.COLOURED_SOFTNESS).melts == cream.melts
+    # a strong colour has nothing to melt; the blender and an explicit value stay
+    assert pencils.coloured(RED).with_(softness=1.0).melts == 0.0
+    assert pencils.BLENDER.with_(softness=0.2).melts == 1.0
+    assert cream.with_(softness=0.8, melts=0.3).melts == 0.3
+    fixed = cream.with_(melts=0.3)
+    assert fixed.with_(softness=0.9).melts == 0.3
+    polish = {}
+    for seed in (1, 2, 3):
+        base = _sheet()
+        _layers(base, pencils.coloured(RED), 3, 0.5)
+        for name, medium in (("soft", soft), ("hard", hard)):
+            test = base.copy()
+            test.shade(BOX, medium, 1.0, angle=20, seed=seed)
+            polish.setdefault(name, []).append(test.polish[INSIDE].mean())
+    assert all(s > h for s, h in zip(polish["soft"], polish["hard"], strict=True))
+
+
 # --------------------------------------------------------------------------
 # where a tip begins to polish
 

@@ -97,9 +97,18 @@ PALE_MELTS = 0.75
 PALE_RANGE = 40.0
 
 
+def melts_at(pale: float, softness: float) -> float:
+    """How far a coloured lead melts (:attr:`fusain.Medium.melts`) that
+    would melt ``pale`` at the softness of an ordinary coloured pencil, at
+    that ``softness``: in proportion to it, so that a softer, waxier core
+    burnishes more and a harder one less (assumed), up to 1, the blender."""
+    return min(pale * softness / COLOURED_SOFTNESS, 1.0)
+
+
 def melts_of(color: ColorLike) -> float:
     """How far a coloured lead of that colour melts into a film of wax it is
-    pressed hard on (:attr:`fusain.Medium.melts`): as far as it is pale. A
+    pressed hard on (:attr:`fusain.Medium.melts`), at the softness of an
+    ordinary coloured pencil: as far as it is pale. A
     white or a cream pencil burnishes nearly as the blender does, a pale
     blue or a pink one somewhat, a yellow or a red one not (assumed: a pale
     lead holds little pigment, and the wax and filler that make up the rest
@@ -116,13 +125,15 @@ def coloured(color: ColorLike, name: str | None = None) -> Medium:
     as the blender does, the more the paler it is (:func:`melts_of`), and
     lays its own pale colour as it does."""
     lead = Pigment(color, COLOURED_OPACITY, COLOURED_STRENGTH, name)
+    pale = melts_of(color)
     return Medium(
         lead,
         softness=COLOURED_SOFTNESS,
         binding=COLOURED_BINDING,
         wax=COLOURED_WAX,
         name=name or f"{lead.hex} pencil",
-        melts=melts_of(color),
+        melts=pale,
+        pale=pale,
     )
 
 

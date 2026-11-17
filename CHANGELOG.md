@@ -8,6 +8,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- A coloured pencil's `melts` follows its softness: `Medium.with_(softness=...)` scales it in proportion (clipped to 1), from the new `Medium.pale` (what its colour alone gives at the softness 0.55 of `pencils.coloured`), unless `melts` is given too. A softer, waxier pencil of the same colour burnishes more. The pencils of `coloured` are unchanged. (fusain-6uj)
 - `tools/benchmark.py` times processor time, not the wall clock, and shows
   the best of N runs (`-n`, 7 by default) with how far they spread. With
   `--against CHECKOUT` it runs another checkout of fusain alongside this

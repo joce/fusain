@@ -50,7 +50,13 @@ class Medium:
         crayon, whose wax binds its own pigment, polishes a film only as far
         as the film is slick already, and stirs it less; a pale one, mostly
         wax and white filler, melts the more the paler it is
-        (:func:`fusain.pencils.melts_of`).
+        (:func:`fusain.pencils.melts_of`), and the softer it is.
+    pale:
+        0..1: for a coloured lead, how far its colour alone would have it
+        melt, at the softness of an ordinary coloured pencil
+        (:func:`fusain.pencils.melts_of`). :meth:`with_` scales ``melts``
+        by the softness it is given from this, unless it is given ``melts``
+        too. 0 (the default) for a medium whose ``melts`` is its own.
     side:
         How many times as wide as its point the side of a stick of it
         marks, held flat (at full tilt): what length of it lies on the
@@ -79,11 +85,12 @@ class Medium:
     name: str = ""
     melts: float = 0.0
     flat_side: bool = False
+    pale: float = 0.0
 
     def __post_init__(self):
         if not isinstance(self.pigment, Pigment):
             raise TypeError(f"pigment must be a murex Pigment, got {self.pigment!r}")
-        for field in ("softness", "binding", "wax", "sheen", "melts"):
+        for field in ("softness", "binding", "wax", "sheen", "melts", "pale"):
             if not 0.0 <= getattr(self, field) <= 1.0:
                 raise ValueError(
                     f"{field} must be between 0 and 1, got {getattr(self, field)!r}"
@@ -96,5 +103,13 @@ class Medium:
             )
 
     def with_(self, **changes) -> Medium:
-        """A copy with some fields changed."""
+        """A copy with some fields changed. A coloured pencil's ``melts``
+        follows its ``softness`` (see :attr:`pale`), unless ``melts`` is
+        given; giving ``melts`` alone fixes it from then on."""
+        if "melts" in changes:
+            changes.setdefault("pale", 0.0)
+        elif "softness" in changes and self.pale > 0.0:
+            from .pencils import melts_at
+
+            changes["melts"] = melts_at(self.pale, changes["softness"])
         return replace(self, **changes)
