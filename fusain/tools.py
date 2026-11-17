@@ -16,7 +16,9 @@ them, and wax leaves a stain in the paper that no rubber eraser takes. A
 light is scratched out of those with ``KNIFE`` or rubbed out with
 ``SAND_ERASER``, or kept from the start (:meth:`fusain.Sheet.indent`).
 Those two cut the surface of the paper, and take the ink of a ballpoint
-stained into it, which no rubber eraser touches."""
+stained into it, which no rubber eraser touches; and they raise its
+fibres, so that what is drawn there next takes more, in blotches, until a
+firm tip or a stump presses them down."""
 
 from __future__ import annotations
 
@@ -48,7 +50,8 @@ class Tool:
         stump tones bare paper, and leaves a tone as it is. (The paste of an
         oil pastel sticks to any paper.)
     press:
-        How strongly it presses the dust into the paper, where it is held.
+        How strongly it presses the dust into the paper, where it is held;
+        it lays down fibres that a blade or grit raised as strongly.
     smear:
         How strongly it pushes the dust on the high ground into the low,
         which greys the white specks of the paper, and spreads it from grain
@@ -70,7 +73,9 @@ class Tool:
         and cuts the surface of the paper by that share of what it lifts of
         what the paper holds: with it go the stain a waxy medium leaves in
         the paper, the ink of a ballpoint, and the flattening of the tooth,
-        which is the paper's own again where it has been cut.
+        which is the paper's own again where it has been cut. And the cut
+        raises the fibres of the paper, which take more of what is drawn
+        there next, in blotches (:attr:`fusain.Sheet.rough`).
     holds:
         How much pigment it holds when it is full, as a volume for each
         pixel of its face (a firm layer of charcoal is about half a unit

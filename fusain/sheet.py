@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import zlib
 from collections.abc import Iterator, Sequence
 
 import numpy as np
@@ -107,8 +108,11 @@ class Sheet:
     its peaks come down towards its valleys, and stay there until the
     paper is cut) and how far the wax that lies on it has been polished
     level (``polish``, which goes with the wax); a tip that comes after
-    touches all of what is level (:attr:`press`). And how far it has
-    been indented (``dent``: the depth of a groove below the peaks of the
+    touches all of what is level (:attr:`press`). How far a blade or grit
+    has raised its fibres where it cut it (``rough``, 0..1: a sand eraser
+    or a knife), in clumps, where what is drawn next takes more, and
+    in blotches, until a firm tip or a stump lays them down again. And how
+    far it has been indented (``dent``: the depth of a groove below the peaks of the
     tooth, in depths of the tooth of a paper of depth 1), the pigment fixed
     to the paper (``held``) and the pigment lying on it, in two layers,
     ``loose`` on top and ``under`` beneath it, so that what was laid last is
@@ -138,6 +142,7 @@ class Sheet:
         self.tooth = self.paper.tooth(H, W, self._rng)
         self.crush = np.zeros((H, W), np.float32)
         self.polish = np.zeros((H, W), np.float32)
+        self.rough = np.zeros((H, W), np.float32)
         self.dent = np.zeros((H, W), np.float32)
         self.cover = np.zeros((H, W), np.float32)
         self.held = np.zeros((H, W, HELD), np.float32)
@@ -163,8 +168,8 @@ class Sheet:
         new.__dict__.update(self.__dict__)
         new._rng = np.random.default_rng()
         new._rng.bit_generator.state = self._rng.bit_generator.state
-        names = ("tooth", "crush", "polish", "dent", "cover", "held", "under")
-        for name in (*names, "loose", "_fresh", "bonded"):
+        names = ("tooth", "crush", "polish", "rough", "dent", "cover", "held")
+        for name in (*names, "under", "loose", "_fresh", "bonded"):
             setattr(new, name, getattr(self, name).copy())
         if self.ink is not None and self.inked is not None:
             new.ink, new.inked = self.ink.copy(), self.inked.copy()
@@ -480,7 +485,10 @@ class Sheet:
         pressure can, and no further for being gone over again: a firmer
         stroke over a lighter one presses the tooth flatter, a lighter one
         over a firmer one leaves it as it is, and light layers, however
-        many, do not burnish.
+        many, do not burnish. Where a sand eraser or a knife has cut the
+        paper and raised its fibres (``rough``), a tip lays more, in
+        blotches, as far as they stand; pressed firmly, it lays them down
+        again, towards the level its pressure reaches.
         Where the paper is indented, a tip lays only what it reaches down
         to (:meth:`indent`): it rests on the highest of the paper it covers,
         so one narrower than a groove goes down into it.
@@ -551,6 +559,7 @@ class Sheet:
                 self.tooth,
                 self.crush,
                 self.polish,
+                self.rough,
                 self.dent,
                 self.cover,
                 self.held,
@@ -894,7 +903,11 @@ class Sheet:
         the wax or through it (``crush``), which only a sand eraser or a
         knife cuts away, with the surface of the paper. Those two take the
         ink of a ballpoint with it, which is a stain in the paper; no rubber
-        eraser touches it.
+        eraser touches it. And where they cut it they raise the fibres of
+        the paper (``rough``), in clumps that are the paper's own: what is
+        drawn there next takes up to twice as much, and about half as much
+        again on the whole, in blotches, until a firm tip, a stump or a
+        finger presses them down.
 
         ``path`` and ``pressure`` are as for :meth:`stroke`; ``width`` is the
         width of the eraser in pixels (by default the tool's own; a
@@ -1066,6 +1079,7 @@ class Sheet:
             self.cover,
             self.crush,
             self.polish,
+            self.rough,
             self.held,
             self.under,
             self.loose,
@@ -1087,6 +1101,8 @@ class Sheet:
                     tool.scrape,
                     tool.holds,
                     tool.deep,
+                    max(eng.CLUMP * self.paper.grain, 1.0),
+                    self._fibres(),
                 ],
                 dtype=np.float64,
             ),
@@ -1097,6 +1113,13 @@ class Sheet:
             self._seed(seed),
         )
         return smudger.load - before
+
+    def _fibres(self) -> int:
+        """The salt of the clumps the fibres of this sheet's paper come up
+        in where it is cut (:func:`fusain._engine.fibres_at`): the paper's
+        own, worked out from its tooth, so that a copy of the sheet, or a
+        sheet of the same paper and seed, has the same."""
+        return zlib.crc32(self.tooth[0].tobytes()) & 0x7FFFFFFF
 
     def _seed(self, seed: int | None) -> int:
         """``seed``, or by default one drawn from the sheet's generator: what
