@@ -205,10 +205,10 @@ def test_a_pencil_does_not_press_fixed_dust_into_the_paper():
     for sheet in (loose, fixed):
         dust = float(_dust(sheet).sum(dtype=np.float64))
         # (a blender leaves no dust of its own, and presses hard; what it
-        # lays over the dust is a film)
+        # lays over the dust is a film, which is no part of the dust)
         sheet.shade(BOX, pencils.BLENDER, 1.0, angle=-20)
-        film = float(sheet.film.sum(dtype=np.float64))
-        pressed.append(dust - float(_dust(sheet).sum(dtype=np.float64)) + film)
+        assert sheet.film.any()
+        pressed.append(dust - float(_dust(sheet).sum(dtype=np.float64)))
     assert pressed[0] > 100.0
     assert abs(pressed[1]) < 0.01 * pressed[0]
 

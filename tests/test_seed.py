@@ -17,6 +17,7 @@ STATE = (
     "held",
     "under",
     "loose",
+    "films",
     "bonded",
     "ink",
 )

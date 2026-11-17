@@ -159,7 +159,9 @@ def _rubbed_join(make, pressure: float, passes: int) -> np.ndarray:
         y = 46 + 108 * k / (passes - 1)
         ends = [(JOIN - 55, y), (JOIN + 55, y + 2)]
         sheet.smudge(ends if k % 2 else ends[::-1], finger, pressure)
+    # (what lies on top, and the films on it: an oil pastel's are its own)
     top = sheet.loose[70:130, :, :N].astype(np.float64).sum(axis=0)
+    top += sheet.films[70:130, ..., :N].astype(np.float64).sum(axis=(0, 2))
     orange_there, blue_there = _of_each(orange, blue, top.T)
     share = blue_there / np.maximum(orange_there + blue_there, 1e-9)
     return np.convolve(share, np.ones(5) / 5, mode="same")
@@ -392,7 +394,7 @@ def test_a_finger_slides_on_a_film_of_wax_laid_over_dust(layers, least):
         sheet.shade(box, crayons.wax("#f2c40f"), 0.8, 9.0, angle=50 * layer - 30)
 
     def loose_underneath() -> float:
-        bonded = sheet.fixed[inside][..., 0] + sheet.film[inside][..., 0]
+        bonded = sheet.fixed[inside][..., 0]
         return float((sheet.under[inside][..., IV] - bonded).sum(dtype=np.float64))
 
     before = loose_underneath()

@@ -149,7 +149,9 @@ def test_the_paper_holds_under_half_of_an_oil_pastel_at_once():
     paste = float(sheet.paste.sum(dtype=np.float64))
     assert 0.4 * laid < paste < 0.65 * laid
     film = float(sheet.film.sum(dtype=np.float64))
-    assert _dust(sheet) == pytest.approx(paste + film, rel=1e-4)
+    assert film > 0.0
+    assert _dust(sheet) == pytest.approx(paste, rel=1e-4)
+    assert float(sheet.films[..., IV].sum(dtype=np.float64)) == pytest.approx(film)
     # one stroke on bare paper: no film
     sheet = _sheet()
     laid = sheet.stroke([(30, 75), (170, 75)], pastels.oil(RED), 0.5, WIDTH)
