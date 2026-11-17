@@ -1286,7 +1286,9 @@ def draw_feet(hand: Hand, bird: Bird) -> None:
     # (the horn of the claws dark, its curve caught by the light along its
     # back)
     c = soft(bird.shade * claws, 2) / np.maximum(soft(claws, 2), 1e-6) * claws
-    hand.tone(BLACK, claws * (0.35 + 0.65 * band(c, 0.25, 0.7)), 0.9, (30, -40, 100), 2.2)
+    hand.tone(
+        BLACK, claws * (0.35 + 0.65 * band(c, 0.25, 0.7)), 0.9, (30, -40, 100), 2.2
+    )
     hand.tone(CHAR, claws * 1.0, 0.8, (75,), 2.2)
 
 
