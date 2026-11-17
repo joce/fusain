@@ -1945,7 +1945,8 @@ def push_along(
                 held[iy, ix, part] -= moved
                 loose[iy, ix, part] += moved
         elif moves:
-            gone = min(there * drag / waxy_at(held, bonded, iy, ix), 1.0)
+            # (wax a rounding left where nothing is, stays)
+            gone = min(there * drag / max(waxy_at(held, bonded, iy, ix), 1e-300), 1.0)
             wax = waxed * gone
             held[iy, ix, IW] -= wax
             slid[IC] += wax
