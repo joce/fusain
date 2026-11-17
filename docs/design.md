@@ -59,10 +59,11 @@ Per pixel, all `float32`:
 | `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. The wax counts all the wax at the pixel, wherever it lies: in what the paper holds, in a film or in paste. |
 | `ink`, `inked` | The ink of pens, a stain in the paper under everything else: K, S and volume, and the colour it bronzes (linear RGB, times the volume); and the share of the pixel it is on. Allocated when a pen first draws. |
 | `under`, `loose` | Pigment lying on what the paper holds: K, S, volume and sheen, in two layers. `loose` is on top; what a new pass covers goes `under`. Most of it is dust. |
-| `bonded` | Of what lies in each of the two layers, the volume that is not loose dust, of three kinds: `fixed`, dust that is set, by fixative or under a film; `film`, what a medium laid on the dust and not on the paper, a waxy one wherever dust lay and a dry one on a bed of it; `paste`, what the paper does not hold of a greasy medium. |
+| `films` | The film that lies on each of the two layers, each a mixture of its own, packed as `held` is: what a medium laid on the dust and not on the paper, a waxy one wherever dust lay and a dry one on a bed of it. Its wax is the wax the film was laid with (which the wax in `held` counts too): a film is dry as far as it has none. |
+| `bonded` | For each of the two layers, four volumes. Three say what in the layer is not loose dust: dust that fixative has set; dust that a film of wax holds (`bound`), set for as long as the film is there (the two together are `fixed`); and `paste`, what the paper does not hold of a greasy medium. The fourth, `film`, is the volume of the film that lies on the layer (that of `films`): on the dust underneath, under the dust on top; or on top of all. |
 
-That is about 0.38 KB per pixel (96 numbers of four bytes; 94 while one
-`press` stood for `crush` and `polish` both, 95 before `rough`), a little more than oilpaint. As there, storing summed
+That is about 0.6 KB per pixel (154 numbers of four bytes; 96 while a
+film was part of the layer it lay on, fusain-r56), more than oilpaint. As there, storing summed
 absorption and scattering lets any number of pigments mix correctly at a fixed
 cost.
 
@@ -83,15 +84,59 @@ stirs the two together.
 Not all that lies in the two layers is dust, and `bonded` says how much of
 each is not. The rule is that a medium lies on what it meets:
 
+- **A film is stored apart from the dust it lies on** (fusain-r56,
+  fusain-fxc). The stack at a pixel, from the paper up, is: what the paper
+  holds; the dust underneath; the film on it; the dust on top; the film on
+  that. Each of the two films is a mixture of its own (`films`), with
+  its own colour, sheen and wax. Three things follow, which one mixture
+  of film and dust could not give.
+  *What takes a film takes the film's pigment.* A tool, or a firm tip
+  that drags a film along, takes its share of `films` and none of the
+  dust. One firm pass of the blender over three layers of a dark coloured
+  pencil laid on near-white pastel works 0.44 to 0.49 of the dark into
+  the tooth (0.23 to 0.25 while it took the layer's average, white dust
+  for the most part), and 0.92 of the pastel stays where it lay.
+  *A film laid on a film joins it.* The film of a pass goes on top of
+  the film that is there. The dust (or paste) of the pass then covers
+  the film on top as far as it is thick (all but a little of it once it
+  is `COVERS` thick): that share of the film is under the dust on top
+  from then on, the crumbs of a mark over its own film as over what the
+  paper holds of it. And the film pushes the dust it comes to lie on
+  under, as any layer does. So layers of a pencil over pastel build as
+  they do on paper: a 6B at full pressure goes 0.18, 0.09, 0.07 of the
+  pastel's tone and ends at 0.06 (on paper 0.14, 0.07, 0.06, 0.05), and
+  a 2B at 0.6 ends at 0.19 (0.17). While each layer buried the last
+  one's film in the pastel under it, the 6B went 0.26, 0.28, 0.30,
+  lighter each time, and the 2B levelled off at 0.46.
+  *Dust a film holds is held by the film.* A film of wax binds part of
+  the loose dust under it (`bound`), which is then as fast as the film.
+  It is kept apart from dust that fixative has set, and is loose again
+  as far as the films over it go: the dust on top by the share of the
+  film on top that is taken, the dust underneath by the share of all the
+  films. A crayon over pastel rubbed off with a vinyl eraser leaves none
+  of the pastel that remains set (it left over a third of it set for
+  good); over fixed pastel, all of it stays set. A firm tip that works a
+  film into the tooth frees what that film held in the same way; the
+  blender then binds what lies under its own film, as any wax does.
+  A film is dry as far as it was laid without wax (`dry_film`: all of a
+  pencil's, none of a crayon's), whatever else the pixel holds. Only a
+  dry film goes with its dust, seals nothing, and is matte to the gloss
+  of wax; its graphite shines by itself (see Rendering).
+  What is not kept: films that lie at the same place are one mixture, so
+  a pencil's film that a crayon's is laid on is one film with it, half
+  dry; and a film on the dust underneath does not sink further when the
+  dust on top of it goes under in its turn.
+
 - **A film.** What the paper holds of a waxy medium (a coloured pencil, a
   crayon, an oil pastel) is a film of wax, and a film sticks to whatever is
   under the tip. On bare paper, or over what the paper holds already, that
   is `held`, as for any medium. Where dust lies on the paper, the film lies
-  on the dust: it goes on top with the dust of the pass, as far as the dust
+  on the dust: it goes on top, as far as the dust
   covers the paper (all of it over dust as thick as covers what is under
   it, less over thinner dust, through which the tip reaches the paper). It
-  is seen over the dust, a later pass buries it as it buries dust, and it
-  is as fast as what the paper holds: only a hard eraser takes it off.
+  is seen over the dust, dust laid later buries it, a film laid later
+  joins it, and it is as fast as what the paper holds: only a hard eraser
+  takes it off.
 - **A bed of dust.** A dry medium lies on what it meets too, but its own
   crumbs are not in its way. How much of a mark the paper holds
   (`binding`) is how much it holds on the tip's own ground: bare paper, or
@@ -104,7 +149,7 @@ each is not. The rule is that a medium lies on what it meets:
   follow from it.
   The tip rides on the bed as far as it covers the paper (all of it once
   the bed is `COVERS` thick), and there what the paper would have held of
-  its mark is a film on the dust, on top with the dust of the pass, as a
+  its mark is a film on the dust, on top, as a
   waxy medium's is; but it has no wax, and binds none of the dust. A film
   is what such a mark has to be: it is seen over the dust; it counts in
   the tooth as what the paper holds does, so that layers of a pencil over
@@ -128,26 +173,33 @@ each is not. The rule is that a medium lies on what it meets:
   stick marks over the dust of a crumbly one, not the other way about:
   vine charcoal over pastel is dust on dust, and finds the tooth full.
   On cartridge paper, over two layers of a pale soft pastel laid at 0.6, a
-  2B line drawn at 0.6 lays 0.78 of what it lays on bare paper and is 0.80
+  2B line drawn at 0.6 lays 0.77 of what it lays on bare paper and is 0.83
   as dark against its ground (0.02 and 0.01 before, the little there was
-  lying under the dust), an HB 0.77 and 0.72, a charcoal pencil 0.77 and
-  0.91; over the same fixed, 0.79 and 0.81, 0.78 and 0.74, 0.78 and 0.92
-  (0.15 and 0.03 before for the 2B); a 2B shaded at 0.5, 0.82 and 0.70.
+  lying under the dust), an HB 0.75 and 0.79, a charcoal pencil 0.76 and
+  0.99; over the same fixed, 0.77 and 0.83, 0.77 and 0.80, 0.77 and 0.99
+  (0.15 and 0.03 before for the 2B). (With the film one mixture with the
+  pastel of its layer the lines were 0.78, 0.70 and 0.87 as dark.)
   All of the line's graphite lies on the pastel, where 0.15 of it did,
   its crumbs; over a light layer of pastel 0.8 of it, and over the dust of
   vine charcoal 0.7, the point reaching the paper through the rest.
   A film of wax holds: it sets the dust under it, a tool slides on it and
   lifts it only as it lifts what the paper holds. The film of a dry medium
   has nothing to hold on to but the dust it lies on, and is as fast as
-  that dust: where a pixel has no wax, a tool lifts a film and spreads it
+  that dust: as far as a film is dry, a tool lifts it, spreads it and
+  stirs it up from under later dust
   as it does the dust, as far as the dust of the two layers is loose (all
   of it on loose pastel, next to none on pastel that is fixed), and what
-  it spreads is dust where it is laid; and the film is not slick, so the
+  it spreads or stirs up is dust where it comes to lie; and the film is
+  not slick, so the
   tool reaches the dust under it. Of a 2B line on loose pastel a kneaded
-  eraser takes 0.79 in a pass, with the pastel under it (it takes 0.58 of
-  the pastel beside the line, and 0.54 of what is under it), a quarter of
-  a line on bare paper or on fixed pastel; a vinyl eraser 0.93, and 0.81
-  of a line on bare paper or on fixed pastel; a finger drawn three times
+  eraser takes 0.68 in a pass, with the pastel under it, a quarter of
+  a line on bare paper and a fifth of one on fixed pastel; a vinyl
+  eraser 0.85, and 0.83 of a line on bare paper, 0.72 on fixed pastel
+  (where it fills with the pastel); the same where the paper under the
+  pastel holds a little crayon (a film at a pixel with wax was taken for
+  one of wax, and the kneaded eraser left half of the line). A finger
+  rubbed over lines that later pastel has buried leaves 0.14 of their
+  films (0.76, all that was buried). A finger drawn three times
   across it carries off a fifth of its graphite and leaves it 0.67 as
   dark (0.07 and 0.93 on bare paper, 0.03 and 0.96 on fixed pastel).
   (Lifted as what the paper holds, the film was a lid: the kneaded eraser
@@ -165,21 +217,22 @@ each is not. The rule is that a medium lies on what it meets:
   a finger a 2B line is 0.77 as dark as on bare paper, blended again
   crosswise 0.23; and a stick that leaves more crumbs of its own takes
   blended pastel for a ground like its own, a tooth that is full: a
-  charcoal pencil over the pastel blended once, 0.21. A film that a later
-  pass buries is one mixture with the dust of its layer, so a pencil over
-  pastel levels off greyer than on paper, and a second layer of a 6B at
-  full pressure, thinner than the first, leaves the patch a little lighter
-  than the first did (0.24 of the pastel's tone, then 0.29 and 0.31).
+  charcoal pencil over the pastel blended once, 0.21.
   A film of graphite shines under the lamp as what the paper holds does
   (see Rendering).
-- **Dust that is set.** A film binds part of the loose dust it is laid
-  over: seven tenths of it under a film thick enough to cover it, less under
-  a thinner one. That dust is set where it lies, exactly as fixative sets
-  it, and counts with it in `fixed`.
+- **Dust that is set.** A film of wax binds part of the loose dust it is
+  laid over: seven tenths of it under a film thick enough to cover it,
+  less under a thinner one. That dust is set where it lies, as fixative
+  sets it, and counts with it in `fixed`; but it is the film that holds
+  it (`bound`), and only for as long as the film is there (above).
 - **Paste.** What the paper does not hold of a greasy medium (a waxy one
   that is soft: an oil pastel) is not dust but paste. It lies in the layers
   as dust does, so a light oil pastel shows over a dark one, and a tip
-  presses it in as it does dust; but it sticks. A tool moves it only as far
+  presses it in as it does dust, as far as the tooth has room for it
+  (`PASTE_ROOM`: on what the paper holds already it slides); but it
+  sticks. All that an oil pastel does not lay in the tooth is paste: it
+  leaves no film on its own paste or on dust, which a finger could not
+  move. A tool moves it only as far
   as it smears: a finger, a stump or a chamois drags it about and blends it,
   and it is paste again where they lay it; an eraser, which lifts and does
   not smear, takes it only as it takes what the paper holds. Dust under a
@@ -803,7 +856,9 @@ At each step, for each pixel under the tip:
 5. **Working what is there.** The tip presses some of the dust under it into
    `held`. At the end of the pass its own dust (or paste) and its film
    settle on top of what was there, which goes `under`: all but a little of
-   it once what is new is thick enough to cover it. A film of wax and
+   it once what is new is thick enough to cover it. The film joins the
+   films of the pixel, on top, and the dust of the pass covers its share
+   of the film on top. A film of wax and
    paste bond part of the loose dust they come to lie on; the film of a
    dry medium binds nothing.
 6. **Wax.** A waxy medium films over the tooth, which then takes less
@@ -823,12 +878,14 @@ At each step, for each pixel under the tip:
    on dust is wax as well, and the tip drags it as much as it drags what
    the paper holds and presses it down into the tooth: one firm layer of
    the blender over three of a dark coloured pencil laid on near-white
-   pastel works a fifth of the dark that lay on the dust into the tooth,
-   and drawn from such a patch out over the paper it smears 0.13 of the
-   dark next to the edge, as it smears 0.12 out of the tooth. (It took
+   pastel works nearly half of the dark that lay on the dust into the
+   tooth (the film's own pigment: a fifth, while it took the average of
+   the film and the dust of its layer), and drawn from such a patch out
+   over the paper it smears the dark next to the edge as it smears it
+   out of the tooth. The dust that the film held is loose again as far as
+   the film has gone. (Before fusain-pv2 it took
    only what the paper held, and the film's wax, which is counted with
-   that, without its pigment: a hundredth of the dark, and 0.08 next to
-   the edge.) It closes the white flecks as it does over the paper, by
+   that, without its pigment: a hundredth of the dark.) It closes the white flecks as it does over the paper, by
    polishing. It sets in by
    degrees, between `BURNISH_SOFT` below `BURNISH_FROM` and as far above
    it (from 0.4 to 0.8), since the wax does not give way at one pressure
@@ -979,7 +1036,8 @@ set: the loose dust in the layer underneath is stirred up and lifted only
 as far as what is set or a film on top does not cover it (all of it, under
 a layer of those `COVERS` thick). The film a dry medium leaves on a bed of
 dust has no wax: a tool does not slide on it, and takes it with the loose
-dust it lies on (see "A bed of dust").
+dust it lies on (see "A bed of dust"). Of any film a tool takes the film's
+own pigment, and the dust that film held is loose again that far.
 
 The wax of a pixel is in what the paper holds there, in the films and in
 the paste, and it goes with them: a tool that takes a share of those takes
@@ -1107,8 +1165,10 @@ at full pressure about 0.75; and light layers of HB level off near 0.5.
 
 Per pixel: Kubelka-Munk reflectance of the `loose` layer over the `under`
 layer over the `held` layer over the paper's own colour, on the covered share
-of the pixel; the rest shows bare paper. A film is in the layer it was laid
-in, so a crayon drawn over charcoal dust is seen over it, and so is a
+of the pixel; the rest shows bare paper. On the dust of each of the two
+layers lies its share of the films, a layer of its own with the films'
+colour (only where there are films: two layers more to work out), so a
+crayon drawn over charcoal dust is seen over it, and so is a
 pencil line drawn over a bed of pastel.
 By default a fairly high lamp shows the tooth faintly, as on a scan; a raking
 light brings it out, and `lighting=False` renders the sheet flat.
@@ -1133,33 +1193,31 @@ raking one; it is added to what the pigment sends back.
   without the shine: graphite never looks as black as charcoal.
   A pencil drawn over a bed of dust lays the graphite the paper would have
   held as a film on the dust (see "A bed of dust"), and that film shines as
-  what the paper holds does. A layer is one mixture: what its film is made
-  of, and what lies over what within it, are not kept. What can be told is
-  that the graphite in a layer with a film came with a pencil's mark, the
-  film and its crumbs; so the film is taken to hold the share of it that
-  the paper holds of a pencil's mark (`FILM_GRAPHITE`, its binding), never
-  more than its own volume, which is exact for a pencil over pastel, and
-  loose graphite dust from elsewhere that lies with a film is taken for its
-  crumbs, matte but for the film's share. In the layer on top, the film
-  shines through all the matte that lies with it: the clay of its crumbs,
-  as a line on paper does through its own, and whatever dust is there, for
-  dust a light pass did not bury cannot be told from dust laid over the
-  film after it. That errs on the matte side, as loose graphite is matte: a
-  light line shines less than its film would. A film that a later pass
-  buried lies on the older dust it was buried in, and shines through the
-  clay of its crumbs and the matte of the layer on top. Where a pixel has
-  wax, a film there is taken for one of wax, as a tool takes it. On
+  what the paper holds does, by its own graphite (`films`): as thick as a
+  film that the paper holds, it shines as much. The share of it on top
+  has nothing over it; the share that the crumbs of its pass cover, or
+  dust laid since, shines through what is matte in the dust on top, as
+  what the paper holds does through all the dust; and what is matte in the
+  films hides the shine of what the paper holds under them. (While a film
+  was one mixture with its layer, it was taken to hold the pencils'
+  binding of the graphite in the layer, under all the matte of the layer,
+  and to be wax where the pixel had any: a light line shone a third of
+  what its film would.) On
   cartridge paper, along lines 4 wide drawn over two layers of a pale soft
-  pastel, of which 0.88 to 0.90 of the graphite is a film where on bare
-  paper the paper holds it: a 2B at full pressure shines 0.38 (0.43 on bare
-  paper; nothing before, 0.001), a 6B 0.68 (0.76), an HB 0.27 (0.31), the
-  same over the pastel fixed; at 0.6 a 2B 0.18 (0.22), at 0.3 a third of
-  what it shines on bare paper. Overhead, the lamp adds 0.022 of the
-  paper's white to the 2B line (0.025 on bare paper) and 0.040 to the 6B
-  (0.044). Six layers of 6B at full pressure shaded over the pastel shine
-  0.78, against 0.82 on bare paper. A stump or a finger drawn across a line
+  pastel, of which 0.77 to 0.80 of the graphite is a film where on bare
+  paper the paper holds it: a 2B at full pressure shines 0.39 (0.44 on bare
+  paper), a 6B 0.70 (0.76), an HB 0.27 (0.31), the
+  same over the pastel fixed; at 0.6 a 2B 0.18 (0.21), at 0.3 0.053
+  (0.070): three quarters or more of what it shines on bare paper at any
+  pressure, a little more than its share of the graphite, since part of
+  the film lies over its crumbs. Overhead, the lamp adds 0.026 of the
+  paper's white to the 2B line (0.029 on bare paper) and 0.047 to the 6B
+  (0.051). Six layers of 6B at full pressure shaded over the pastel shine
+  0.99, against 0.82 on bare paper: each film lies over the crumbs of
+  those before it, where on paper what is held lies under all its crumbs.
+  A stump or a finger drawn across a line
   on loose pastel takes its film with the pastel and its shine with it; on
-  fixed pastel, 0.83 of the film stays and 0.87 and 0.81 of its shine;
+  fixed pastel, 0.86 of the film stays and 0.89 and 0.93 of its shine;
   and what they spread is dust, with no film, and shines as it did.
 - **Wax** has no sheen of its own: it is its polish that shines. The gloss is
   how slick the film of wax is at the pixel (as for the resist) times the

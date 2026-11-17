@@ -68,7 +68,7 @@ def test_every_mark_is_there():
     what it shows, and the numbers its calls returned."""
     held = ("tooth", "crush", "polish", "dent", "cover", "held", "under", "loose")
     for name, marks in RECORDED["marks"].items():
-        for key in (*held, "_fresh", "bonded", "_rng", "ground"):
+        for key in (*held, "films", "_fresh", "bonded", "_rng", "ground"):
             assert f"sheet.{key}" in marks, (name, key)
         for key in ("reflectance", "shine", "image", "raking"):
             assert f"sheet:{key}" in marks, (name, key)

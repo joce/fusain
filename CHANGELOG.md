@@ -43,6 +43,81 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- A film is stored apart from the dust it lies on (fusain-r56,
+  fusain-fxc), and the picture changes wherever a film lies: a coloured
+  pencil or a crayon over dust (its own crumbs included), an oil pastel
+  over its paste, a pencil over pastel. What a medium lays on dust and not
+  on the paper was a volume within the layer of dust it lay in, one
+  mixture with it. Now a film lies on the dust underneath (under the
+  dust on top) or on top of all, and each of the two is a mixture of its
+  own (`Sheet.films`, (H, W, 2, ...), each packed as `held` is; its wax
+  is the wax the film was laid with; `Sheet.film` is their volumes). The
+  render lays each over the dust of its layer. A sheet takes about 0.6 KB
+  a pixel, not 0.38, and a render where films lie works out two layers
+  more.
+  - What takes a film takes the film's own pigment. One firm pass of the
+    blender over three layers of a dark coloured pencil on near-white
+    pastel works 0.44 to 0.49 of the dark into the tooth (0.23 to 0.25:
+    it took the average of the film and the white dust of its layer), and
+    0.92 of the pastel stays where it lay. Three light layers of a red
+    crayon over blue pastel are red (a chroma of 19; 5.7 as a mixture
+    with the pastel), and 15 after the blender (4.8).
+  - A film laid on a film joins it, on top; the dust of a pass covers its
+    share of the film on top, the crumbs of a mark over its own film as
+    over what the paper holds. Layers of a pencil over pastel build as on
+    paper: a 6B at full pressure goes 0.18, 0.09, 0.07 of the pastel's
+    tone and ends at 0.06 (it went 0.26, 0.28, 0.30, lighter each time;
+    on paper 0.14, 0.07, 0.06, 0.05), a 2B at 0.6 ends at 0.19 (0.46; on
+    paper 0.17). A single 2B line over pastel is 0.83 as dark as on paper
+    (0.78), an HB 0.79 (0.70), a charcoal pencil 0.99 (0.87).
+  - Dust that a film of wax holds is kept apart from dust that fixative
+    has set (new `Sheet.bound`; `Sheet.fixed` is the two together, and no
+    longer a view), and is loose again as far as the film over it goes. A
+    crayon over pastel rubbed off with a vinyl eraser leaves none of the
+    pastel that remains set (over a third of it was); over fixed pastel all
+    of it stays set. The blender over the red crayon above leaves 0.87 of
+    what was held (it left 1.37 times as much set).
+  - A film is dry as far as it was laid without wax, whatever else the
+    pixel holds: a pencil line on loose pastel comes away with the pastel
+    also where the paper under the pastel holds a little crayon (a
+    kneaded eraser left half of it there, and leaves a quarter); a finger
+    stirs up a pencil's film that later pastel has buried (it left 0.76
+    of such films, and leaves 0.14); and a film of graphite shines by its
+    own graphite, also where the pixel has wax. What fusain-q5k had to
+    assume of such a film is gone (`sheet.FILM_GRAPHITE`,
+    `_engine.film_sheen`): a 2B line over pastel shines 0.76 to 0.97 of
+    what it does on bare paper at any pressure (a third at 0.3, and 0.80
+    at 0.6), a little more than its share of the graphite (0.82), since
+    part of the film lies over its crumbs; six layers of a 6B shine 0.99
+    where on paper they shine 0.82 (0.78).
+  - An oil pastel leaves no film: what it lays on what lies over the
+    paper is paste, as the rest of it is, as far as the medium is greasy
+    (a film of its own colour that no finger moves would keep the
+    hatching of every stroke under a rubbed join). Paste is pressed into
+    the tooth only as far as the tooth has room for it
+    (`_engine.PASTE_ROOM`, a thickness of 0.8 held: on what the paper
+    holds already it slides), which the film of an oil pastel, a lid on
+    the paste under it, used to see to; and a greasy tip ploughs up 0.09
+    of what it buries, not 0.12, of a third more paste (`PLOUGH`). With
+    the two, in `crayons.png`, over three sheets: a finger rubbed across a
+    join of two oil pastels leaves the blue rising by 0.21 of the way from
+    one colour to the other over a finger's width either side of the
+    join, as it did (0.21), and takes the hatching out as it did (the
+    spread of L* in blocks of 5 pixels 0.16, from 0.41; it was 0.18); a
+    white oil pastel over a black one is at L* 54.1 (54.5).
+  - In the example images: `crayons.png` moves in its row of oil
+    pastels by little (a few blocks of 32 pixels by up to 3 in colour,
+    at the rubbed join) and where a crayon lies over charcoal and pastel
+    by up to 9 (a twentieth of its blocks by more than 1); `macaw`, `colour`, `deco`, `broadway`, `shine` and
+    `lake` by less than 0.5 anywhere; the rest are the same to the bit,
+    as is every drawing without a film (graphite alone, to the bit over
+    41 sheets of the thorough fingerprint).
+  - `_engine`: `bonded` has four kinds (`BOUND` after `PASTE`); `bear`,
+    `lay_stroke`, `rub_stroke`, `roll_stroke`, `blot` and the helpers
+    under them take `films`; `take_films`, `dry_film`, `film_share` and
+    `thicken_film` are new, `drag_film`, `film_graphite` and `film_sheen`
+    gone.
+
 - A stump has a deep load as well as its surface (fusain-bbq). What it
   lifts is on its surface, which it lays from; as it is rubbed that works
   into its fibres, and back out as bare paper empties the surface, the two

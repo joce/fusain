@@ -144,12 +144,13 @@ def test_a_finger_smears_oil_pastel_less_than_soft_pastel_more_than_crayon():
 def test_the_paper_holds_under_half_of_an_oil_pastel_at_once():
     sheet = _sheet()
     laid = sheet.shade(BOX, pastels.oil(RED), 0.5, WIDTH)
-    # the rest is paste (and what a stroke lays over the paste of the one
-    # before is a film on it)
+    # the rest is paste: also what a stroke lays over the paste of the one
+    # before, which is no film (a finger could not move one), but paste on
+    # paste (0.68 of it; 0.59 while two fifths of what met paste was a film)
     paste = float(sheet.paste.sum(dtype=np.float64))
-    assert 0.4 * laid < paste < 0.65 * laid
-    film = float(sheet.film.sum(dtype=np.float64))
-    assert _dust(sheet) == pytest.approx(paste + film, rel=1e-4)
+    assert 0.4 * laid < paste < 0.75 * laid
+    assert not sheet.film.any() and not sheet.films.any()
+    assert _dust(sheet) == pytest.approx(paste, rel=1e-4)
     # one stroke on bare paper: no film
     sheet = _sheet()
     laid = sheet.stroke([(30, 75), (170, 75)], pastels.oil(RED), 0.5, WIDTH)

@@ -9,7 +9,7 @@ import pytest
 from murex import spectral as sp
 
 from fusain import Sheet, Smudger, charcoal, crayons, papers, pastels, pencils, tools
-from fusain._engine import IP, IV, IW, IX, PASTY, paste_of
+from fusain._engine import IP, IV, IW, IX, PASTY, SET, STICKS, N, dry_film, paste_of
 
 BOX = (20, 20, 180, 130)
 INSIDE = (slice(50, 100), slice(50, 150))
@@ -17,8 +17,8 @@ RED, YELLOW, BLUE = "#c0392b", "#f2c40f", "#2456a6"
 WIDTH = 9.0
 
 
-def _sheet() -> Sheet:
-    return Sheet(200, 150, paper=papers.CARTRIDGE, seed=1)
+def _sheet(seed=1) -> Sheet:
+    return Sheet(200, 150, paper=papers.CARTRIDGE, seed=seed)
 
 
 def _drawn(medium, pressure=0.5) -> Sheet:
@@ -46,8 +46,14 @@ def _total(sheet) -> float:
     return float(sheet.pigment().sum(dtype=np.float64))
 
 
-def _lying(sheet) -> float:
+def _dust(sheet) -> float:
+    """The volume in the two layers: dust, set or not, and paste."""
     return float((sheet.under[..., IV] + sheet.loose[..., IV]).sum(dtype=np.float64))
+
+
+def _lying(sheet) -> float:
+    """All that lies on the paper: the two layers, and the films on them."""
+    return _dust(sheet) + float(sheet.films[..., IV].sum(dtype=np.float64))
 
 
 def _sum(array) -> float:
@@ -71,14 +77,15 @@ def _kneaded_share(medium, pressure=0.8) -> float:
 
 
 def _bonded_within_bounds(sheet) -> bool:
-    """Nothing is bonded but what lies there, layer by layer."""
-    if sheet.bonded.min() < 0.0:
+    """Nothing is bonded but what lies there, layer by layer, and the film
+    that lies on each layer is that film's own volume."""
+    if sheet.bonded.min() < 0.0 or sheet.films.min() < 0.0:
         return False
     for which, layer in enumerate((sheet.under, sheet.loose)):
-        bonded = sheet.bonded[:, :, which].sum(axis=-1)
+        bonded = sheet.fixed[..., which] + sheet.paste[..., which]
         if (bonded > layer[..., IV] * (1 + 1e-4) + 1e-5).any():
             return False
-    return True
+    return np.allclose(sheet.film, sheet.films[..., IV], rtol=1e-4, atol=1e-5)
 
 
 WAXY = [crayons.wax(YELLOW), pencils.coloured(YELLOW), pastels.oil(YELLOW)]
@@ -174,7 +181,10 @@ def test_dust_laid_over_a_film_buries_it_with_what_it_set():
     assert _sum(sheet.film[..., 1]) > 0.8 * film
     sheet.shade(BOX, pastels.oil(RED), 0.9, WIDTH, angle=80)
     assert _sum(sheet.film[..., 0]) > 0.7 * film
-    assert _sum(sheet.fixed) >= fixed * (1 - 1e-5)
+    # (an oil pastel pressed firmly drags part of the film off, and what
+    # that held is loose again, or paste under the pastel: 0.83 of it is
+    # still held)
+    assert _sum(sheet.fixed) > 0.7 * fixed
     assert _bonded_within_bounds(sheet)
 
 
@@ -387,9 +397,9 @@ DRY = [*FIRM, pencils.B6, charcoal.COMPRESSED, charcoal.VINE]
 DRY += [pastels.soft(BLUE), pastels.hard(BLUE)]
 
 
-def _bed(fixed=False, layers=2, pressure=0.6, dust=None) -> Sheet:
+def _bed(fixed=False, layers=2, pressure=0.6, dust=None, seed=1) -> Sheet:
     """Layers of a pale soft pastel (or of ``dust``), loose or fixed."""
-    sheet = _sheet()
+    sheet = _sheet(seed)
     dust = pastels.soft(PALE) if dust is None else dust
     for layer in range(layers):
         sheet.shade(BOX, dust, pressure, 14.0, angle=30 - 60 * layer)
@@ -418,13 +428,13 @@ def _pencilled(sheet, medium, pressure=0.6) -> tuple[float, float]:
 
 def _graphite(sheet, where=(slice(None), slice(None))) -> float:
     """The graphite at these pixels, wherever it lies (as its sheen)."""
-    return sum(
-        _sum(layer[where][..., IX]) for layer in (sheet.held, sheet.under, sheet.loose)
-    )
+    layers = (sheet.held, sheet.under, sheet.loose, sheet.films)
+    return sum(_sum(layer[where][..., IX]) for layer in layers)
 
 
 def _nothing_negative(sheet) -> bool:
-    arrays = (sheet.held, sheet.under, sheet.loose, sheet.bonded, sheet.cover)
+    arrays = (sheet.held, sheet.under, sheet.loose, sheet.films, sheet.bonded)
+    arrays = (*arrays, sheet.cover)
     return all(float(array.min()) >= 0.0 for array in arrays)
 
 
@@ -442,9 +452,16 @@ def test_a_pencil_line_drawn_over_pastel_shows_on_it(medium, fixed):
     assert laid > 0.55 * on_paper
     assert dark > 0.5 * dark_on_paper
     # what the paper would have held of it is a film on the pastel, on top
+    # but for what its own crumbs cover (0.15 of a 2B's, 0.11 of an HB's,
+    # 0.33 of a charcoal pencil's, which crumbles more): those lie over
+    # their film as over what the paper holds
     film = _sum(over.film) - _sum(base.film)
     assert film == pytest.approx(medium.binding * laid, rel=0.02)
-    assert _sum(over.film[..., 1]) == pytest.approx(film, rel=1e-4)
+    assert 0.6 * film < _sum(over.film[..., 1]) < 0.95 * film
+    # and it is the pencil's own: all of the mark but its crumbs
+    assert _sum(over.films[..., IV]) == pytest.approx(film, rel=1e-5)
+    absorbed = _sum(over.films[..., :N]) / film
+    assert absorbed == pytest.approx(float(medium.pigment.K.sum()), rel=1e-4)
     # it has no wax: it sets none of the dust, and what was set stays so
     assert _sum(over.fixed) == pytest.approx(_sum(base.fixed), rel=1e-5)
     assert not over.paste.any()
@@ -465,7 +482,12 @@ def test_a_pencil_shaded_over_pastel_is_a_little_weaker_than_on_bare_paper(mediu
         # the way (over two layers a 2B laid a hundredth of this, and over
         # a light one half)
         assert 0.7 * on_paper < laid < 0.95 * on_paper
-        assert 0.5 * dark_on_paper < dark < 0.95 * dark_on_paper
+        # (over four sheets a 2B is 0.80 to 0.93 as dark and an HB 0.78 to
+        # 0.90; a charcoal pencil 0.92 to 1.08: its film is its own, on top
+        # of the pale dust and of two fifths of its crumbs, where on paper
+        # all its crumbs lie over what the paper holds, and the paper shows
+        # between)
+        assert 0.5 * dark_on_paper < dark < 1.15 * dark_on_paper
 
 
 def _dust_under(sheet, path) -> float:
@@ -654,9 +676,12 @@ def test_pastel_rubbed_into_the_paper_takes_a_pencil_while_dust_is_left_on_it():
         (charcoal.PENCIL, 0.7, False),
     ],
 )
-def test_layers_of_a_pencil_over_pastel_build_and_level_off(medium, pressure, fixed):
-    bare, sheet = _sheet(), _bed(fixed)
-    ground = _luminance(sheet)
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_layers_of_a_pencil_over_pastel_build_and_level_off(
+    medium, pressure, fixed, seed
+):
+    bare, sheet = _sheet(seed), _bed(fixed, seed=seed)
+    ground, paper = _luminance(sheet), _luminance(bare)
     laid, tones, on_paper = [], [], 0.0
     for layer in range(12):
         angle = 30 + 50 * layer
@@ -667,22 +692,27 @@ def test_layers_of_a_pencil_over_pastel_build_and_level_off(medium, pressure, fi
     # about as much as it holds on bare paper: what a pass leaves on the
     # pastel is in the tip's way as what the paper holds is (left loose
     # there, it piled up without end)
-    # (a layer takes from 0.67 to 0.91 of the one before it, as its strokes
-    # fall over those of the last)
-    assert all(b < 0.95 * a for a, b in itertools.pairwise(laid[:7]))
+    # (over five sheets a layer takes from 0.51 to 1.02 of the one before
+    # it, as its strokes fall over those of the last: 0.67 to 0.91 on the
+    # first sheet, which was the only one looked at)
+    assert all(b < 1.05 * a for a, b in itertools.pairwise(laid[:7]))
+    assert laid[6] < 0.5 * laid[0]
     assert laid[-1] < 0.2 * laid[0]
     assert 0.8 * on_paper < sum(laid) < 1.1 * on_paper
     assert float(sheet.pigment().max()) < 5.0
-    # and the tone does not fade under the layers that follow: the film
-    # keeps the tip from pressing it, and the dust under it, into the paper
+    # and the tone builds as it does on paper: a film laid on a film joins
+    # it, on top, its own colour (fusain-r56). Each layer is darker than
+    # the one before, down to nearly the tone the layers reach on bare
+    # paper: a 6B at 1.0 goes 0.18, 0.09, 0.07 of the pastel's tone and
+    # ends at 0.06 (on paper 0.14, 0.07, 0.06 and 0.05); a 2B at 0.6 ends
+    # at 0.19 (0.17). While a film was one mixture with the dust of its
+    # layer, each layer buried the last one's film in the pastel under it:
+    # the 6B went 0.26, 0.28, 0.30, lighter each time, and the 2B levelled
+    # off at 0.46.
     assert tones[0] < 0.75 and min(tones) > 0.02
-    if pressure < 1.0:
-        assert tones[-1] < tones[0] - 0.05
-    else:
-        # (a full first layer is as dark as it gets: the layers after it
-        # bury its film in the pastel's layer, one mixture with it, and
-        # are thinner themselves; it was a third lighter again)
-        assert tones[-1] < tones[0] + 0.12
+    assert all(b < a + 0.002 for a, b in itertools.pairwise(tones))
+    assert tones[2] < 0.8 * tones[0]
+    assert tones[-1] < 1.35 * _luminance(bare) / paper
     assert _nothing_negative(sheet) and _bonded_within_bounds(sheet)
 
 
@@ -704,3 +734,215 @@ def test_what_a_dry_medium_lays_over_a_bed_is_on_the_sheet_or_on_the_tool(over, 
     assert stump.load == pytest.approx(stump.clean())
     assert _total(sheet) + taken == pytest.approx(laid, rel=1e-5)
     assert _nothing_negative(sheet) and _bonded_within_bounds(sheet)
+
+
+# --------------------------------------------------------------------------
+# a film apart from the dust it lies on (fusain-r56, fusain-fxc)
+
+DARK, WHITE = "#141416", "#f4f1ea"
+SEEDS = [1, 2, 3]
+
+
+def _absorbed(packed) -> float:
+    """How much light a mixture absorbs for its volume (K over all bands)."""
+    return _sum(packed[..., :N]) / _sum(packed[..., IV])
+
+
+def test_a_film_is_dry_as_far_as_it_was_laid_without_wax():
+    assert dry_film(1.0, 0.0) == 1.0  # a pencil's
+    assert dry_film(2.0, 2.0 * STICKS) == 0.0  # as waxy as counts
+    assert dry_film(1.0, 0.85) == 0.0  # a crayon's
+    assert dry_film(1.0, 0.5 * STICKS) == pytest.approx(0.5)
+    assert dry_film(0.0, 0.0) == 0.0  # (no film)
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_a_film_keeps_its_own_colour_and_a_tool_takes_that(seed):
+    # a dark coloured pencil over near-white pastel: the film is the
+    # pencil's, with none of the white in it
+    sheet = _sheet(seed)
+    laid = sheet.shade(BOX, pastels.soft(WHITE), 0.4, WIDTH)
+    dark = pencils.coloured(DARK)
+    for layer in range(3):
+        laid += sheet.shade(BOX, dark, 0.5, 6.0, angle=30 - 55 * layer)
+    own = float(dark.pigment.K.sum())
+    assert own > 100 * float(pastels.soft(WHITE).pigment.K.sum())
+    film = _sum(sheet.films[..., IV])
+    assert film > 500.0 and _absorbed(sheet.films) == pytest.approx(own, rel=1e-5)
+    assert _sum(sheet.films[..., IW]) == pytest.approx(film * dark.wax, rel=1e-5)
+    # the two layers are the pastel and the pencil's crumbs: far paler
+    # (as one mixture with the film they were a third as dark as the film)
+    lying = sheet.under + sheet.loose
+    assert _absorbed(lying) < 0.1 * own
+    # tools take of the film what they take of what is held, and what they
+    # take is the film's: it is as dark as it was, less of it
+    eraser = Smudger(tools.ERASER)
+    taken = sheet.rub((30, 30, 170, 80), eraser, 0.5)
+    taken += sheet.rub((30, 60, 170, 120), tools.FINGER, 0.7)
+    taken += sheet.rub((30, 30, 170, 120), tools.KNEADED, 0.7, angle=90)
+    assert _sum(sheet.films[..., IV]) < 0.85 * film
+    assert _absorbed(sheet.films) == pytest.approx(own, rel=1e-5)
+    # (the eraser also took the pale dust, most of what it carries: with
+    # one layer's mixture it carried 0.6 as much of the dark for its load)
+    assert eraser._carried[:, :N].sum() / eraser.load > 0.1 * own
+    assert _total(sheet) + taken == pytest.approx(laid, rel=1e-5)
+    assert _nothing_negative(sheet) and _bonded_within_bounds(sheet)
+    twin = sheet.copy()
+    twin.films[:] = 0.0
+    assert sheet.films.any()
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+@pytest.mark.parametrize("fixed", [False, True])
+def test_dust_a_film_held_is_loose_again_once_the_film_is_taken_off(seed, fixed):
+    # (fusain-fxc) a crayon over pastel: its film holds part of the dust
+    # under it. What is set did not say whether fixative or a film had set
+    # it: rubbed off with a vinyl eraser, the film left the dust it had
+    # held set for good (0.37 of the dust left on the sheet was)
+    inside = (slice(50, 100), slice(50, 150))
+    sheet = _sheet(seed)
+    sheet.shade(BOX, pastels.soft(BLUE), 0.3, WIDTH)
+    if fixed:
+        sheet.fix()
+    sheet.shade(BOX, crayons.wax(RED), 0.6, 6.0, angle=-30)
+    film, bound = _sum(sheet.film[inside]), _sum(sheet.bound[inside])
+    by_fixative = sheet.bonded[..., SET]
+    assert film > 100.0
+    if fixed:
+        # all the dust was set already: the film has none left to hold
+        assert bound == 0.0 and _sum(by_fixative) > 100.0
+    else:
+        assert bound > 0.2 * _sum(_dust_in(sheet, inside)) and not by_fixative.any()
+    assert np.allclose(sheet.fixed, sheet.bound + by_fixative)
+    sheet.rub(BOX, tools.ERASER, 0.5)
+    film_left = _sum(sheet.film[inside]) / film
+    assert 0.3 < film_left < 0.6  # (0.43 to 0.53)
+    if not fixed:
+        # the eraser takes what the film holds as it takes the film, and
+        # what it leaves of it is loose as far as the film over it has
+        # gone: 0.19 to 0.26 of it is still held, where 0.43 to 0.49 of
+        # the film is left
+        assert _sum(sheet.bound[inside]) / bound < 0.7 * film_left
+    for k in range(1, 3):
+        sheet.rub(BOX, tools.ERASER, 0.8, angle=45 * k)
+    dust = _sum(_dust_in(sheet, inside))
+    assert _sum(sheet.film[inside]) < 0.02 * film and dust > 0.0
+    if fixed:  # what fixative set stays set, film or no film
+        assert _sum(by_fixative[inside]) > 0.99 * dust
+    else:  # (0.003 to 0.03 of it; it was over a third)
+        assert _sum(sheet.fixed[inside]) < 0.06 * dust
+    assert _nothing_negative(sheet) and _bonded_within_bounds(sheet)
+
+
+def _dust_in(sheet, where) -> np.ndarray:
+    return sheet.under[where][..., IV] + sheet.loose[where][..., IV]
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_a_pencil_line_on_loose_pastel_comes_away_with_it_where_the_paper_holds_wax(
+    seed,
+):
+    # (fusain-r56) whether a film goes with its dust was a yes or no on the
+    # wax of the pixel: a pencil line on loose pastel, where the paper
+    # under the pastel held a little crayon, was taken for a film of wax,
+    # and a kneaded eraser left half of it (0.45 to 0.58) where it leaves
+    # a quarter of one on pastel alone. A film is dry as far as it was
+    # laid without wax, whatever else the pixel holds
+    left = []
+    for waxed in (False, True):
+        sheet = _sheet(seed)
+        if waxed:
+            sheet.shade(BOX, crayons.wax(YELLOW), 0.25, WIDTH, angle=80)
+            assert sheet.held[..., IW][INSIDE].mean() > 0.01
+        for layer in range(2):
+            sheet.shade(BOX, pastels.soft(PALE), 0.6, 14.0, angle=30 - 60 * layer)
+        sheet.stroke(ALONG, pencils.B2, 0.6, 4.0)
+        there = _graphite(sheet)
+        assert _sum(sheet.films[..., IX]) > 0.7 * there  # (it is a film)
+        assert not sheet.films[..., IW].any()  # (and a dry one)
+        sheet.erase(ALONG, tools.KNEADED, 0.6, 10.0)
+        left.append(_graphite(sheet) / there)
+        assert _nothing_negative(sheet) and _bonded_within_bounds(sheet)
+    # (0.24 to 0.32 without wax under it, 0.19 to 0.25 with)
+    assert left[0] < 0.4 and left[1] < left[0] + 0.05
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_a_finger_stirs_up_a_pencil_film_that_later_pastel_buried(seed):
+    # (fusain-r56) a dry film goes with the loose dust it lies on, but one
+    # that later dust had buried was not stirred up with the dust
+    # underneath: a finger rubbed all over left 0.74 to 0.80 of the films
+    # as they were, the 0.74 to 0.80 that were buried
+    sheet = _bed(seed=seed)
+    for path in LINES:
+        sheet.stroke(path, pencils.B2, 0.7, 6.0)
+    sheet.shade(BOX, pastels.soft(PALE), 0.6, 14.0, angle=70)
+    film, pigment, graphite = _sum(sheet.film), _total(sheet), _graphite(sheet)
+    assert _sum(sheet.film[..., 0]) > 0.7 * film  # (most of it is buried)
+    finger = Smudger(tools.FINGER)
+    taken = 0.0
+    for x in range(40, 170, 10):
+        taken += sheet.smudge([(x, 30), (x, 126)], finger, 0.6)
+    # it comes up into the dust on top, and is dust there (0.13 to 0.14 of
+    # the films is left)
+    assert _sum(sheet.film) < 0.25 * film
+    assert _sum(sheet.films[..., IV]) == pytest.approx(_sum(sheet.film), rel=1e-4)
+    assert _total(sheet) + taken == pytest.approx(pigment, rel=1e-5)
+    carried = float(finger._carried[:, IX].sum())
+    assert _graphite(sheet) + carried == pytest.approx(graphite, rel=1e-4)
+    assert _nothing_negative(sheet) and _bonded_within_bounds(sheet)
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_an_oil_pastel_leaves_paste_and_no_film_and_a_light_one_covers_a_dark(seed):
+    # what an oil pastel lays on what lies over the paper is paste, as the
+    # rest of it is: no film. (As a film, two fifths of what met paste lay
+    # on it its own colour, and no finger moved it: the strokes showed
+    # through a rubbed join; and with one mixture for all the films of a
+    # pixel the black came up into the white, 24 L* darker.) L* 51 to 57
+    # over black at 9 to 11, as it was (52 to 58) before films were kept
+    # apart
+    sheet = _sheet(seed)
+    for angle in (25, -40):
+        sheet.shade(BOX, pastels.oil(DARK), 0.7, 14, angle)
+    where = (slice(60, 90), slice(70, 130))
+
+    def lightness() -> float:
+        return float(sp.srgb_to_lab(sp.linear_to_srgb(_rgb(sheet, where)))[0])
+
+    black = lightness()
+    sheet.shade((50, 45, 150, 105), pastels.oil(WHITE), 0.8, 14, 60)
+    assert black < 15.0 and lightness() > 50.0
+    assert not sheet.film.any() and not sheet.films.any()
+    assert _sum(sheet.paste) == pytest.approx(_dust(sheet), rel=1e-4)
+    # a crayon, which is not greasy, still lays a film over the paste
+    sheet.shade(BOX, crayons.wax(YELLOW), 0.6, WIDTH, angle=10)
+    assert _sum(sheet.film) > 30.0
+    assert _nothing_negative(sheet) and _bonded_within_bounds(sheet)
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_a_finger_rubs_the_strokes_out_of_an_oil_pastel(seed):
+    # two layers of an oil pastel, rubbed with a finger: the hatching goes
+    # (the spread of 5-pixel blocks of the tone, across the passes, falls
+    # to under a hundredth of what it was; while an oil pastel left a film
+    # on its own paste, the film stayed, and the strokes with it)
+    sheet = _sheet(seed)
+    for angle in (25, -40):
+        sheet.shade(BOX, pastels.oil(BLUE), 0.7, 14, angle)
+    where = (slice(50, 100), slice(60, 140))
+
+    def texture() -> float:
+        spectrum = sheet.reflectance()[where].astype(np.float64)
+        tone = sp.reflectance_to_linear_rgb(spectrum) @ sp.LUMINANCE
+        blocks = tone.reshape(10, 5, 16, 5).mean(axis=(1, 3))
+        return float((blocks - blocks.mean(axis=0)).std())
+
+    before = texture()
+    finger = Smudger(tools.FINGER)
+    for k in range(12):
+        y = 44 + 6 * k
+        ends = [(45, y), (155, y + 2)]
+        sheet.smudge(ends, finger, 0.8)
+        sheet.smudge(ends[::-1], finger, 0.8)
+    assert texture() < 0.1 * before

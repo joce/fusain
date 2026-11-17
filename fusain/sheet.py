@@ -13,10 +13,9 @@ from murex.spline import Profile
 
 from . import _engine as eng
 from . import hatching
-from ._engine import FILM, HELD, IS, IV, IW, IX, KINDS, LOOSE, PASTE, SET, N
+from ._engine import BOUND, FILM, HELD, IS, IV, IW, IX, KINDS, LOOSE, PASTE, SET, N
 from .medium import Medium
 from .paper import Paper
-from .pencils import BINDING as PENCIL_BINDING
 from .pens import HeldPen, Pen
 from .smudger import Smudger
 from .stick import Stick
@@ -50,11 +49,6 @@ SHEEN_HIDE = 0.1
 SHEEN_FLAT = 0.6
 #: How narrow the mirrored light is: graphite is satin, not a mirror.
 SHININESS = 12.0
-#: A pencil drawn over a bed of dust lays a film on it (:attr:`Sheet.film`)
-#: that shines as what the paper holds does. Of the graphite in a layer
-#: with a film, the share that is the film's: what the paper holds of a
-#: pencil's mark. The rest is its crumbs, loose and matte.
-FILM_GRAPHITE = PENCIL_BINDING
 #: The gloss of wax: what a film of wax as slick as it gets
 #: (:data:`fusain._engine.WAX_FULL`), polished flat, adds to the light when
 #: it mirrors the lamp squarely, and how narrow that light is. Less than
@@ -118,10 +112,13 @@ class Sheet:
     ``loose`` on top and ``under`` beneath it, so that what was laid last is
     seen over what was laid before. Most of that is dust, which is
     what a stump, an eraser or a later stroke can still move; ``bonded``
-    holds how much of each layer is not: dust that is set (:attr:`fixed`), a
-    film laid over the dust (:attr:`film`) and greasy paste
-    (:attr:`paste`). ``cover`` is the share of the pixel that carries
-    pigment: the rest shows bare paper. Memory: about 0.38 KB per pixel.
+    holds how much of each layer is not: dust that is set (:attr:`fixed`,
+    by fixative or under a film: :attr:`bound`) and greasy paste
+    (:attr:`paste`). A film laid over the dust (:attr:`film`) is no part of
+    the dust it lies on: ``films`` holds the pigment of the film that
+    lies on each of the two layers. ``cover`` is
+    the share of the pixel that carries pigment: the rest shows bare
+    paper. Memory: about 0.6 KB per pixel.
 
     Raises ValueError or TypeError unless ``width`` and ``height`` are whole
     numbers above 0.
@@ -153,9 +150,14 @@ class Sheet:
         # it, and its film
         self._fresh = np.zeros((H, W, 2), np.float32)
         # of what lies in the layer underneath (0) and in the layer on top
-        # (1), the volume at each pixel that is not loose dust: set, film
-        # and paste
+        # (1), the volume at each pixel that is not loose dust (set by
+        # fixative, bound under a film, paste), and the volume of film that
+        # lies on the layer
         self.bonded = np.zeros((H, W, 2, KINDS), np.float32)
+        # the film that lies on the layer underneath (0) and on the layer
+        # on top (1), each a mixture of its own, packed as ``held`` is (its
+        # wax: what it was laid with, which ``held`` counts too)
+        self.films = np.zeros((H, W, 2, HELD), np.float32)
         # the ink of pens: a stain in the paper, packed as dust is with the
         # colour it bronzes after, and the share of each pixel it is on
         # (None until a pen has drawn)
@@ -169,7 +171,7 @@ class Sheet:
         new._rng = np.random.default_rng()
         new._rng.bit_generator.state = self._rng.bit_generator.state
         names = ("tooth", "crush", "polish", "rough", "dent", "cover", "held")
-        for name in (*names, "under", "loose", "_fresh", "bonded"):
+        for name in (*names, "under", "loose", "films", "_fresh", "bonded"):
             setattr(new, name, getattr(self, name).copy())
         if self.ink is not None and self.inked is not None:
             new.ink, new.inked = self.ink.copy(), self.inked.copy()
@@ -198,24 +200,41 @@ class Sheet:
     @property
     def fixed(self) -> np.ndarray:
         """Volume of the dust that is set, (H, W, 2): in the layer underneath
-        and in the layer on top. Fixative sets dust, and so does a film of
-        wax laid over it. A view: writing to it changes the sheet."""
-        return self.bonded[..., SET]
+        and in the layer on top. Fixative sets dust, for good; and a film
+        of wax laid over it holds it (:attr:`bound`), for as long as the
+        film is there. An array of its own: the two are kept apart
+        (``bonded``)."""
+        return self.bonded[..., SET] + self.bonded[..., BOUND]
+
+    @property
+    def bound(self) -> np.ndarray:
+        """Volume of the dust that a film of wax holds, (H, W, 2): in the
+        layer underneath and in the layer on top. It is set
+        (:attr:`fixed`) while the film lies over it, and loose again as far
+        as the film goes: taken off by an eraser, or worked into the tooth
+        by a firm tip. A view: writing to it changes the sheet."""
+        return self.bonded[..., BOUND]
 
     @property
     def film(self) -> np.ndarray:
-        """Volume of film in each of the two layers, (H, W, 2): what a
-        medium laid not on the paper but on what lay over it. A waxy medium
-        (a coloured pencil, a crayon, an oil pastel) lays one wherever dust
-        lies; a dry one (a pencil, a stick of charcoal) on a bed of dust,
-        more of it than the crumbs of its own mark. It stays on top of the
-        dust. A film of wax sets most of the dust under it, and a tool
-        slides on it and lifts it only as it lifts what the paper holds: no
-        stump or kneaded eraser moves it. The film of a dry medium is only
-        as fast as the dust it lies on: a pencil line on loose pastel comes
-        away with the pastel, and one on fixed pastel stays; its graphite
-        shines as what the paper holds does (:meth:`shine`). A view, as
-        :attr:`fixed` is."""
+        """Volume of film that lies on each of the two layers, (H, W, 2):
+        on the dust underneath (under the dust on top) and on top of all.
+        A film is what a medium laid not on the paper but on what lay over
+        it. A waxy medium (a coloured pencil, a crayon, an oil pastel) lays
+        one wherever dust lies; a dry one (a pencil, a stick of charcoal)
+        on a bed of dust, more of it than the crumbs of its own mark. It
+        is no part of the dust it lies on: the film on each layer has its
+        own pigment (``films``, (H, W, 2, ...), each packed as ``held``
+        is), so a film has its own colour, and what takes a film takes
+        that. A film
+        laid on a film joins it, on top; dust laid over it buries it. A
+        film of wax holds most of the dust under it (:attr:`bound`), and a
+        tool slides on it and lifts it only as it lifts what the paper
+        holds: no stump or kneaded eraser moves it. A film as far as it is
+        dry is only as fast as the dust it lies on: a pencil line on loose
+        pastel comes away with the pastel, and one on fixed pastel stays;
+        its graphite shines as what the paper holds does (:meth:`shine`).
+        A view: writing to it changes the sheet."""
         return self.bonded[..., FILM]
 
     @property
@@ -223,12 +242,16 @@ class Sheet:
         """Volume of paste in each of the two layers, (H, W, 2): what the
         paper does not hold of a greasy medium (an oil pastel), and the dust
         it was laid over and took up. A finger smears it, with its wax; a
-        kneaded eraser does not lift it. A view, as :attr:`fixed` is."""
+        kneaded eraser does not lift it. A view, as :attr:`film` is."""
         return self.bonded[..., PASTE]
 
     def pigment(self) -> np.ndarray:
-        """Volume of pigment at each pixel, held and loose, (H, W)."""
-        return self.held[..., IV] + self.under[..., IV] + self.loose[..., IV]
+        """Volume of pigment at each pixel, (H, W): what the paper holds,
+        the dust and the paste of the two layers, and the films."""
+        lying = self.under[..., IV] + self.loose[..., IV]
+        if not self.film.any():  # (most drawings in dry media: no film)
+            return self.held[..., IV] + lying
+        return self.held[..., IV] + lying + self.films[..., IV].sum(axis=-1)
 
     def shine(self, of: str | None = None) -> np.ndarray:
         """How much of each pixel mirrors the light, 0..1, (H, W). Three
@@ -271,62 +294,47 @@ class Sheet:
 
     def _graphite_sheen(self) -> np.ndarray:
         """The sheen of graphite; see :meth:`shine`. What the paper holds
-        shines through the matte dust of both layers; a film of it on a bed
-        of dust as well (:meth:`_film_sheen`), and the shine of all of it
-        together is no more than the covered share of the pixel."""
+        shines through the matte dust of both layers and the matte of the
+        films; the graphite of a film as well (:meth:`_film_sheen`), and the
+        shine of all of it together is no more than the covered share of
+        the pixel."""
         cover = np.maximum(self.cover, np.float32(1e-6))
         flat = np.float32(SHEEN_FLAT) * self._pressed()
         full = np.float32(SHEEN_FULL) * (1.0 - flat)
         film = np.minimum(self.held[..., IX] / cover / full, 1.0)
         dust = self.under[..., IV] + self.loose[..., IV]
         matte = np.maximum(dust - self.under[..., IX] - self.loose[..., IX], 0.0)
+        if not self.film.any():
+            # (no film: the shine of what the paper holds, as it was)
+            return self.cover * film * np.exp(-matte / cover / np.float32(SHEEN_HIDE))
+        matte += self._film_matte()
         shine = self.cover * film * np.exp(-matte / cover / np.float32(SHEEN_HIDE))
-        if self._has_graphite_films():
-            # (where there is no film it adds nothing, and the shine of what
-            # the paper holds is as it was, to the bit)
-            self._film_sheen(shine)
+        if self.films[..., IX].any():
+            shine = np.minimum(shine + self._film_sheen(cover, full), self.cover)
         return shine
 
-    def _has_graphite_films(self) -> bool:
-        """Whether any film lies in the layers where there is graphite."""
-        if not self.film.any():
-            return False
-        return bool(self.under[..., IX].any() or self.loose[..., IX].any())
+    def _film_matte(self) -> np.ndarray:
+        """What of the films of each pixel is matte, (H, W): all that is not
+        graphite."""
+        matte = np.maximum(self.films[..., IV] - self.films[..., IX], 0.0)
+        return matte.sum(axis=-1)
 
-    def _film_sheen(self, shine: np.ndarray) -> None:
-        """Add to ``shine`` the sheen of the films a pencil laid on a bed
-        of dust (:func:`fusain._engine.film_sheen`).
-
-        A layer is one mixture: its film is kept as a volume, and what it
-        is made of, and what lies over what within the layer, are not kept
-        apart from the dust. What can be told is that the graphite in a
-        layer with a film came with a pencil's mark: the film, which the
-        paper would have held, and its crumbs, which it would not. So the
-        film is taken to hold the share of that graphite that the paper
-        holds of a pencil's mark (:data:`FILM_GRAPHITE`), and never more
-        than its own volume: exact for a pencil over pastel, in one pass or
-        in many, and loose graphite dust from elsewhere that lies with a
-        film is taken for its crumbs, matte but for the film's share. In
-        the layer on top the film shines through all the matte that lies
-        with it, the clay of its crumbs and any dust: what a light pass did
-        not bury cannot be told from dust laid over the film later, and it
-        is taken to hide it. That errs on the matte side: a light line over
-        pastel shines less than its film would. A film a later pass buried
-        lies on the older dust underneath, and shines through the clay of
-        its crumbs, as a line on paper does, and the matte on top. Where a
-        pixel has wax, a film there is taken for one of wax (as a tool
-        takes it), and its gloss is the wax's."""
-        how = np.array([SHEEN_FULL, SHEEN_FLAT, SHEEN_HIDE, FILM_GRAPHITE])
-        eng.film_sheen(
-            self.held,
-            self.under,
-            self.loose,
-            self.bonded,
-            self.cover,
-            self._pressed(),
-            shine,
-            how,
-        )
+    def _film_sheen(self, cover: np.ndarray, full: np.ndarray) -> np.ndarray:
+        """The sheen of the graphite of the films, (H, W): a pencil drawn
+        over a bed of dust lays a film on it that shines as what the paper
+        holds does, by its own graphite (``films``), as thick as ``full``
+        when it shines fully. The share of it that lies on top has nothing
+        over it; the share on the dust underneath shines through the matte
+        dust on top: the crumbs of the pass that laid it, as on paper, and
+        what was laid since. (What is matte in a film thins its graphite,
+        and hides none of it.)"""
+        below = self.films[..., 0, IX] / cover / full
+        above = self.films[..., 1, IX] / cover / full
+        over = np.maximum(self.loose[..., IV] - self.loose[..., IX], 0.0)
+        hidden = np.exp(-over / cover / np.float32(SHEEN_HIDE))
+        # (the two shine as one film does: no more than fully)
+        above = np.minimum(above, 1.0)
+        return self.cover * (above + np.minimum(below, 1.0 - above) * hidden)
 
     def _wax_gloss(self) -> np.ndarray:
         """The gloss of polished wax; see :meth:`shine`. Seen from above,
@@ -336,12 +344,18 @@ class Sheet:
         cover = np.maximum(self.cover, np.float32(1e-6))
         slick = np.minimum(self.held[..., IW] / cover / np.float32(eng.WAX_FULL), 1.0)
         seen = np.ones_like(cover)  # (how much of the wax held shows)
+        # (a film shines as wax as far as it is wax: a dry one is matte)
+        filmed = np.maximum(self.films[..., IV], np.float32(1e-12))
+        dry = self.films[..., IW] / filmed / np.float32(eng.STICKS)
         for which, layer in enumerate((self.under, self.loose)):
-            film = self.film[..., which] + self.paste[..., which]
-            dust = np.maximum(layer[..., IV] - film, 0.0)
-            over = np.minimum(film / cover / np.float32(eng.COVERS), 1.0)
+            paste, film = self.paste[..., which], self.film[..., which]
+            waxy = np.minimum(dry[..., which], 1.0)
+            dust = np.maximum(layer[..., IV] - paste, 0.0)
             seen *= np.exp(-dust / cover / np.float32(SHEEN_HIDE))
+            wax = film * waxy + paste
+            over = np.minimum(wax / cover / np.float32(eng.COVERS), 1.0)
             seen = over + (1.0 - over) * seen
+            seen *= np.exp(-film * (1.0 - waxy) / cover / np.float32(SHEEN_HIDE))
         return self.cover * slick * self.polish ** np.float32(WAX_POLISH) * seen
 
     def _ink_bronze(self) -> np.ndarray:
@@ -359,7 +373,8 @@ class Sheet:
     def reflectance(self) -> np.ndarray:
         """Reflectance spectrum of the drawing, (H, W, N_BANDS) float32: what
         lies on top over what lies underneath over the held pigment over the
-        paper."""
+        paper, and on the dust of each of the two layers the film that lies
+        on it."""
         out = np.empty((self.height, self.width, N), np.float32)
         for rows in self._row_chunks():
             out[rows] = self._reflectance_rows(rows)
@@ -371,12 +386,18 @@ class Sheet:
 
     def _reflectance_rows(self, rows: slice) -> np.ndarray:
         layers = (self.held[rows], self.under[rows], self.loose[rows])
+        films = self.films[rows]
+        # (whether a film lies on the dust underneath, and on top, in these
+        # rows: none, in most drawings of dry media)
+        filmed = [bool(self.film[rows][..., which].any()) for which in (0, 1)]
         out = np.empty((*layers[0].shape[:2], N))
         out[:] = self.ground
         stained = self._stain(out, rows)
         marked = layers[0][..., IV] > 0
         for layer in layers[1:]:
             marked |= layer[..., IV] > 0
+        if any(filmed):
+            marked |= (films[..., IV] > 0).any(axis=-1)
         count = int(np.count_nonzero(marked))
         if count:
             # the pigment lies on the covered share of the pixel, that much
@@ -385,10 +406,13 @@ class Sheet:
             bare = out[marked] if stained else self.ground
             kappa, sigma = np.empty((count, N)), np.empty(count)
             seen = np.empty((count, N))
-            for layer in layers:  # from the paper up
+            for which, layer in enumerate(layers, start=-1):  # from the paper up
                 eng.thicken(layer, marked, share, kappa, sigma)
                 sp.km_layer(kappa, sigma, bare, out=seen)
                 bare = seen  # (the next layer lies on what is seen so far)
+                if which >= 0 and filmed[which]:  # (and on its dust, its film)
+                    eng.thicken_film(films, which, marked, share, kappa, sigma)
+                    sp.km_layer(kappa, sigma, bare, out=seen)
             eng.show_through(out, marked, share, seen)
         return out
 
@@ -565,6 +589,7 @@ class Sheet:
                 self.held,
                 self.under,
                 self.loose,
+                self.films,
                 self._fresh,
                 self.bonded,
                 xs,
@@ -634,6 +659,8 @@ class Sheet:
                 self.held,
                 self.under,
                 self.loose,
+                self.films,
+                self.bonded,
                 self.ink,
                 self.inked,
                 xs,
@@ -760,11 +787,10 @@ class Sheet:
             ("wax", IW, WAX_SHEEN, WAX_SHININESS),
         )
         for kind, part, sheen, shininess in lobes:
-            if not self.held[..., part].any():
-                # (graphite also shines as a film on a bed of dust)
-                filmed = kind == "graphite" and self._has_graphite_films()
-                if not filmed:
-                    continue
+            # (graphite also shines as a film on a bed of dust)
+            filmed = self.film.any() and self.films[..., part].any()
+            if not (self.held[..., part].any() or filmed):
+                continue
             mirrored = self.shine(kind) * facing**shininess * (sheen * gloss)
             white = mirrored if white is None else white + mirrored
         if white is not None:
@@ -1046,14 +1072,14 @@ class Sheet:
         total = 0.0
         for which, layer in enumerate((self.under, self.loose)):
             volume = layer[..., IV]
-            # (a film is hard already: fixative sets the dust and the paste)
-            hard = self.fixed[..., which] + self.film[..., which]
-            newly = np.maximum(volume - hard, 0.0)
+            # (a film is hard already, and what it holds is set: fixative
+            # sets the dust and the paste)
+            newly = np.maximum(volume - self.fixed[..., which], 0.0)
             newly *= np.float32(amount)
             # (only what is newly set darkens)
             share = newly / np.maximum(volume, np.float32(1e-9))
             layer[..., IS] *= 1.0 - np.float32(FIXATIVE_DARKENS) * share
-            self.fixed[..., which] += newly
+            self.bonded[..., which, SET] += newly
             self.paste[..., which] *= np.float32(1.0 - amount)
             total += float(newly.sum(dtype=np.float64))
         return total
@@ -1083,6 +1109,7 @@ class Sheet:
             self.held,
             self.under,
             self.loose,
+            self.films,
             self.bonded,
             ink,
             inked,

@@ -20,18 +20,25 @@ from fusain import (
     tools,
 )
 from fusain._engine import (
+    BOUND,
     BURNISH,
     BURNISH_FROM,
     BURNISH_SOFT,
+    FILM,
     FLATTEN,
+    HELD,
     IV,
     IW,
+    KINDS,
     POLISH_HOLDS,
+    SET,
     SETTLE,
     WAX_FAST,
     WAX_HOLDS,
+    N,
     firmness,
     settled,
+    take_films,
     wax_grip,
 )
 
@@ -202,10 +209,10 @@ def test_the_blender_drags_colour_across_an_edge_but_not_far():
 WHITE = "#f4f1ea"
 
 
-def _over_dust(box=BOX) -> Sheet:
+def _over_dust(box=BOX, seed=1) -> Sheet:
     """Three layers of a dark coloured pencil over a near-white soft pastel:
     most of the dark lies on the dust, a film."""
-    sheet = _sheet()
+    sheet = Sheet(200, 150, paper=papers.CARTRIDGE, seed=seed)
     sheet.shade(box, pastels.soft(WHITE), 0.4, 9.0)
     for layer in range(3):
         sheet.shade(box, pencils.coloured(DARK), 0.5, 6.0, angle=30 - 55 * layer)
@@ -216,20 +223,46 @@ def _absorption(layer) -> float:
     return float(layer[..., :10].sum(dtype=np.float64))
 
 
-def test_a_firm_pass_works_a_film_that_lies_over_dust_into_the_tooth():
-    sheet = _over_dust()
-    lying = _absorption(sheet.under) + _absorption(sheet.loose)
-    held = _absorption(sheet.held)
+def _lying(sheet) -> float:
+    """How dark what lies on the paper is: the two layers, and the films."""
+    layers = (sheet.under, sheet.loose, sheet.films)
+    return sum(_absorption(layer) for layer in layers)
+
+
+def _dust(sheet) -> float:
+    """The volume of the two layers: the dust, without the films on it."""
+    return float((sheet.under[..., IV] + sheet.loose[..., IV]).sum(dtype=np.float64))
+
+
+def _sum(array) -> float:
+    return float(np.asarray(array).sum(dtype=np.float64))
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_a_firm_pass_works_a_film_that_lies_over_dust_into_the_tooth(seed):
+    sheet = _over_dust(seed=seed)
+    lying, held = _lying(sheet), _absorption(sheet.held)
     assert lying > 3.0 * held  # (the dark is on the dust)
+    # and it is a film there, the pencil's own: next to none of the dark is
+    # in the dust (its crumbs)
+    assert _absorption(sheet.films) > 0.85 * lying
     pigment, wax = _total(sheet), float(sheet.held[..., IW].sum(dtype=np.float64))
+    dust = _dust(sheet)
     lost = sheet.shade(BOX, pencils.BLENDER, 1.0, angle=20)
     # it drags the film along as it drags what the paper holds, and lays it
-    # down in the tooth: a fifth of the dark that lay on the dust (before,
-    # a hundredth: only the wax of the film, which is counted with what
-    # the paper holds, went with it)
-    after = _absorption(sheet.under) + _absorption(sheet.loose)
-    assert after < 0.85 * lying
+    # down in the tooth: 0.44 to 0.49 of the dark that lay on the dust,
+    # over three sheets (fusain-r56). While a film was one mixture with
+    # the dust of its layer, the tip took the layer's average, white dust
+    # for the most part: 0.23 to 0.25 of the dark, and before fusain-pv2 a
+    # hundredth: only the wax of the film, which is counted with what the
+    # paper holds, went with it.
+    after = _lying(sheet)
+    assert after < 0.62 * lying
     assert _absorption(sheet.held) > held + 0.9 * (lying - after)
+    # what it takes is the film: the pale dust stays where it lay, but for
+    # what a firm tip presses in of it (0.07 to 0.08 of it; with the film
+    # went 0.18 of it)
+    assert _dust(sheet) > 0.9 * dust
     # nothing is lost: the medium, and the wax, which the blender adds to
     np.testing.assert_allclose(_total(sheet), pigment + lost, rtol=1e-5)
     np.testing.assert_allclose(
@@ -237,7 +270,68 @@ def test_a_firm_pass_works_a_film_that_lies_over_dust_into_the_tooth():
         wax + lost * pencils.BLENDER.wax,
         rtol=1e-5,
     )
-    assert sheet.bonded.min() >= 0.0
+    assert sheet.bonded.min() >= 0.0 and sheet.films.min() >= 0.0
+
+
+def test_what_takes_a_film_takes_its_own_pigment_and_frees_the_dust_it_held():
+    # (fusain-r56, fusain-fxc) the film on each of the two layers is a
+    # mixture of its own; a film of wax holds dust under it, which fixative
+    # has not set
+    films = np.zeros((1, 1, 2, HELD), np.float32)
+    films[0, 0, 0, :N], films[0, 0, 0, IV], films[0, 0, 0, IW] = 8.0, 0.25, 0.125
+    films[0, 0, 1, :N], films[0, 0, 1, IV], films[0, 0, 1, IW] = 3.0, 0.75, 0.25
+    bonded = np.zeros((1, 1, 2, KINDS), np.float32)
+    bonded[0, 0, :, FILM] = 0.25, 0.75  # (on the dust underneath, and on top)
+    bonded[0, 0, :, BOUND] = 0.4, 0.2
+    bonded[0, 0, :, SET] = 0.3, 0.1
+    onto = np.zeros(HELD)
+    # a firm tip drags half of the film, wherever it lies
+    assert take_films(films, bonded, onto, 0, 0, 0.5, 0.5) == 0.5
+    assert onto[IV] == 0.5 and np.allclose(onto[:N], 5.5)
+    assert np.allclose(films[0, 0, :, IV], (0.125, 0.375))
+    assert np.allclose(films[0, 0, 0, :N], 4.0) and np.allclose(films[0, 0, 1, :N], 1.5)
+    assert np.allclose(bonded[0, 0, :, FILM], (0.125, 0.375))
+    # (its wax is the pixel's, counted with what the paper holds)
+    assert onto[IW] == 0.0 and np.allclose(films[0, 0, :, IW], (0.0625, 0.125))
+    # the dust it held is loose again that far; what fixative set stays set
+    assert np.allclose(bonded[0, 0, :, BOUND], (0.2, 0.1))
+    assert np.allclose(bonded[0, 0, :, SET], (0.3, 0.1))
+    # a tool that takes all of the film on top and none of the one under
+    # the dust: it takes the pigment of the one on top; the dust on top is
+    # all loose, and the dust underneath as far as the films over it have
+    # gone, three quarters of them
+    assert take_films(films, bonded, onto, 0, 0, 0.0, 1.0) == 0.375
+    assert np.allclose(bonded[0, 0, :, FILM], (0.125, 0.0))
+    assert np.allclose(bonded[0, 0, :, BOUND], (0.05, 0.0))
+    assert np.allclose(films[0, 0, 0, :N], 4.0) and not films[0, 0, 1].any()
+    assert np.allclose(onto[:N], 7.0)
+    # nothing to take, nothing changes
+    before = films.copy(), bonded.copy()
+    assert take_films(films, bonded, onto, 0, 0, 0.0, 0.5) == 0.0
+    assert np.array_equal(films, before[0]) and np.array_equal(bonded, before[1])
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_red_wax_over_blue_pastel_is_red_and_the_blender_leaves_it_so(seed):
+    # (fusain-r56, fusain-fxc) three light layers of a red crayon over
+    # blue pastel: the film is the crayon's own, on the pastel, where it
+    # was one mixture with the pastel dust of its layer, a dull violet
+    # grey (a chroma of 5.7, then 4.8 after the blender; now 19 and 15:
+    # the blender works two fifths of the red into the tooth, under the
+    # pastel that is left)
+    sheet = Sheet(200, 150, paper=papers.CARTRIDGE, seed=seed)
+    sheet.shade(BOX, pastels.soft(BLUE), 0.3, 9.0)
+    for layer in range(3):
+        sheet.shade(BOX, crayons.wax(RED), 0.5, 6.0, angle=30 - 55 * layer)
+    before, bound = _lab(sheet), _sum(sheet.bound)
+    assert before[1] > 12.0 and before[2] > 0.0 and _chroma(sheet) > 14.0
+    sheet.shade(BOX, pencils.BLENDER, 1.0, angle=20)
+    after = _lab(sheet)
+    assert after[1] > 0.75 * before[1] and _chroma(sheet) > 0.7 * np.hypot(*before[1:])
+    # and it leaves less of the dust set than it found (it found 1190 and
+    # left 1630: what the films it dragged off had held, and what its own
+    # film holds; now 1030)
+    assert _sum(sheet.bound) < 0.95 * bound
 
 
 def test_the_blender_closes_the_flecks_of_a_film_over_dust_as_of_one_in_the_tooth():
@@ -270,7 +364,7 @@ def test_the_blender_drags_a_film_over_dust_across_an_edge_as_wax_in_the_tooth()
         rows = slice(45, 105)
 
         def dark(columns) -> float:
-            layers = (sheet.held, sheet.under, sheet.loose)
+            layers = (sheet.held, sheet.under, sheet.loose, sheet.films)
             return sum(
                 float(a[rows, columns, :10].mean(dtype=np.float64)) for a in layers
             )
