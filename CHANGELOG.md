@@ -64,6 +64,26 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   5%), and one in the hand 1.4% before it is full (from 0.6%). The picture
   changes wherever a stump or a finger is used.
 
+- Paper scraped by a sand eraser or a knife has its fibres raised, and
+  takes more of what is drawn there next, in blotches (fusain-rlo). It took
+  a stroke as fresh paper does, to the bit: the paper's `crush` cannot go
+  below nothing. `Sheet.rough` (0 to 1, four bytes a pixel) is how far the
+  fibres stand: a tool raises them as far as it cuts the paper (`scrape`),
+  towards how far the fibres of that clump come up, the paper's own
+  (clumps `_engine.CLUMP`, 3, grains apart, the same whatever cuts them),
+  and no further for cutting again. Where they stand fully, the tooth
+  holds and takes `_engine.ROUGH` (1) times more. A tip pressed firmly lays
+  them down towards the level of its load, as it polishes wax, and a
+  stump, a finger or a chamois as far as it presses the dust in; a light
+  layer and a rubber eraser leave them. On cartridge paper a patch gone
+  over once with a sand eraser takes 1.53 times as much of a light layer
+  of HB (1.36 at 0.8, 1.52 of vine charcoal at 0.5), and what varies over
+  more than the grain grows from 0.39 of the mean to 0.45 (0.21 to 0.26,
+  0.29 to 0.37); L* 1.7 to 4.9 darker. The stroke and rub kernels take the
+  array after `polish`. Of the fingerprint suite, the picture of one
+  drawing changes (`drawing`, which scratches a light out with a knife and draws over it), and
+  every mark gains the hash of `rough`.
+
 - Strokes are twice as fast, and the picture changes a little
   (fusain-6ru). A tip lays at samples a quarter of its width apart, not an
   eighth: shading takes 0.54 to 0.59 of the time, 2000 short strokes and a

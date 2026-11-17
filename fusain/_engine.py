@@ -429,6 +429,23 @@ POLISH_HOLDS = 0.9
 #: stain of a light layer is most of what a heavy one leaves. A knife or a
 #: sand eraser takes it as far as it scrapes.
 STAIN = 0.008
+#: What cuts the surface of the paper, a blade or grit, raises its fibres
+#: (``rough``, 0..1), as far as it cuts it: where they stand fully up, a
+#: pass lays ROUGH more again of a medium, and the tooth holds as much more,
+#: so scraped paper takes a darker mark than fresh paper. Not evenly: the
+#: fibres come up in clumps about CLUMP grains of the paper apart, each as
+#: far as the paper's own felt lets it (a number for each clump that is the
+#: sheet's, whatever cuts it and however often: :func:`fibres_at`; on the
+#: whole half the way, an eighth of the paper not at all and an eighth all
+#: the way), and no further for being cut again, so the mark is blotchy: a
+#: light layer shaded over paper a sand eraser has gone over once lays 1.4
+#: to 1.6 times as much there, and what varies over more than the grain
+#: grows from 0.34-0.42 of the mean to 0.42-0.47. A tip pressed firmly
+#: lays them down again, towards the level of its load as it polishes wax
+#: (BURNISH times its :func:`firmness`), and a tool that presses the dust
+#: in (a stump, a finger) by the share of a pass it presses.
+ROUGH = 1.0
+CLUMP = 3.0
 #: An eraser slides on wax that holds against it, and drags some of it
 #: along: this share of what it would have lifted, had the wax not held
 #: (:func:`push_along`). It lays that back, held, DRAG_LAY of it over each
@@ -458,6 +475,24 @@ def unit_noise(ix: int, iy: int, salt: int) -> float:
     h = ((h ^ (h >> 16)) * 0x45D9F3B) & 0xFFFFFFFF
     h ^= h >> 16
     return (h & 0xFFFFFF) / 16777216.0
+
+
+@_inlined
+def fibres_at(ix: int, iy: int, clump: float, salt: int) -> float:
+    """How far the fibres of the paper at a pixel come up where it is cut,
+    0..1: a number for each clump of them, ``clump`` pixels apart, the
+    sheet's own (``salt``), smoothly between them, always the same; twice
+    as far from the middle as the numbers are, and cut off at 0 and 1, so
+    that some clumps do not come up at all and some all the way."""
+    fx, fy = (ix + 0.5) / clump, (iy + 0.5) / clump
+    cx, cy = math.floor(fx), math.floor(fy)
+    u, v = fx - cx, fy - cy
+    u, v = u * u * (3.0 - 2.0 * u), v * v * (3.0 - 2.0 * v)
+    i, j = int(cx), int(cy)
+    a, b = unit_noise(i, j, salt), unit_noise(i + 1, j, salt)
+    c, d = unit_noise(i, j + 1, salt), unit_noise(i + 1, j + 1, salt)
+    top, bottom = a + (b - a) * u, c + (d - c) * u
+    return min(max(2.0 * (top + (bottom - top) * v) - 0.5, 0.0), 1.0)
 
 
 @njit(cache=True, error_model="numpy")
@@ -686,15 +721,29 @@ def settled(pressed, load, slick, passing):
 
 @_inlined
 def press_flat(
-    crush, polish, iy, ix, crushed, polished, bearing, flattens, slick, passing
+    crush,
+    polish,
+    rough,
+    iy,
+    ix,
+    crushed,
+    polished,
+    roughed,
+    bearing,
+    flattens,
+    slick,
+    passing,
 ):
     """Press a pixel flat as a tip that bears on it with ``bearing`` (its
     pressure there, the streaks of its lead aside) does in the share
     ``passing`` of a pass: a dry tip crushes the paper (``crush``; its load
     at full pressure is ``flattens``), and any tip polishes a film of wax
     as far as it is ``slick`` (``polish``), each towards the level of its
-    load (:func:`settled`). ``crushed`` and ``polished`` are what the pixel
-    holds of the two. Returns how level the tooth then is to a tip.
+    load (:func:`settled`), and lays down the fibres a blade or grit raised
+    (``rough``), as it polishes wax as slick as it gets: how far they lie
+    goes towards the level of that load. ``crushed``, ``polished`` and
+    ``roughed`` are what the pixel holds of the three. Returns how level
+    the tooth then is to a tip.
 
     (A tip that bears too lightly here, a waxy one on the paper and any
     tip where no wax is slick would leave what they do not press as it
@@ -707,6 +756,9 @@ def press_flat(
         if slick > 0.0:
             polish[iy, ix] = settled(polished, BURNISH * steady, slick, passing)
             polished = polish[iy, ix]
+        if roughed > 0.0:
+            lying = settled(1.0 - roughed, BURNISH * steady, 1.0, passing)
+            rough[iy, ix] = min(roughed, 1.0 - lying)
     return crushed + polished - crushed * polished
 
 
@@ -1208,6 +1260,7 @@ def bear(
     tooth,
     crush,
     polish,
+    rough,
     dent,
     cover,
     held,
@@ -1250,7 +1303,10 @@ def bear(
     The tooth it meets is level as far as the paper has been crushed
     (``crush``) and the wax on it polished (``polish``); pressed firmly, a
     dry tip raises the one and any tip on wax the other, each towards the
-    level that its load reaches and no further (:func:`settled`).
+    level that its load reaches and no further (:func:`settled`). Where a
+    blade or grit has raised the fibres of the paper (``rough``), it lays
+    more and the tooth holds more (:data:`ROUGH`), and pressed firmly it
+    lays them down again.
 
     Returns the volume laid and what of it is left to settle on top."""
     height, width = tooth.shape
@@ -1306,6 +1362,8 @@ def bear(
                 continue
             covered = max(cover[iy, ix], touch)
             cover[iy, ix] = covered
+            # (fibres a blade or grit raised take more, and hold more)
+            roughed = rough[iy, ix]
             there = held[iy, ix, IV] + under[iy, ix, IV] + loose[iy, ix, IV]
             thick = (there + fresh[iy, ix, 0] + fresh[iy, ix, 1]) / covered
             was_set = bonded[iy, ix, 0, SET] + bonded[iy, ix, 1, SET]
@@ -1333,10 +1391,12 @@ def bear(
                 flat = press_flat(
                     crush,
                     polish,
+                    rough,
                     iy,
                     ix,
                     crushed,
                     polished,
+                    roughed,
                     min(row[4, at], 1.0),
                     flattens,
                     slick,
@@ -1355,7 +1415,8 @@ def bear(
             # the tip presses some of the dust under it into the paper
             pressed = min(PRESS_IN * bearing, 1.0) * passing
             press_dust(held, under, loose, bonded, cover, iy, ix, pressed)
-            room = full * (FILL_LIGHT + (1.0 - FILL_LIGHT) * bearing) - thick
+            holds = full * (1.0 + ROUGH * roughed)
+            room = holds * (FILL_LIGHT + (1.0 - FILL_LIGHT) * bearing) - thick
             if room > 0.0:
                 # (a light pass takes less, but not in proportion: the lead
                 # still slides over all it touches)
@@ -1470,6 +1531,7 @@ def put_down(
     tooth,
     crush,
     polish,
+    rough,
     dent,
     cover,
     held,
@@ -1505,6 +1567,7 @@ def put_down(
             tooth,
             crush,
             polish,
+            rough,
             dent,
             cover,
             held,
@@ -1669,6 +1732,7 @@ def lay_stroke(
     tooth,
     crush,
     polish,
+    rough,
     dent,
     cover,
     held,
@@ -1795,6 +1859,7 @@ def lay_stroke(
                         tooth,
                         crush,
                         polish,
+                        rough,
                         dent,
                         cover,
                         held,
@@ -1820,6 +1885,7 @@ def lay_stroke(
                     tooth,
                     crush,
                     polish,
+                    rough,
                     dent,
                     cover,
                     held,
@@ -2252,6 +2318,23 @@ def bare_tooth(crush, polish, held, cover, iy, ix, cut):
 
 
 @_inlined
+def cut_fibres(rough, iy, ix, cut, flattened, clump, salt):
+    """Raise the fibres of the paper at a pixel as far as a tool cuts its
+    surface (``cut``, the share of it: a blade or grit), towards how far
+    they come up there (:func:`fibres_at`, clumps ``clump`` pixels apart
+    with the sheet's ``salt``) and no further; and lay down the share
+    ``flattened`` of them first, as a tool that presses the dust in does
+    (``rough``: how far they stand, 0..1)."""
+    roughed = rough[iy, ix]
+    for _ in once(cut > 0.0 or (roughed > 0.0 and flattened > 0.0)):
+        roughed *= 1.0 - flattened
+        if cut > 0.0:
+            stands = fibres_at(ix, iy, clump, salt)
+            roughed = max(roughed, roughed + (stands - roughed) * cut)
+        rough[iy, ix] = roughed
+
+
+@_inlined
 def scrape_ink(ink, inked, load, iy, ix, cut, room):
     """Cut the share ``cut`` of the surface of the paper at a pixel off
     onto a tool (``load``), with the ink stained into it: that share of the
@@ -2444,6 +2527,7 @@ def rub_under(
     cover,
     crush,
     polish,
+    rough,
     held,
     under,
     loose,
@@ -2466,14 +2550,16 @@ def rub_under(
     in, how strongly it smears, how far it scrapes through wax, how its
     face bears, summed over it (:func:`face_of`), the volume it holds
     when it is full, the share of what it pushes along that it lays
-    back over each of its widths, and the volume it holds deep in it when
-    that is full]; ``now`` is [x, y,
+    back over each of its widths, the volume it holds deep in it when
+    that is full, how far apart the clumps of the paper's fibres are in
+    pixels, and the sheet's salt for them (:func:`fibres_at`)]; ``now`` is
+    [x, y,
     heading (x, y), its pressure, and, for a tool landing or lifting, the x
     and y of where it does so (else NaN): it rubs then only the paper it
-    covers there]. ``carried``, ``crush``, ``polish``, ``ink``, ``inked`` and
-    ``streaks`` are as for :func:`rub_stroke`, and ``giving`` and ``lifts``
-    are room to work in: two rows as long as those of ``carried``, and what
-    :func:`lift` takes as ``lifts``.
+    covers there]. ``carried``, ``crush``, ``polish``, ``rough``, ``ink``,
+    ``inked`` and ``streaks`` are as for :func:`rub_stroke`, and ``giving``
+    and ``lifts`` are room to work in: two rows as long as those of
+    ``carried``, and what :func:`lift` takes as ``lifts``.
 
     To what it has lifted (its load) the tool adds the less the fuller it
     is, and it gives the dust of it to bare tooth only (:func:`hunger`).
@@ -2507,6 +2593,7 @@ def rub_under(
     put = at_x == at_x  # (not NaN)
     lift_loose, lift_held = tool[1], tool[2]
     press, smear, scrape = tool[4], tool[5], tool[6]
+    clump, fibres = tool[11], int(tool[12])
     per_full = 1.0 / tool[8]  # (nothing, for a tool that holds any amount)
     bound = tool[0] + 0.5
     rim = RIM * bound + 0.5
@@ -2622,6 +2709,10 @@ def rub_under(
                 dusty = stir_up(under, loose, bonded, iy, ix, stirred) / after
                 cover[iy, ix] += (1.0 - cover[iy, ix]) * stirred * dusty
             bare_tooth(crush, polish, held, cover, iy, ix, cut)
+            # (and raises its fibres as far as it cuts it; a tool that
+            # presses the dust in lays them down)
+            flattened = min(press * share, 1.0)
+            cut_fibres(rough, iy, ix, cut, flattened, clump, fibres)
 
 
 @njit(cache=True, error_model="numpy")
@@ -2629,6 +2720,7 @@ def put_tool(
     cover,
     crush,
     polish,
+    rough,
     held,
     under,
     loose,
@@ -2660,6 +2752,7 @@ def put_tool(
             cover,
             crush,
             polish,
+            rough,
             held,
             under,
             loose,
@@ -2683,6 +2776,7 @@ def rub_stroke(
     cover,
     crush,
     polish,
+    rough,
     held,
     under,
     loose,
@@ -2701,8 +2795,9 @@ def rub_stroke(
     """Rub one pass of a round tool through the points (``xs``, ``ys``),
     bearing with ``pressures`` (0..1) and moving ``steps`` pixels at each.
     ``tool`` is [its radius in pixels, ``lift_loose``, ``lift_held``,
-    ``lay``, ``press``, ``smear``, ``scrape``, ``holds``, ``deep``]. Where
-    it bears fully, one
+    ``lay``, ``press``, ``smear``, ``scrape``, ``holds``, ``deep``, how far
+    apart the clumps of the paper's fibres are in pixels, the sheet's salt
+    for them (:func:`fibres_at`)]. Where it bears fully, one
     pass lifts the shares ``lift_loose`` of the dust (less of the dust
     underneath) and ``lift_held`` of the held pigment onto the tool, presses
     the share ``press`` of the dust into the paper, and stirs the share
@@ -2753,6 +2848,9 @@ def rub_stroke(
     stained into it (``ink``, packed as the ink of a sheet is, and
     ``inked``; arrays with no rows if no pen has drawn) comes off with it,
     onto the tool (:func:`scrape_ink`). No other tool touches the ink.
+    Where it cuts, it raises the fibres of the paper, which take more of
+    what is drawn there next (``rough``, :func:`cut_fibres`); a tool that
+    presses the dust in lays them down as far as it presses.
 
     ``carried`` is what the tool carries, four rows packed as dust is with
     the volume of paste and the volume of wax after ([K (N bands), S,
@@ -2774,7 +2872,7 @@ def rub_stroke(
     """
     streaks = streaks_of(salt)
     count = xs.shape[0]
-    gear = np.empty(11)  # (the tool, as rub_under takes it)
+    gear = np.empty(13)  # (the tool, as rub_under takes it)
     gear[:7] = tool[:7]
     gear[7] = face_of(tool[0])
     gear[8] = tool[7] * math.pi * (tool[0] + 0.5) ** 2
@@ -2782,6 +2880,7 @@ def rub_stroke(
     # if it smears; the wax it drags, if it does not, further on)
     gear[9] = SPREAD if tool[5] > 0.0 else DRAG_LAY
     gear[10] = tool[8] * math.pi * (tool[0] + 0.5) ** 2  # (its deep load, full)
+    gear[11], gear[12] = tool[9], tool[10]
     now = np.empty(7)
     now[5], now[6] = math.nan, math.nan
     # what the face of the tool gives in a step, of its dust and of the
@@ -2808,6 +2907,7 @@ def rub_stroke(
                     cover,
                     crush,
                     polish,
+                    rough,
                     held,
                     under,
                     loose,
@@ -2828,6 +2928,7 @@ def rub_stroke(
                     cover,
                     crush,
                     polish,
+                    rough,
                     held,
                     under,
                     loose,

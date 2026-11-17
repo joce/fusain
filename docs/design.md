@@ -36,6 +36,8 @@ is judged on. Each one is measurable, so each becomes a test.
    moved it (stump, eraser), or counted as dust that fell off.
 8. **The surface.** The paper is worked as well as marked. A hard tip pressed
    firmly flattens the tooth, which is then touched all over and bites less.
+   A sand eraser or a knife cuts the surface and raises its fibres, which
+   take more of what is drawn there next, in blotches.
    A stylus, or the ball of a pen, indents a groove, and a tone shaded over
    it afterwards skips it: the line stays the colour of the paper. And what
    lies flat shines under a lamp: graphite like metal, polished wax softly,
@@ -50,6 +52,7 @@ Per pixel, all `float32`:
 | `tooth` | Height of the paper surface, 0 (valley) to 1 (peak). Set once from the paper's texture. |
 | `crush` | How far the paper's own tooth has been crushed here (0 to 1), its peaks pressed down towards its valleys: by a dry tip pressed firmly, the more the harder the tip. It is the paper's: it stays whatever is laid or lifted afterwards, until a blade or grit cuts the surface of the paper away. |
 | `polish` | How far the wax that lies here has been polished level (0 to 1): by any tip pressed firmly on a film of wax, and by a blender. It is the wax's: it goes as the wax that filled the tooth is taken off. |
+| `rough` | How far a blade or grit has raised the paper's fibres here (0 to 1), where it cut the surface: a sand eraser or a knife. They come up in clumps, each as far as the paper lets it; a firm tip, a stump or a finger lays them down again. See "Raised: what a blade or grit leaves". |
 | (`press`) | Not stored: what a tip meets, worked out from the two (`Sheet.press`, `crush + polish - crush * polish`). A tooth pressed flat is level: a tip touches all of it, as it would its peaks, and in the relief its peaks have come down to its valleys. |
 | `dent` | How far the paper has been indented here: the depth of a groove below the peaks of the tooth, in depths of the tooth of a paper of depth 1. By a stylus, and by the ball of a pen. |
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
@@ -58,8 +61,8 @@ Per pixel, all `float32`:
 | `under`, `loose` | Pigment lying on what the paper holds: K, S, volume and sheen, in two layers. `loose` is on top; what a new pass covers goes `under`. Most of it is dust. |
 | `bonded` | Of what lies in each of the two layers, the volume that is not loose dust, of three kinds: `fixed`, dust that is set, by fixative or under a film; `film`, what a medium laid on the dust and not on the paper, a waxy one wherever dust lay and a dry one on a bed of it; `paste`, what the paper does not hold of a greasy medium. |
 
-That is about 0.38 KB per pixel (95 numbers of four bytes; 94 while one
-`press` stood for `crush` and `polish` both), a little more than oilpaint. As there, storing summed
+That is about 0.38 KB per pixel (96 numbers of four bytes; 94 while one
+`press` stood for `crush` and `polish` both, 95 before `rough`), a little more than oilpaint. As there, storing summed
 absorption and scattering lets any number of pigments mix correctly at a fixed
 cost.
 
@@ -428,6 +431,72 @@ rims: it varies at the scale of a pit and little beside (at grain 4, a tenth
 of its variation is at wavelengths over four grains, against over half for a rough
 paper), and a light tone on it is a net of dark around pale pits.
 
+### Raised: what a blade or grit leaves
+
+Scraped paper is not fresh paper. Grit or a blade that cuts the surface
+tears its fibres loose and raises them, and what is drawn there next
+takes more, and in blotches. `crush` cannot say so: it cannot go below
+nothing, so a sand eraser or a knife could leave the paper at best as
+fresh. The sheet keeps a third number for it, `rough` (0 to 1): how far
+the fibres stand.
+
+- **Where it rises.** As far as a tool cuts the paper (`scrape` times
+  what it lifts of what the paper holds, the share by which it already
+  takes the crush and the ink: `cut_fibres`). Only a sand eraser and a
+  knife cut; a vinyl or a kneaded eraser, a stump or a finger never raise
+  it. It rises towards how far the fibres at that pixel come up, and no
+  further for being cut again.
+- **Not evenly.** How far they come up is the paper's own: a number for
+  each clump of fibres, `CLUMP` (3) grains apart, smoothly between them,
+  twice as far from the middle and cut off at 0 and 1 (`fibres_at`): half
+  the way on the whole, an eighth of the paper not at all and an eighth all
+  the way. The numbers are drawn from the sheet (its salt is worked out
+  from its tooth), so any tool, any seed and any number of passes raise
+  the same clumps, and a copy of the sheet, or a sheet of the same paper
+  and seed, has the same.
+- **What it does.** Raised fibres take more and hold more: where they
+  stand fully, a tip finds the tooth `ROUGH` (1) times roomier, and lays
+  that much more on empty paper. Nothing else reads it: the tooth a tip
+  touches, how little a level tooth bites, the relief and the shine are as
+  for fresh paper. One number on the room in the tooth is all the stroke
+  reads, a load at each pixel a tip touches.
+- **How it goes.** A tip pressed firmly lays the fibres down as it
+  polishes wax as slick as it gets: how far they lie goes towards the level
+  of its load, `BURNISH` times its `firmness`, and no further for going
+  on (in `press_flat`). A light layer leaves them standing. A tool that
+  presses the dust in (a stump, a finger, a chamois) lays them down by
+  the share of a pass it presses (`press` times it); an eraser does not.
+
+Why a number of its own and not the tooth made higher: what raised fibres
+do is take more, not stand where a tip reaches them first; the tooth is
+the paper's texture, which the relief, the reach of a tip and the bite all
+read, and a higher tooth would have changed all of them. A separate number
+keeps the change to what scraped paper does and costs four bytes a pixel
+and one load where a tip touches; a sheet nobody scrapes is drawn as it
+was, to the bit.
+
+Measured on cartridge paper (three seeds), a patch gone over once with a
+sand eraser at 0.9 and a layer shaded across it, against the same layer
+on fresh paper. Before, the two were the same to the bit.
+
+| Over the scraped patch | Laid, against fresh | What varies over more than the grain (5 pixels), as a share of the mean: fresh, scraped | Mean L*: fresh, scraped |
+| --- | --- | --- | --- |
+| HB at 0.3 | 1.53 | 0.39, 0.45 | 90.3, 88.6 |
+| HB at 0.8 | 1.36 | 0.21, 0.26 | 73.1, 68.2 |
+| Vine charcoal at 0.5 | 1.52 | 0.29, 0.37 | 73.3, 68.9 |
+
+A knife does the same (1.54, 1.37, 1.54), and so does a sand eraser over a
+burnished dark of coloured pencil, which it scrapes back to the paper
+(1.52 for the light HB, 0.45 of the mean blotchy); a vinyl eraser leaves
+the paper as fresh. The fibres stand 0.52 on the whole there; a rub of a
+stump at 0.9 lays them down to 0.26, and the light HB then lays 1.27
+times what it lays on fresh paper. Four layers of HB at 0.7 leave 0.30 of
+them standing, at 0.85 0.035 and at full pressure 0.0015. A firm stroke
+lays them down as it goes, so it takes less more than a light one (1.36
+for 1.53 at 0.8). Not modelled: what a pen's ball does on raised fibres
+(it writes as on fresh paper, and does not lay them down), and how they
+look under a raking light (the relief is as fresh paper's).
+
 ## A medium
 
 A medium is a pigment plus a handful of physical numbers. The same stroke
@@ -556,7 +625,9 @@ A tool is a tip plus, usually, a medium.
   scraped back with a sand eraser or a knife touches 0.69 and 0.67 of the
   pixels there, where it touches 0.68 of fresh paper, and is as grainy;
   it touched 0.96 and 0.998 of them, and lay three or four times as
-  evenly, the tooth having stayed level. A vinyl eraser leaves most of the
+  evenly, the tooth having stayed level. It lays more there than on fresh
+  paper, though, and in blotches: the cut raised the fibres (see "Raised:
+  what a blade or grit leaves"). A vinyl eraser leaves most of the
   wax of a burnished dark, which stays level.
 - **An eraser smears wax** (built). An eraser that slides on wax that holds
   against it drags some of it along (`WAX_DRAG` of what it would have

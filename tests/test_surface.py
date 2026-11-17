@@ -3,6 +3,7 @@ stylus or the ball of a pen indents a groove that a pencil skips,
 measured."""
 
 import itertools
+import pickle
 
 import numpy as np
 import pytest
@@ -479,6 +480,174 @@ def test_indent_checks_what_it_is_given():
     sheet.indent([(-20, 5), (30, -5)], 0.5)
     sheet.indent([(100.5, 100.5)], 2.0, 5.0)  # (the pressure is clipped to 1)
     assert float(sheet.dent[100, 100]) == pytest.approx(eng.INDENT)
+
+
+# --------------------------------------------------------------------------
+# paper scraped by a blade or grit: its fibres stand up (fusain-rlo)
+
+SCRAPED = (60, 60, 140, 92)
+CUT = (slice(66, 86), slice(70, 130))
+SEEDS = range(1, 5)
+
+
+def _scraped(tool, seed=1, paper=papers.CARTRIDGE) -> Sheet:
+    sheet = Sheet(200, 150, paper=paper, seed=seed)
+    sheet.rub(SCRAPED, tool, 0.9, 10, spacing=1.0 if tool is tools.KNIFE else None)
+    return sheet
+
+
+def _over(sheet, medium, pressure) -> np.ndarray:
+    """A layer shaded over the sheet: what it laid at each pixel. What it
+    returns is what is on the paper (the medium is conserved)."""
+    before = sheet.pigment().copy()
+    laid = sheet.shade(BOX, medium, pressure, 6.0, angle=-20, seed=7)
+    new = sheet.pigment() - before
+    assert laid == pytest.approx(float(new.sum(dtype=np.float64)), rel=1e-5)
+    return new
+
+
+def _blocks(new, size=5) -> np.ndarray:
+    """The means of an area in squares of ``size``: what varies over more
+    than the grain."""
+    area = new[CUT].astype(np.float64)
+    h, w = area.shape[0] // size * size, area.shape[1] // size * size
+    return area[:h, :w].reshape(h // size, size, w // size, size).mean(axis=(1, 3))
+
+
+def _blotch(new) -> float:
+    blocks = _blocks(new)
+    return float(blocks.std() / blocks.mean())
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_a_sand_eraser_or_a_knife_raises_the_fibres_and_a_rubber_eraser_does_not(
+    seed,
+):
+    for tool in (tools.SAND_ERASER, tools.KNIFE):
+        sheet = _scraped(tool, seed)
+        # (0.37 to 0.63: a patch of clumps of fibres, each up as far as its own)
+        assert 0.25 < sheet.rough[CUT].mean() < 0.75
+        assert sheet.rough.max() <= 1.0 and sheet.rough.min() >= 0.0
+        # (only where it cut: within its area, and its rim)
+        outside = np.ones(sheet.rough.shape, bool)
+        outside[56:97, 56:145] = False
+        assert not sheet.rough[outside].any()
+    for tool in (tools.ERASER, tools.KNEADED, tools.STUMP, tools.CHAMOIS):
+        assert not _scraped(tool, seed).rough.any()
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_scraped_paper_takes_more_and_less_evenly(seed):
+    # (before: as much as fresh paper, to the bit, and as evenly)
+    for tool in (tools.SAND_ERASER, tools.KNIFE):
+        for medium, pressure in ((pencils.HB, 0.3), (charcoal.VINE, 0.5)):
+            fresh = _over(_sheet_of(seed), medium, pressure)
+            scraped = _over(_scraped(tool, seed), medium, pressure)
+            # (1.36 to 1.64 times as much; at most 1 + ROUGH)
+            more = scraped[CUT].mean() / fresh[CUT].mean()
+            assert 1.25 < more < 1.0 + eng.ROUGH
+            # blotchy: what varies over more than the grain grows (0.25 to
+            # 0.42 of the mean, from 0.34 to 0.47), and it is the fibres'
+            # (0.16 to 0.26 of the mean, the same strokes over fresh paper)
+            assert _blotch(scraped) > _blotch(fresh) + 0.03
+            ratio = _blocks(scraped) / _blocks(fresh)
+            assert ratio.std() / ratio.mean() > 0.1
+            # and beyond where it cut, as on fresh paper
+            rows = slice(25, 50)
+            assert np.array_equal(scraped[rows], fresh[rows])
+
+
+def _sheet_of(seed) -> Sheet:
+    return Sheet(200, 150, paper=papers.CARTRIDGE, seed=seed)
+
+
+def test_the_fibres_come_up_in_the_papers_own_clumps():
+    sand, knife = _scraped(tools.SAND_ERASER), _scraped(tools.KNIFE)
+    # where they come up, and how far, is the paper's: whatever cuts it
+    corr = np.corrcoef(sand.rough[CUT].ravel(), knife.rough[CUT].ravel())[0, 1]
+    assert corr > 0.95
+    # and however often: cut again, none comes up further than its own
+    clump = eng.CLUMP * papers.CARTRIDGE.grain
+    salt = sand._fibres()
+    own = np.array(
+        [[eng.fibres_at(ix, iy, clump, salt) for ix in range(200)] for iy in range(150)]
+    )
+    for _ in range(3):
+        sand.rub(SCRAPED, tools.SAND_ERASER, 1.0, 10)
+    assert (sand.rough <= own + 1e-6).all()
+    assert sand.rough[CUT].mean() > 0.9 * own[CUT].mean()
+    # in clumps: some hardly come up, some all the way
+    assert (own == 0.0).mean() > 0.1 and (own == 1.0).mean() > 0.1
+    # a sheet of the same paper and seed has the same; another seed, others
+    again = _scraped(tools.SAND_ERASER)
+    assert again._fibres() == knife._fibres()
+    other = _scraped(tools.SAND_ERASER, seed=2)
+    corr = np.corrcoef(again.rough[CUT].ravel(), other.rough[CUT].ravel())[0, 1]
+    assert abs(corr) < 0.5
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_a_firm_tip_or_a_stump_lays_the_fibres_down_and_a_light_one_does_not(seed):
+    raised = _scraped(tools.SAND_ERASER, seed)
+    up = float(raised.rough[CUT].mean())
+    light = raised.copy()
+    light.shade(BOX, pencils.HB, 0.3, 6.0, angle=-20, seed=7)
+    assert np.array_equal(light.rough, raised.rough)
+    # a firm tip lays them down as far as it presses: the firmer the further,
+    # towards the level of its load, and no further for going on (seed 1:
+    # four layers at 0.7 leave 0.30 of the 0.48 that stood, nine in ten
+    # pixels below 0.58, its level; at 0.85 0.035, below 0.10; at full
+    # pressure 0.0015)
+    laid = []
+    for pressure in (0.7, 0.85, 1.0):
+        sheet = raised.copy()
+        for layer in range(4):
+            sheet.shade(BOX, pencils.HB, pressure, 6.0, angle=30 - 55 * layer)
+        laid.append(float(sheet.rough[CUT].mean()))
+        level = 1.0 - min(eng.BURNISH * eng.firmness(pressure), 1.0)
+        assert np.quantile(sheet.rough[CUT], 0.9) < level + 0.1
+    assert up > laid[0] > laid[1] > laid[2]
+    assert laid[2] < 0.02 * up
+    # a stump presses them down too, as it presses the dust in (to 0.5 of
+    # what they were in a rub); an eraser does not
+    stump, vinyl = raised.copy(), raised.copy()
+    stump.rub(SCRAPED, tools.STUMP, 0.9)
+    vinyl.rub(SCRAPED, tools.ERASER, 0.9)
+    assert 0.3 * up < stump.rough[CUT].mean() < 0.7 * up
+    assert np.array_equal(vinyl.rough, raised.rough)
+    # and paper laid down takes less than it did, scraped
+    fresh = _over(_sheet_of(seed), pencils.HB, 0.3)
+    on_raised = _over(raised.copy(), pencils.HB, 0.3)
+    on_stumped = _over(stump, pencils.HB, 0.3)
+    assert fresh[CUT].mean() < on_stumped[CUT].mean() < on_raised[CUT].mean()
+
+
+def test_a_copy_and_a_pickle_keep_the_raised_fibres():
+    sheet = _scraped(tools.KNIFE)
+    copy = sheet.copy()
+    assert np.array_equal(copy.rough, sheet.rough) and copy.rough is not sheet.rough
+    copy.rough[:] = 0.0
+    assert sheet.rough.any()
+    thawed = pickle.loads(pickle.dumps(sheet))
+    assert np.array_equal(thawed.rough, sheet.rough)
+    # and what is drawn on either takes it alike
+    assert np.array_equal(
+        _over(thawed, pencils.HB, 0.3), _over(sheet.copy(), pencils.HB, 0.3)
+    )
+
+
+def test_fibres_at_is_a_share_and_always_the_same():
+    values = [
+        eng.fibres_at(ix, iy, 9.0, 12345) for iy in range(0, 90, 7) for ix in range(90)
+    ]
+    assert min(values) >= 0.0 and max(values) <= 1.0
+    assert eng.fibres_at(17, 40, 9.0, 12345) == eng.fibres_at(17, 40, 9.0, 12345)
+    # smooth between the clumps: neighbours differ little
+    steps = [
+        abs(eng.fibres_at(ix + 1, 30, 9.0, 12345) - eng.fibres_at(ix, 30, 9.0, 12345))
+        for ix in range(200)
+    ]
+    assert max(steps) < 0.5
 
 
 # --------------------------------------------------------------------------
