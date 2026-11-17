@@ -294,7 +294,9 @@ FLATTEN = 5.0
 #: The tooth is what scrapes a dry medium off its stick, and a tooth pressed
 #: flat bites less: a dry medium lays this much less on it in a pass. It
 #: lays it evenly, though: all of a flattened tooth is touched. So with the
-#: floor of a groove, where the point that pressed it took the peaks off.
+#: floor of a groove, which the point that pressed it flattened as far as it
+#: is deep (in depths of the tooth): paper dented evenly takes a medium as
+#: paper crushed as far does.
 FLAT_BITE = 0.7
 #: A hard round point pressed into the paper leaves a groove. ``dent`` is
 #: how far below the peaks of its tooth the paper has been pushed down, in
@@ -1263,7 +1265,8 @@ def bear(
             crushed, polished = crush[iy, ix], polish[iy, ix]
             flat = crushed + polished - crushed * polished
             raised = tooth[iy, ix] + (1.0 - tooth[iy, ix]) * flat
-            floor = 1.0 - dent[iy, ix] * sunk
+            sunk_here = dent[iy, ix] * sunk
+            floor = 1.0 - sunk_here
             above = min(raised, floor) + MICRO - level + down
             touch = min(max(above / (2.0 * MICRO), 0.0), 1.0) * edge
             if touch <= 0.0:
@@ -1327,8 +1330,9 @@ def bear(
                 # (to a dry medium wax is slick as soon as it covers the tooth)
                 dv *= 1.0 - dry * min(waxed / COVERS, 1.0) - slides * waxy
                 # (and a flattened tooth bites it less, as does the floor of a
-                # groove, which the point that pressed it left as flat)
-                levelled = min(max((raised - floor) / MICRO, 0.0), 1.0)
+                # groove: the peaks the point that pressed it took off, and
+                # what is left of the tooth there as far as the groove is deep)
+                levelled = min(max((raised - floor) / MICRO, sunk_here), 1.0)
                 dv *= 1.0 - smooth * max(flat, levelled)
                 # (and dust scrapes less off a tip that rides on it)
                 dv *= 1.0 - BED_BITE * rides

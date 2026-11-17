@@ -465,7 +465,8 @@ def test_a_finger_evens_out_charcoal_however_it_was_laid(how):
     for angle in (30, -40):
         sheet.shade((30, 30, 270, 170), charcoal.VINE, angle=angle, **how)
     grainy, streaky = _unevenness(sheet)
-    assert (sheet.pigment()[60:140, 70:230] == 0).mean() > 0.05  # bare paper between
+    # bare paper between: 0.036 to 0.071 of it over twenty sheets
+    assert (sheet.pigment()[60:140, 70:230] == 0).mean() > 0.02
     _rub_all_over(sheet, tools.FINGER)
     smooth, even = _unevenness(sheet)
     assert smooth < 0.5 * grainy

@@ -358,6 +358,29 @@ def test_a_shading_lays_the_bands_of_a_stick_laid_flat_side_by_side(monkeypatch)
     assert np.allclose(gaps(pencils.B2), 0.55 * 30)
 
 
+def test_a_hand_lays_each_band_of_a_flat_stick_beside_the_last(monkeypatch):
+    def gaps(medium) -> np.ndarray:
+        sheet, centres = Sheet(300, 300, seed=2), []
+        draw = sheet.stroke
+
+        def recording(path, medium, pressure, width, tilt, ends, **mark):
+            centres.append(float(np.mean([p[1] for p in path])))
+            return draw(path, medium, pressure, width, tilt, ends, **mark)
+
+        monkeypatch.setattr(sheet, "stroke", recording)
+        sheet.shade((20, 20, 280, 280), medium, 0.6, 6.0, 0.0, tilt=1.0)
+        return np.diff(centres)
+
+    # bands that meet by under half the stick's thickness stray by a share
+    # of that thickness, not of their length, or they part and leave a
+    # streak of bare paper between (a natural hand left lines of +10 to +20
+    # in L* where soft pastel's bands met, +2.5 at most now); a pencil's
+    # soft, overlapping strokes stray by a share of their mark
+    flat, pencil = gaps(pastels.soft("#203050")), gaps(pencils.B2)
+    assert flat.mean() == pytest.approx(27.3, abs=0.3)
+    assert flat.std() < 0.4 * 6.0 < 4.0 * 6.0 * 0.15 < pencil.std()
+
+
 @pytest.mark.parametrize("seed", range(3))
 def test_the_span_of_a_row_misses_no_pixel_under_the_side_of_a_stick(seed):
     rng = np.random.default_rng(seed)

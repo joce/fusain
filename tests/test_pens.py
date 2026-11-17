@@ -785,16 +785,21 @@ def test_a_scraping_tool_takes_no_more_ink_than_it_has_room_for(over):
 def test_a_pencil_draws_over_light_ink_as_on_bare_paper():
     """The ink is in the paper, not on it. (A pen pressed firmly leaves
     grooves, which a pencil skips: see test_surface.py.)"""
+    # (the pencil's shadings have one seed, so that they differ by the
+    # paper under them and not by their grain, which alone moves what a
+    # shading lays by 5%)
     bare, inked = Sheet(200, 150, seed=1), Sheet(200, 150, seed=1)
     for layer in range(3):
         inked.shade(BOX, pens.BLUE, 0.25, angle=30 + 47 * layer)
-    over = inked.shade(BOX, pencils.HB, 0.5)
-    assert 0.9 < over / bare.shade(BOX, pencils.HB, 0.5) < 1.1
-    # (over firm ink it lays from 0.58 to 0.62 as much, over six sheets)
+    over = inked.shade(BOX, pencils.HB, 0.5, seed=9)
+    # (1.008 to 1.018 as much, over eight sheets: a light line's groove is
+    # shallow, and its floor bites as little less as it is deep)
+    assert 0.97 < over / bare.shade(BOX, pencils.HB, 0.5, seed=9) < 1.04
+    # (over firm ink it lays from 0.51 to 0.55 as much, over eight sheets)
     firm = Sheet(200, 150, seed=1)
     for layer in range(3):
         firm.shade(BOX, pens.BLUE, 0.9, angle=30 + 47 * layer)
-    assert firm.shade(BOX, pencils.HB, 0.5) < 0.65 * over
+    assert firm.shade(BOX, pencils.HB, 0.5, seed=9) < 0.6 * over
 
 
 def _share_taken(under, layers, pressure, width=None) -> float:
