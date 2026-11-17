@@ -1,16 +1,16 @@
-# Handoff: the open issues, 17 November 2026
+# Handoff: the open issues, 17 November 2026 (evening)
 
 Where the issues stand after the passes of 15 to 17 November (pull requests
-#49 to #74 here, #7 to #10 in murex), and what can be picked up next. The
+#49 to #78 here, #7 to #10 in murex), and what can be picked up next. The
 issues themselves are in Beads: `bd show <id>` has the description and the
 measurements of each, and `bd ready` what is open. This file only sorts them;
 delete it once they are done or sorted again.
 
 ## Where things stand
 
-Eleven issues are open here and two in murex. None can go without the owner:
-every one needs a decision on what the right behaviour is, new modelling the
-owner has not asked for yet, material from the owner, or work in oilpaint.
+Seven issues are open here and two in murex. None can go without the owner:
+every one needs a decision on what the right behaviour is, material from the
+owner, or work in oilpaint.
 
 Neither library has been released since these passes. murex's requirement of
 NumPy 2 and its stored spectral tables reach users only with its next
@@ -51,7 +51,42 @@ Closed, each with its measurements in the issue's closing note:
 - In murex, `murex-krb` half (#9): `spectral`'s tables are stored, and
   `tests/test_bits.py` pins its numbers on x86-64.
 
+## What the pass of 17 November evening did
+
+The four modelling issues, with the owner:
+
+- `fusain-bbq` (#76): a stump or a finger keeps a deep load (`Tool.deep`,
+  `Smudger.deep`, `soak` once a step). One pass through a tone loads a
+  stump; a used one stays grey over several drags.
+- `fusain-rlo` (#77): a sand eraser or a knife raises the fibres
+  (`Sheet.rough`), which take about half as much again, in blotches, until
+  a firm tip, a stump or a finger lays them down.
+- `fusain-r56`, `fusain-fxc` (#78): a film is stored apart from the dust
+  (`Sheet.films`, `bonded` with `BOUND`); an oil pastel leaves paste and no
+  film (the owner caught a finger no longer blending an oil-pastel join).
+- Timed against `d110c20`: #76 and #77 together 1.01; #78 1.07 more in
+  geometric mean (1.2 for a finger or kneaded eraser where every pixel has
+  a dry film, 1.03 for plain graphite). Memory 0.38 to 0.6 KB a pixel.
+
 ## For the owner to look at
+
+Results that the numbers cannot settle:
+
+- From #76: a bare stump (cleaned before each rub) now takes 10.5% of an
+  8B tone in eight rubs (5%; fusain-6lr had pinned it under 4%). A smaller
+  `STUMP.deep` lowers it, and a stump stays grey for less long.
+- From #77: under a light layer of HB, sanded paper reads only about 1.7 L*
+  darker than fresh; `ROUGH` (1) sets how much. A ballpoint and a stylus
+  ignore raised fibres, and neither the relief nor the shine shows them.
+- From #78: the blender still dulls red crayon over blue pastel by a fifth
+  (a dragged film goes into the tooth under the pastel: lay it back on the
+  dust instead?); six layers of 6B over pastel shine 0.99 of bare paper
+  against 0.82 on paper alone; films at one place are one mixture; the
+  graphite of the lower film shines through a matte film over it (the review
+  of #78: hiding it by the top film's matte also hides a pencil line under
+  its own later samples, and moves 8 fingerprint drawings, so it needs a
+  rule for which films hide). `PASTE_ROOM` (0.8) and `PLOUGH` (0.09, was
+  0.12) were tuned to keep main's oil-pastel join.
 
 Results that the numbers cannot settle:
 
@@ -92,15 +127,6 @@ What the right behaviour is, which the code cannot tell:
 - `fusain-bq2`: how well pastel rubbed into the paper should take a pencil.
 - `fusain-6uj`: how the softness of a coloured pencil changes its
   burnishing.
-
-### New modelling, each at a cost (4)
-
-- `fusain-r56`: a film stored apart from the dust it lies on. It would also
-  take out what `fusain-q5k` had to assume about a film of graphite.
-- `fusain-fxc`: dust that a film has set stays set once the film is gone;
-  it goes with `fusain-r56`.
-- `fusain-bbq`: a deep reservoir in a stump.
-- `fusain-rlo`: scraped paper rougher than fresh.
 
 ### Needs material from the owner (1)
 
@@ -152,6 +178,11 @@ What the right behaviour is, which the code cannot tell:
   outside it.
 - A stale `.beads/issues.jsonl` in a lane can reopen issues closed since it
   branched (caught in #74's review): import main's before committing.
+- Lanes, each in a git worktree, share the main checkout's Beads database, and bd's
+  commit hook exports it, other lanes' closes included, into the main
+  checkout: commit only a lane's own issue lines, on main's file.
+- Look at a change to the picture as a delta (before, after and a heatmap
+  of ΔE), not only as two renders: the owner found the oil-pastel fault so.
 - The review bot's findings have been real when it had any (the still life
   under NumPy 1.x; the compatibility claim of murex #9). Reproduce a
   finding before acting on it.
