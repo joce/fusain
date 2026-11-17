@@ -477,6 +477,9 @@ def shading(model: mm.Model, part: dict[str, np.ndarray]) -> np.ndarray:
     s += 0.35 * chin * band(by, -0.2, -0.8)
     body = np.isfinite(model.seen.z) & ~part["branch"]
     s += 0.55 * soft(np.roll(np.roll(body, 26, 0), 18, 1), 14) * part["branch"]
+    # (the feet's own soft shadow on the bark, down and away from the light)
+    feet = part["toes"] | part["claws"]
+    s += 0.45 * soft(np.roll(np.roll(feet, 5, 0), 7, 1), 4) * part["branch"]
     return np.clip(s, 0.0, 1.0)
 
 
@@ -1280,7 +1283,12 @@ def draw_feet(hand: Hand, bird: Bird) -> None:
             (x + 3 * math.cos(a), y + 3 * math.sin(a)),
         ]
         hand.erase(stroke, tools.ERASER, [0.15, 0.4, 0.15], 3.0, as_seed(grain))
-    hand.tone(BLACK, claws * 1.0, 0.9, (30, -40, 100), 2.2)
+    # (the horn of the claws dark, its curve caught by the light along its
+    # back)
+    c = soft(bird.shade * claws, 2) / np.maximum(soft(claws, 2), 1e-6) * claws
+    hand.tone(
+        BLACK, claws * (0.35 + 0.65 * band(c, 0.25, 0.7)), 0.9, (30, -40, 100), 2.2
+    )
     hand.tone(CHAR, claws * 1.0, 0.8, (75,), 2.2)
 
 

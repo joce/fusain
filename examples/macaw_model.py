@@ -431,10 +431,10 @@ TAIL_ROOT, TAIL_HANG, TAIL_LENGTH, TAIL_ROLL = (-3.5, -4.75), 17.0, 7.6, 62.0
 #: across it), its front end toward the viewer, so that the near side of
 #: the branch is the side the bird's back is to; and it is as thick as the
 #: toes can close round, so that they wrap about two thirds of the way.
-BRANCH_AT, BRANCH_DIR, BRANCH_R = (-1.69, -4.74, 0.0), (0.71, -0.11, 0.7), 0.42
+BRANCH_AT, BRANCH_DIR, BRANCH_R = (-1.69, -4.74, 0.0), (0.71, -0.11, -0.7), 0.42
 #: Where along the branch from that point each foot grips: the near (right)
 #: one ahead, the far (left) one behind, a body's width at the legs apart.
-FEET = (0.42, -0.42)
+FEET = (0.3, -0.42)
 
 #: The feathered body: centre (x, y), radii (along, across, sideways) and
 #: the direction (degrees) its long axis runs, down from the neck: the
@@ -451,7 +451,7 @@ TORSO = [
 #: far one behind, the near one ahead.
 THIGHS = [
     ((-2.0, -3.78, -0.16), (0.5, 0.46, 0.4)),
-    ((-1.38, -3.7, 0.1), (0.46, 0.44, 0.38)),
+    ((-1.58, -3.72, 0.02), (0.38, 0.38, 0.32)),
 ]
 
 
@@ -651,32 +651,33 @@ def branch_blobs() -> list[Blob]:
     return chain(spine, r, r, "branch", side=side, overlap=6.0)
 
 
-#: The toes of the near (right) foot, closed round the branch: from where
-#: each leaves the ball of the foot to its tip, how far round the branch's
-#: section it runs (degrees: 90 is the top, 0 the side toward the viewer,
-#: 180 the far side, where the bird's front is), how far along the branch
-#: its tip lies (toward the foot's outer side), how thick it is at its root,
-#: how many joints it bends at, and how far round its claw reaches. Two
-#: forward over the top and down the far side (the outer, 3, longest), two
-#: back down the near side (the outer, 4, long, the hind toe short); the
-#: left foot is their mirror image along the branch.
-TOES = ((110, 226, 0.08, 0.1, 3, 42), (110, 208, -0.22, 0.095, 2, 40),
-        (82, -30, 0.3, 0.1, 4, 48), (82, 18, -0.2, 0.092, 1, 42))  # fmt: skip
-#: The leg of the near foot: where its heel lies from the ball of the foot
-#: (behind it, above it and in toward the body's middle, hidden in the
-#: thigh's feathers), and how thick the scaly tarsus is.
-HEEL, TARSUS = (-0.12, 0.42, -0.14), 0.135
+#: The toes of a foot, closed round the branch: from where each leaves the
+#: ball of the foot to its tip, how far round the branch's section it runs
+#: (degrees: 90 is the top, 0 the side toward the viewer, which is the side
+#: the bird faces, 180 the far side), how far along the branch its tip lies
+#: (toward the foot's outer side), how thick it is at its root, how many
+#: joints it bends at, and how far round its claw reaches. A parrot's foot
+#: is zygodactyl: two toes forward, over the top and down the side we see
+#: (the outer, 3, longer, the inner, 2, shorter), two back over the far
+#: side, out of sight (the outer, 4, long, the hind toe short). The two
+#: feet are mirror images of each other along the branch.
+TOES = ((100, -18, 0.2, 0.1, 3, 70), (100, 8, -0.1, 0.095, 2, 64),
+        (100, 222, 0.22, 0.1, 4, 50), (100, 196, -0.16, 0.092, 1, 46))  # fmt: skip
+#: How thick the scaly tarsus is; each leg runs from the ball of its foot
+#: straight up into the belly's feathers, where its heel lies hidden.
+TARSUS = 0.15
 
 
 def foot(f: float):
     """The foot gripping ``f`` along the branch: its point on the branch's
     axis, which way along the branch its outer side lies (+1 or -1), the
-    ball of the foot on top of the branch and the heel above it."""
+    ball of the foot on top of the branch and the heel straight above it, a
+    little behind, hidden in the belly's feathers."""
     b, up, _ = branch_frame()
     centre = np.asarray(BRANCH_AT) + b * f
     outward = 1.0 if f > 0 else -1.0
     ball = centre + up * (BRANCH_R + 0.05)
-    heel = ball + np.array([HEEL[0], HEEL[1], HEEL[2] * outward])
+    heel = ball + np.array([-0.06, 0.5, 0.0])
     return centre, outward, ball, heel
 
 
@@ -690,10 +691,12 @@ def toe_path(centre, toe_of, outward: float, claw: bool = False, n: int = 16):
     start, stop, splay, thick, joints, reach = toe_of
     t = np.linspace(0.0, 1.0, n)
     if claw:
+        # (a hook: it rises off the bark from the toe's tip, arches over and
+        # bites back into the wood at its point, curling a little inward)
         turn = stop + np.sign(stop - start) * reach * t
-        along = splay * (1.0 + 0.1 * t)
-        radius = thick * (0.64 - 0.56 * t**1.2)
-        lift = 0.55 * radius - 0.03 * t**2
+        along = splay - 0.06 * np.sign(splay) * t**2
+        radius = thick * (0.62 - 0.54 * t**1.1)
+        lift = 0.55 * thick * 0.62 + 0.05 * np.sin(np.pi * t) - 0.1 * t**3
     else:
         turn = start + (stop - start) * t
         along = splay * t**1.3
@@ -720,7 +723,7 @@ def feet_blobs() -> list[Blob]:
         leg = np.linspace(heel, ball, 7)
         thick = np.linspace(TARSUS, 0.9 * TARSUS, 7)
         out += chain(leg, thick, thick, "toes", side=b, overlap=2.0)
-        out.append(blob(ball, (0.14, 0.085, 0.14), "toes", along=b))
+        out.append(blob(ball, (0.12, 0.07, 0.12), "toes", along=b))
         for toe_of in TOES:
             spine, radius, _ = toe_path(c, toe_of, outward)
             out += chain(spine, radius, radius, "toes", side=b, overlap=2.4)
