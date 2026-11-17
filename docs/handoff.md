@@ -178,7 +178,7 @@ What the right behaviour is, which the code cannot tell:
   outside it.
 - A stale `.beads/issues.jsonl` in a lane can reopen issues closed since it
   branched (caught in #74's review): import main's before committing.
-- Lanes in worktrees share the main checkout's Beads database, and bd's
+- Lanes, each in a git worktree, share the main checkout's Beads database, and bd's
   commit hook exports it, other lanes' closes included, into the main
   checkout: commit only a lane's own issue lines, on main's file.
 - Look at a change to the picture as a delta (before, after and a heatmap
