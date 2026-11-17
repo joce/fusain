@@ -213,10 +213,11 @@ def test_a_pencil_line_drawn_firmly_over_pastel_shines_as_far_as_it_is_a_film(
     # (a 2B at 1.0: 0.001, against 0.431 on bare paper)
     assert _sum(over.held[..., IX][ALONG]) < 0.02 * _sum(on_paper.held[..., IX][ALONG])
     # now it shines as the line on paper does, as far as there is as much
-    # of it: 0.88 to 0.90 as much of it, and the shine 0.87 to 0.90 as much
-    # (a 2B 0.381, a 6B 0.684), the clay of its crumbs over it as on paper
+    # of it: 0.77 to 0.80 as much of it, and the shine 0.72 to 0.83 as much,
+    # the clay of its crumbs over it as on paper (with eight steps to the
+    # tip's width it was 0.88 to 0.90 as much, and shone 0.87 to 0.90)
     share = _sum(over.film[ALONG]) / _sum(on_paper.held[..., IV][ALONG])
-    assert share - 0.05 < shine / bare < share + 0.04
+    assert share - 0.06 < shine / bare < share + 0.05
     # and the lamp shows it, in proportion
     glint, glint_bare = (
         _tone(s.render(light=OVERHEAD), ALONG)

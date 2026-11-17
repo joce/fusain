@@ -43,6 +43,28 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Strokes are twice as fast, and the picture changes a little
+  (fusain-6ru). A tip lays at samples a quarter of its width apart, not an
+  eighth: shading takes 0.54 to 0.59 of the time, 2000 short strokes and a
+  ballpoint pen 0.65 to 0.69. How far a tip reaches into the tooth for its
+  pressure (the pressure to the power 0.6) is read off a table, within
+  0.003 of it, and the share of graphite that slides under a stump is
+  worked out by products, not a power: with them shading takes 0.47 to 0.53
+  of its time (compiled for this machine with AVX-512 or for haswell), and
+  a stump rubs in 0.85 to 0.90. The tone is a little
+  darker where the paper fills up (mean L* 0.14 lower for an HB shade, 0.45
+  for a 4B or vine charcoal pressed hard), the grain a little coarser (the
+  spread of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
+  the tone ripples by 2% of itself a step apart (a third of an L*; on a
+  paper with a tooth ten times smaller than its grain). A flat end that a
+  stroke curves sharply into lets 0.93 of a pixel past its cut, not 0.75.
+  A firm pencil line over pastel lies on it as a film for 0.77 to 0.80 of
+  what it would have held on the paper, not 0.88 to 0.90, and shines as
+  much less. A worn stick wears a little wider, so a shading drawn with it
+  next spaces its passes a little differently. Rubbing, smudging, erasing
+  and a stylus keep samples an eighth apart: at a quarter a rub leaves
+  beads along its way, a step apart, and a groove ripples.
+
 - A stub of a shading wanders less (fusain-dpx): a stroke that a corner of
   the area cuts short is kept if it is half a tip long, and each of its
   knots wandered by a tenth of the tip's width however short it was, so
@@ -222,6 +244,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   of HB at 0.4 crushed the tooth by 0.004, and now by 0.0005).
 
 ### Fixed
+
+- A sand eraser over coloured pencil no longer makes NaN (fusain-6ru): where
+  rounding had left a trace of wax at a pixel with nothing to hold it, an
+  eraser that drags wax divided nothing by nothing, and the NaN spread over
+  the whole sheet. Today's drawings never reached it; samples a quarter of
+  the tip apart did.
 
 - Shading with the side of a stick leaves no streaks of bare paper between
   its bands (fusain-cyl). The bands of charcoal, pastel or crayon laid
@@ -1028,6 +1056,28 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Strokes are twice as fast, and the picture changes a little
+  (fusain-6ru). A tip lays at samples a quarter of its width apart, not an
+  eighth: shading takes 0.54 to 0.59 of the time, 2000 short strokes and a
+  ballpoint pen 0.65 to 0.69. How far a tip reaches into the tooth for its
+  pressure (the pressure to the power 0.6) is read off a table, within
+  0.003 of it, and the share of graphite that slides under a stump is
+  worked out by products, not a power: with them shading takes 0.47 to 0.53
+  of its time (compiled for this machine with AVX-512 or for haswell), and
+  a stump rubs in 0.85 to 0.90. The tone is a little
+  darker where the paper fills up (mean L* 0.14 lower for an HB shade, 0.45
+  for a 4B or vine charcoal pressed hard), the grain a little coarser (the
+  spread of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
+  the tone ripples by 2% of itself a step apart (a third of an L*; on a
+  paper with a tooth ten times smaller than its grain). A flat end that a
+  stroke curves sharply into lets 0.93 of a pixel past its cut, not 0.75.
+  A firm pencil line over pastel lies on it as a film for 0.77 to 0.80 of
+  what it would have held on the paper, not 0.88 to 0.90, and shines as
+  much less. A worn stick wears a little wider, so a shading drawn with it
+  next spaces its passes a little differently. Rubbing, smudging, erasing
+  and a stylus keep samples an eighth apart: at a quarter a rub leaves
+  beads along its way, a step apart, and a groove ripples.
+
 - NumPy 1.x is no longer supported: fusain needs `numpy>=2.0`, and with it
   `numba>=0.60`, the first numba that runs on NumPy 2 (fusain-klv). The
   picture depended on NumPy's major version, and only NumPy 2 was ever
@@ -1303,6 +1353,28 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Strokes are twice as fast, and the picture changes a little
+  (fusain-6ru). A tip lays at samples a quarter of its width apart, not an
+  eighth: shading takes 0.54 to 0.59 of the time, 2000 short strokes and a
+  ballpoint pen 0.65 to 0.69. How far a tip reaches into the tooth for its
+  pressure (the pressure to the power 0.6) is read off a table, within
+  0.003 of it, and the share of graphite that slides under a stump is
+  worked out by products, not a power: with them shading takes 0.47 to 0.53
+  of its time (compiled for this machine with AVX-512 or for haswell), and
+  a stump rubs in 0.85 to 0.90. The tone is a little
+  darker where the paper fills up (mean L* 0.14 lower for an HB shade, 0.45
+  for a 4B or vine charcoal pressed hard), the grain a little coarser (the
+  spread of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
+  the tone ripples by 2% of itself a step apart (a third of an L*; on a
+  paper with a tooth ten times smaller than its grain). A flat end that a
+  stroke curves sharply into lets 0.93 of a pixel past its cut, not 0.75.
+  A firm pencil line over pastel lies on it as a film for 0.77 to 0.80 of
+  what it would have held on the paper, not 0.88 to 0.90, and shines as
+  much less. A worn stick wears a little wider, so a shading drawn with it
+  next spaces its passes a little differently. Rubbing, smudging, erasing
+  and a stylus keep samples an eighth apart: at a quarter a rub leaves
+  beads along its way, a step apart, and a groove ripples.
+
 - Strokes and rubs are faster, by a quarter to a half, and no picture
   changes: every array of a sheet after any sequence of calls, every number
   returned and every rendered image is what it was, to the last bit. On a
@@ -1527,6 +1599,28 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Strokes are twice as fast, and the picture changes a little
+  (fusain-6ru). A tip lays at samples a quarter of its width apart, not an
+  eighth: shading takes 0.54 to 0.59 of the time, 2000 short strokes and a
+  ballpoint pen 0.65 to 0.69. How far a tip reaches into the tooth for its
+  pressure (the pressure to the power 0.6) is read off a table, within
+  0.003 of it, and the share of graphite that slides under a stump is
+  worked out by products, not a power: with them shading takes 0.47 to 0.53
+  of its time (compiled for this machine with AVX-512 or for haswell), and
+  a stump rubs in 0.85 to 0.90. The tone is a little
+  darker where the paper fills up (mean L* 0.14 lower for an HB shade, 0.45
+  for a 4B or vine charcoal pressed hard), the grain a little coarser (the
+  spread of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
+  the tone ripples by 2% of itself a step apart (a third of an L*; on a
+  paper with a tooth ten times smaller than its grain). A flat end that a
+  stroke curves sharply into lets 0.93 of a pixel past its cut, not 0.75.
+  A firm pencil line over pastel lies on it as a film for 0.77 to 0.80 of
+  what it would have held on the paper, not 0.88 to 0.90, and shines as
+  much less. A worn stick wears a little wider, so a shading drawn with it
+  next spaces its passes a little differently. Rubbing, smudging, erasing
+  and a stylus keep samples an eighth apart: at a quarter a rub leaves
+  beads along its way, a step apart, and a groove ripples.
+
 - With the blender burnishing more, a red burnished with it has 0.78 of the
   gloss of polished wax (from 0.70), and goes from (222, 83, 56) to
   (225, 90, 67) under the default lamp.
@@ -1626,6 +1720,28 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Strokes are twice as fast, and the picture changes a little
+  (fusain-6ru). A tip lays at samples a quarter of its width apart, not an
+  eighth: shading takes 0.54 to 0.59 of the time, 2000 short strokes and a
+  ballpoint pen 0.65 to 0.69. How far a tip reaches into the tooth for its
+  pressure (the pressure to the power 0.6) is read off a table, within
+  0.003 of it, and the share of graphite that slides under a stump is
+  worked out by products, not a power: with them shading takes 0.47 to 0.53
+  of its time (compiled for this machine with AVX-512 or for haswell), and
+  a stump rubs in 0.85 to 0.90. The tone is a little
+  darker where the paper fills up (mean L* 0.14 lower for an HB shade, 0.45
+  for a 4B or vine charcoal pressed hard), the grain a little coarser (the
+  spread of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
+  the tone ripples by 2% of itself a step apart (a third of an L*; on a
+  paper with a tooth ten times smaller than its grain). A flat end that a
+  stroke curves sharply into lets 0.93 of a pixel past its cut, not 0.75.
+  A firm pencil line over pastel lies on it as a film for 0.77 to 0.80 of
+  what it would have held on the paper, not 0.88 to 0.90, and shines as
+  much less. A worn stick wears a little wider, so a shading drawn with it
+  next spaces its passes a little differently. Rubbing, smudging, erasing
+  and a stylus keep samples an eighth apart: at a quarter a rub leaves
+  beads along its way, a step apart, and a groove ripples.
+
 - `Sheet.shine()` is now what shines in any of the three ways; what it was
   is `Sheet.shine("graphite")`, which also counts how flat the tooth is
   pressed. A `Sheet` takes about 0.37 KB per pixel, from 0.36.
@@ -1693,6 +1809,28 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   `stilllife.png` (ballpoint) and `papers.png` are unchanged.
 
 ### Changed
+
+- Strokes are twice as fast, and the picture changes a little
+  (fusain-6ru). A tip lays at samples a quarter of its width apart, not an
+  eighth: shading takes 0.54 to 0.59 of the time, 2000 short strokes and a
+  ballpoint pen 0.65 to 0.69. How far a tip reaches into the tooth for its
+  pressure (the pressure to the power 0.6) is read off a table, within
+  0.003 of it, and the share of graphite that slides under a stump is
+  worked out by products, not a power: with them shading takes 0.47 to 0.53
+  of its time (compiled for this machine with AVX-512 or for haswell), and
+  a stump rubs in 0.85 to 0.90. The tone is a little
+  darker where the paper fills up (mean L* 0.14 lower for an HB shade, 0.45
+  for a 4B or vine charcoal pressed hard), the grain a little coarser (the
+  spread of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
+  the tone ripples by 2% of itself a step apart (a third of an L*; on a
+  paper with a tooth ten times smaller than its grain). A flat end that a
+  stroke curves sharply into lets 0.93 of a pixel past its cut, not 0.75.
+  A firm pencil line over pastel lies on it as a film for 0.77 to 0.80 of
+  what it would have held on the paper, not 0.88 to 0.90, and shines as
+  much less. A worn stick wears a little wider, so a shading drawn with it
+  next spaces its passes a little differently. Rubbing, smudging, erasing
+  and a stylus keep samples an eighth apart: at a quarter a rub leaves
+  beads along its way, a step apart, and a groove ripples.
 
 - `lay_stroke` (in `fusain._engine`) takes the width, tilt and side of the
   tip at each point, and the spacing of the points and how the stroke ends.
@@ -1839,6 +1977,28 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   where charcoal stays black. `render(gloss=0)` renders matte.
 
 ### Changed
+
+- Strokes are twice as fast, and the picture changes a little
+  (fusain-6ru). A tip lays at samples a quarter of its width apart, not an
+  eighth: shading takes 0.54 to 0.59 of the time, 2000 short strokes and a
+  ballpoint pen 0.65 to 0.69. How far a tip reaches into the tooth for its
+  pressure (the pressure to the power 0.6) is read off a table, within
+  0.003 of it, and the share of graphite that slides under a stump is
+  worked out by products, not a power: with them shading takes 0.47 to 0.53
+  of its time (compiled for this machine with AVX-512 or for haswell), and
+  a stump rubs in 0.85 to 0.90. The tone is a little
+  darker where the paper fills up (mean L* 0.14 lower for an HB shade, 0.45
+  for a 4B or vine charcoal pressed hard), the grain a little coarser (the
+  spread of L* 0.1 to 0.4 more), and along a line on a paper with no tooth
+  the tone ripples by 2% of itself a step apart (a third of an L*; on a
+  paper with a tooth ten times smaller than its grain). A flat end that a
+  stroke curves sharply into lets 0.93 of a pixel past its cut, not 0.75.
+  A firm pencil line over pastel lies on it as a film for 0.77 to 0.80 of
+  what it would have held on the paper, not 0.88 to 0.90, and shines as
+  much less. A worn stick wears a little wider, so a shading drawn with it
+  next spaces its passes a little differently. Rubbing, smudging, erasing
+  and a stylus keep samples an eighth apart: at a quarter a rub leaves
+  beads along its way, a step apart, and a groove ripples.
 
 - A drawing with graphite in it renders a little lighter in its darks under
   the default lamp, from the shine. `gloss=0` gives the earlier picture.

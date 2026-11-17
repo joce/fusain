@@ -614,6 +614,17 @@ the tip and its tilt can vary along it (speed is still to come). A width
 that changes draws a stroke that tapers or recedes in perspective; a tilt
 that changes turns a stick from its point onto its side as it goes.
 
+The tip lays at each sample, and the samples are a quarter of its width
+apart (half a pixel for the narrowest): each pixel under a stroke is laid
+on about four times, half as often as at an eighth, which they were until
+`fusain-6ru` and which took twice the time. The tone is a little darker
+where the paper fills up (a 4B pressed hard 0.5 L*, an HB 0.14), the grain
+a little coarser, and along a line on paper with no tooth the tone ripples
+by 2% of itself, a third of an L*, a step apart; on any paper with a tooth
+that is ten times smaller than its grain. A tool that rubs keeps an eighth,
+and so does the point of a stylus: at a quarter a rub leaves beads along
+its way and a groove ripples.
+
 The tip lays as it slides, so a pixel gets a pass's worth from all the
 places of the tip that cover it. Under the middle of a stroke that is the
 whole tip going over it; where the tip lands, the paper under its back half
@@ -667,14 +678,15 @@ path up to its end, and no more. A straight end has none of its band past
 the cut, nor has a bend half a tip or more before the end, nor a curve no
 tighter than the tip: those are cut as they were, to the bit. Between
 them a hook grows without a jump: with no hook the cut is across the long
-leg; over the first sample's spacing of hook (an eighth of the tip) it
+leg; over the first sample's spacing of hook (a quarter of the tip) it
 turns with the last two samples to lie across the hook, as it did, and
 the rounded outside of the corner comes in behind it; from there to half
 a tip the cut crosses less and less of the band before the bend, and at
 half a tip it is clear of it. A tip 24 wide drawn 140 pixels and turned
-square for 2, 4 and 6 pixels has, 4 to 12 pixels before the corner, 1.19,
-1.29 and 1.34 times as much on the inside half of the stroke as on the
-outside (it is the inside of a bend), and in the band before the bend
+square for 2, 4 and 6 pixels has, 4 to 12 pixels before the corner, 0.92,
+1.09 and 1.29 times as much on the inside half of the stroke as on the
+outside (it is the inside of a bend; 1.19, 1.29 and 1.34 with samples an
+eighth of the tip apart), and in the band before the bend
 exactly what the same stroke has with round ends, pixel for pixel, up to
 the last sample before the corner; so has every hook of an eighth of the
 tip to just under half of it, for tips 6 to 48 wide, at the end of a
