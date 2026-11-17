@@ -181,7 +181,10 @@ def test_dust_laid_over_a_film_buries_it_with_what_it_set():
     assert _sum(sheet.film[..., 1]) > 0.8 * film
     sheet.shade(BOX, pastels.oil(RED), 0.9, WIDTH, angle=80)
     assert _sum(sheet.film[..., 0]) > 0.7 * film
-    assert _sum(sheet.fixed) >= fixed * (1 - 1e-5)
+    # (an oil pastel pressed firmly drags part of the film off, and what
+    # that held is loose again, or paste under the pastel: 0.83 of it is
+    # still held)
+    assert _sum(sheet.fixed) > 0.7 * fixed
     assert _bonded_within_bounds(sheet)
 
 
@@ -891,14 +894,14 @@ def test_a_finger_stirs_up_a_pencil_film_that_later_pastel_buried(seed):
 
 
 @pytest.mark.parametrize("seed", SEEDS)
-def test_a_light_oil_pastel_still_covers_a_dark_one(seed):
-    # the film on the dust underneath and the film on top are each a
-    # mixture of its own: the film of a white oil pastel laid over a black
-    # one's lies on the white paste and on top, and the black one's film
-    # goes under the white paste with the black. (Were all the films of a
-    # pixel one mixture, the black would come up into the white on top:
-    # the patch came out 24 L* darker.) L* 53 to 59 over black at 10 to
-    # 12; it was 56 to 62 with each film in the mixture of its layer
+def test_an_oil_pastel_leaves_paste_and_no_film_and_a_light_one_covers_a_dark(seed):
+    # what an oil pastel lays on what lies over the paper is paste, as the
+    # rest of it is: no film. (As a film, two fifths of what met paste lay
+    # on it its own colour, and no finger moved it: the strokes showed
+    # through a rubbed join; and with one mixture for all the films of a
+    # pixel the black came up into the white, 24 L* darker.) L* 51 to 57
+    # over black at 9 to 11, as it was (52 to 58) before films were kept
+    # apart
     sheet = _sheet(seed)
     for angle in (25, -40):
         sheet.shade(BOX, pastels.oil(DARK), 0.7, 14, angle)
@@ -909,8 +912,37 @@ def test_a_light_oil_pastel_still_covers_a_dark_one(seed):
 
     black = lightness()
     sheet.shade((50, 45, 150, 105), pastels.oil(WHITE), 0.8, 14, 60)
-    assert black < 15.0 and lightness() > 48.0
-    assert _sum(sheet.film[..., 0]) > 0.0 and _sum(sheet.film[..., 1]) > 0.0
-    films = sheet.films[where]
-    assert _absorbed(films[..., 1, :]) < 0.5 * _absorbed(films[..., 0, :])
+    assert black < 15.0 and lightness() > 50.0
+    assert not sheet.film.any() and not sheet.films.any()
+    assert _sum(sheet.paste) == pytest.approx(_dust(sheet), rel=1e-4)
+    # a crayon, which is not greasy, still lays a film over the paste
+    sheet.shade(BOX, crayons.wax(YELLOW), 0.6, WIDTH, angle=10)
+    assert _sum(sheet.film) > 30.0
     assert _nothing_negative(sheet) and _bonded_within_bounds(sheet)
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_a_finger_rubs_the_strokes_out_of_an_oil_pastel(seed):
+    # two layers of an oil pastel, rubbed with a finger: the hatching goes
+    # (the spread of 5-pixel blocks of the tone, across the passes, falls
+    # to under a hundredth of what it was; while an oil pastel left a film
+    # on its own paste, the film stayed, and the strokes with it)
+    sheet = _sheet(seed)
+    for angle in (25, -40):
+        sheet.shade(BOX, pastels.oil(BLUE), 0.7, 14, angle)
+    where = (slice(50, 100), slice(60, 140))
+
+    def texture() -> float:
+        spectrum = sheet.reflectance()[where].astype(np.float64)
+        tone = sp.reflectance_to_linear_rgb(spectrum) @ sp.LUMINANCE
+        blocks = tone.reshape(10, 5, 16, 5).mean(axis=(1, 3))
+        return float((blocks - blocks.mean(axis=0)).std())
+
+    before = texture()
+    finger = Smudger(tools.FINGER)
+    for k in range(12):
+        y = 44 + 6 * k
+        ends = [(45, y), (155, y + 2)]
+        sheet.smudge(ends, finger, 0.8)
+        sheet.smudge(ends[::-1], finger, 0.8)
+    assert texture() < 0.1 * before

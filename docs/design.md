@@ -228,7 +228,11 @@ each is not. The rule is that a medium lies on what it meets:
 - **Paste.** What the paper does not hold of a greasy medium (a waxy one
   that is soft: an oil pastel) is not dust but paste. It lies in the layers
   as dust does, so a light oil pastel shows over a dark one, and a tip
-  presses it in as it does dust; but it sticks. A tool moves it only as far
+  presses it in as it does dust, as far as the tooth has room for it
+  (`PASTE_ROOM`: on what the paper holds already it slides); but it
+  sticks. All that an oil pastel does not lay in the tooth is paste: it
+  leaves no film on its own paste or on dust, which a finger could not
+  move. A tool moves it only as far
   as it smears: a finger, a stump or a chamois drags it about and blends it,
   and it is paste again where they lay it; an eraser, which lifts and does
   not smear, takes it only as it takes what the paper holds. Dust under a

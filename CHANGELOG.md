@@ -90,14 +90,25 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
     at 0.6), a little more than its share of the graphite (0.82), since
     part of the film lies over its crumbs; six layers of a 6B shine 0.99
     where on paper they shine 0.82 (0.78).
-  - A finger blends a join of two oil pastels over a narrower passage,
-    1.3 widths of the finger, not 2.7, in what is seen on top: the films
-    of an oil pastel are their own and stay, where they were mixed with
-    the paste the finger moves.
-  - In the example images: `crayons.png` moves where a finger rubs the
-    join of two oil pastels and where crayon lies over charcoal and
-    pastel (blocks of 32 pixels by up to 9 in colour, a tenth of them by
-    more than 1); `macaw`, `colour`, `deco`, `broadway`, `shine` and
+  - An oil pastel leaves no film: what it lays on what lies over the
+    paper is paste, as the rest of it is, as far as the medium is greasy
+    (a film of its own colour that no finger moves would keep the
+    hatching of every stroke under a rubbed join). Paste is pressed into
+    the tooth only as far as the tooth has room for it
+    (`_engine.PASTE_ROOM`, a thickness of 0.8 held: on what the paper
+    holds already it slides), which the film of an oil pastel, a lid on
+    the paste under it, used to see to; and a greasy tip ploughs up 0.09
+    of what it buries, not 0.12, of a third more paste (`PLOUGH`). With
+    the two, in `crayons.png`, over three sheets: a finger rubbed across a
+    join of two oil pastels leaves the blue rising by 0.21 of the way from
+    one colour to the other over a finger's width either side of the
+    join, as it did (0.21), and takes the hatching out as it did (the
+    spread of L* in blocks of 5 pixels 0.16, from 0.41; it was 0.18); a
+    white oil pastel over a black one is at L* 54.1 (54.5).
+  - In the example images: `crayons.png` moves in its row of oil
+    pastels by little (a few blocks of 32 pixels by up to 3 in colour,
+    at the rubbed join) and where a crayon lies over charcoal and pastel
+    by up to 9 (a twentieth of its blocks by more than 1); `macaw`, `colour`, `deco`, `broadway`, `shine` and
     `lake` by less than 0.5 anywhere; the rest are the same to the bit,
     as is every drawing without a film (graphite alone, to the bit over
     41 sheets of the thorough fingerprint).

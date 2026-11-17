@@ -246,8 +246,22 @@ GREASE = 0.8
 PASTY = 0.5
 #: A greasy tip ploughs into what it is laid over: of the dust and the paste
 #: on top that a pass of paste would bury, this share stays on top and mixes
-#: with it, so a light oil pastel only half covers a dark one.
-PLOUGH = 0.12
+#: with it, so a light oil pastel only half covers a dark one. (0.12 while
+#: two fifths of what an oil pastel laid on its own paste was a film, which
+#: no tip ploughed: all of it is paste, a third more, and three quarters
+#: as much of it comes up for the same covering.)
+PLOUGH = 0.09
+#: What the paper does not hold of a greasy medium, it does not hold for
+#: being pressed either: paste goes into the tooth only as far as the tooth
+#: has room for it, and on what the paper holds already it slides. A tooth
+#: that holds this thickness (on the covered share of the pixel) takes no
+#: more paste under a tip or a tool, and one that holds less, less in
+#: proportion. So a finger smears an oil pastel about, pass after pass,
+#: and what it carries onto bare paper sticks there. (While an oil pastel
+#: left a film on its own paste, that film was a lid on the paste under
+#: it; the thickness is set so that a finger blends a join of two oil
+#: pastels as it did then.)
+PASTE_ROOM = 0.8
 #: Pressed harder than BURNISH_FROM, a tip polishes a waxy layer flat
 #: (``polish``, the wax's own), and a pressed tooth is level, so the white
 #: specks close up. It sets in by degrees: the wax (and, under a dry tip,
@@ -678,10 +692,21 @@ def dry_film(film, wax):
 
 
 @_inlined
+def pasty_share(bonded, layer, iy, ix, which):
+    """The share of a layer at a pixel (``which``: 0 underneath, 1 on top)
+    that is paste."""
+    there, paste = layer[iy, ix, IV], bonded[iy, ix, which, PASTE]
+    if there <= 0.0:
+        return 0.0
+    return min(paste / there, 1.0)
+
+
+@_inlined
 def press_dust(held, under, loose, bonded, cover, iy, ix, share):
     """Press the ``share`` of the dust and of the paste at a pixel into the
     paper: not what is set or bound (``bonded``), and less of the rest the
-    more of those and of film lies between it and the paper."""
+    more of those and of film lies between it and the paper; and of paste,
+    only what the tooth has room for (:data:`PASTE_ROOM`)."""
     dusty = loose[iy, ix, IV] > 0.0 or under[iy, ix, IV] > 0.0
     # (else no dust here, most pixels of a first pass; or a tool that
     # presses nothing in, an eraser)
@@ -692,6 +717,14 @@ def press_dust(held, under, loose, bonded, cover, iy, ix, share):
             share *= 1.0 - min(barrier / max(cover[iy, ix], 1e-6) / COVERS, 1.0)
             from_loose = share * free_share(bonded, loose, iy, ix, 1)
             from_under = share * free_share(bonded, under, iy, ix, 0)
+        # (paste goes into the tooth only as far as the tooth has room for
+        # it: on what the paper holds already it slides)
+        room = 1.0
+        if bonded[iy, ix, 1, PASTE] + bonded[iy, ix, 0, PASTE] > 0.0:
+            full = held[iy, ix, IV] / max(cover[iy, ix], 1e-6) / PASTE_ROOM
+            room = 1.0 - min(full, 1.0)
+            from_loose *= 1.0 - (1.0 - room) * pasty_share(bonded, loose, iy, ix, 1)
+            from_under *= 1.0 - (1.0 - room) * pasty_share(bonded, under, iy, ix, 0)
         for part in range(LOOSE):
             moved = loose[iy, ix, part] * from_loose
             loose[iy, ix, part] -= moved
@@ -700,9 +733,9 @@ def press_dust(held, under, loose, bonded, cover, iy, ix, share):
             under[iy, ix, part] -= moved
             held[iy, ix, part] += moved
         if bonded[iy, ix, 1, PASTE] > 0.0:
-            bonded[iy, ix, 1, PASTE] -= bonded[iy, ix, 1, PASTE] * share
+            bonded[iy, ix, 1, PASTE] -= bonded[iy, ix, 1, PASTE] * share * room
         if bonded[iy, ix, 0, PASTE] > 0.0:
-            bonded[iy, ix, 0, PASTE] -= bonded[iy, ix, 0, PASTE] * share
+            bonded[iy, ix, 0, PASTE] -= bonded[iy, ix, 0, PASTE] * share * room
 
 
 @_inlined
@@ -947,7 +980,10 @@ def settle_pixel(fresh, cover, bonded, under, loose, pasty, binds, iy, ix):
     film of a dry medium). The film that comes joins the film that lay on
     top; and the film on top goes under only as far as the dust and the
     paste of the pass come to lie on it, its crumbs over its own film as
-    over what the paper holds of it. Returns the volumes of dust and paste,
+    over what the paper holds of it. What a greasy medium lays on what lies
+    over the paper is paste, as the rest of it is, as far as it is greasy
+    (``pasty``): an oil pastel leaves no film, which no finger could move,
+    but paste on paste. Returns the volumes of dust and paste,
     and of film, to add to the layer on top and to the films, and the share
     of the film on top that goes under; ``fresh`` is left empty."""
     rest, film = fresh[iy, ix, 0], fresh[iy, ix, 1]
@@ -955,6 +991,14 @@ def settle_pixel(fresh, cover, bonded, under, loose, pasty, binds, iy, ix):
     fresh[iy, ix, 1] = 0.0
     thin = 1.0 / (cover[iy, ix] * COVERS)
     buried = BURY * min((rest + film) * thin, 1.0)
+    # (of its film, the share that is paste; numbers of the sheet's own
+    # precision, as they were, so that a medium that is not greasy settles
+    # as it did, to the bit)
+    kept = np.float32(film * (1.0 - pasty))
+    turned = film - kept
+    film = kept
+    paste = rest * pasty + turned
+    rest = rest + turned
     covers = BURY * min(rest * thin, 1.0)  # (what covers the film on top)
     # (a greasy tip ploughs up part of what can be moved, which stays on top)
     free = free_share(bonded, loose, iy, ix, 1)
@@ -971,7 +1015,6 @@ def settle_pixel(fresh, cover, bonded, under, loose, pasty, binds, iy, ix):
             moved = (bonded[iy, ix, 1, kind] + film) * covers
         bonded[iy, ix, 1, kind] -= moved
         bonded[iy, ix, 0, kind] += moved
-    paste = rest * pasty
     binder = film + paste
     # (the loose dust of each layer, before any of it is bonded)
     below = loose_in(bonded, under, iy, ix, 0)
