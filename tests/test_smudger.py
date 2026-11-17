@@ -8,7 +8,8 @@ import pytest
 from murex import spectral as sp
 
 from fusain import Sheet, Smudger, charcoal, crayons, pastels, pencils, tools
-from fusain._engine import IC, IP
+from fusain import _engine as eng
+from fusain._engine import CARRIED, IC, IP
 from fusain.sheet import IS, IV, IW, N
 
 TONE = (20, 20, 380, 180)  # the rectangle shaded
@@ -16,8 +17,8 @@ INNER = (120, 50, 300, 150)  # the part of it that is rubbed
 ROWS = slice(62, 138)  # rows well inside the part rubbed
 
 
-def _toned(medium=charcoal.VINE, width=9.0, area=TONE) -> tuple[Sheet, float]:
-    sheet = Sheet(400, 200, seed=1)
+def _toned(medium=charcoal.VINE, width=9.0, area=TONE, seed=1) -> tuple[Sheet, float]:
+    sheet = Sheet(400, 200, seed=seed)
     laid = sum(sheet.shade(area, medium, 0.6, width, angle=a) for a in (30, -40))
     return sheet, laid
 
@@ -58,7 +59,9 @@ def test_rubbing_a_dark_tone_again_and_again_does_not_wear_it_away():
     once = float(_luminance(sheet)[inside].mean())
     for _ in range(7):
         sheet.rub(area, stump, 0.9)
-    assert _total(sheet) > 0.99 * laid
+    # (what it holds, on its surface and deep in it: 1.4% of the tone, on
+    # sheets 1 to 3; 0.6% before it had a deep load)
+    assert _total(sheet) > 0.98 * laid
     assert _total(sheet) + stump.load == pytest.approx(laid, rel=1e-5)
     assert abs(float(_luminance(sheet)[inside].mean()) - once) < 0.01
     # a bare tool starts each rub clean, and still takes little: it carries
@@ -67,12 +70,14 @@ def test_rubbing_a_dark_tone_again_and_again_does_not_wear_it_away():
     bare = Sheet(300, 120, seed=1)
     bare.shade(area, pencils.B8, 0.9)
     taken = sum(bare.rub(area, tools.STUMP, 0.9) for _ in range(8))
-    assert 0.0 < taken < 0.06 * laid
-    full = tools.STUMP.holds * np.pi * (0.5 * tools.STUMP.width + 0.5) ** 2
-    # (a full load and what is on its face: 1.14 fulls a rub, where it was
-    # 1.01 when its passes strayed past the tone and spent some on the bare
-    # paper there)
-    assert taken < 8 * 1.2 * full
+    # (a clean stump fills deep in it too, in each rub: 10.4 to 10.7% of the
+    # tone in eight, on sheets 1 to 3, where it was 5% with no deep load)
+    assert 0.0 < taken < 0.12 * laid
+    full, deep_full = _capacity()
+    # (a full load, a full deep load and what is on its face: 1.03 of those
+    # a rub; with no deep load it was 1.14 fulls a rub, and 1.01 when its
+    # passes strayed past the tone and spent some on the bare paper there)
+    assert taken < 8 * 1.2 * (full + deep_full)
     assert _total(bare) + taken == pytest.approx(laid, rel=1e-5)
 
 
@@ -213,28 +218,44 @@ def test_a_loaded_finger_brings_little_onto_a_tone_of_another_colour():
     assert orange_there < 0.03 * blue_there
 
 
-def test_a_stump_fills_slowly_and_takes_no_more_once_it_is_full():
-    # a stump holds so much (``Tool.holds`` for each pixel of its face); it
-    # takes less the fuller it is, and a full one takes nothing more
-    full = tools.STUMP.holds * np.pi * (0.5 * tools.STUMP.width + 0.5) ** 2
-    sheet, laid = _toned(charcoal.VINE, 9.0)
+def _capacity(tool=tools.STUMP) -> tuple[float, float]:
+    """What a tool holds on its surface and deep in it, when full."""
+    face = np.pi * (0.5 * tool.width + 0.5) ** 2
+    return tool.holds * face, tool.deep * face
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_a_stump_fills_slowly_and_takes_no_more_once_it_is_full(seed):
+    # a stump holds so much (``Tool.holds`` for each pixel of its face, and
+    # ``Tool.deep`` worked into its fibres); it takes less the fuller its
+    # surface is, and a full one takes nothing more
+    full, deep_full = _capacity()
+    sheet, laid = _toned(charcoal.VINE, 9.0, seed=seed)
     stump = Smudger(tools.STUMP)
-    # one pass through 32 widths of charcoal: a fifth of what it holds
-    assert 0.1 * full < sheet.smudge([(40, 100), (360, 100)], stump, 0.7) < 0.4 * full
+    # one pass through 32 widths of charcoal: two fifths of what its surface
+    # holds (0.37 to 0.45; it was a fifth, before it had a deep load), and
+    # of what it lifted nearly half has gone deep already
+    assert 0.3 * full < sheet.smudge([(40, 100), (360, 100)], stump, 0.7) < 0.6 * full
+    assert 0.07 * deep_full < stump.deep < 0.2 * deep_full
     # (rubbed well inside a tone: on the bare paper round it, it would leave
     # what it carries)
-    lifted = []  # (what it has lifted, without the dust on its face)
+    lifted, deep = [], []  # (what it has lifted, without the dust on its face)
     for _ in range(3):
         sheet.rub(INNER, stump, 0.7)
-        lifted.append(float(stump._carried[0, IV]))
-    assert 0.4 * full < lifted[0] < lifted[1] < lifted[2] < full
-    assert lifted[1] - lifted[0] < 0.75 * lifted[0] and lifted[2] > 0.9 * full
+        lifted.append(float(stump._carried[0, IV]) / full)
+        deep.append(stump.deep / deep_full)
+    # (0.69 to 0.72 of its surface after one rub, 0.94 to 0.96 after three,
+    # and the deep load as full within a hundredth)
+    assert 0.4 < lifted[0] < lifted[1] < lifted[2] < 1.0
+    assert lifted[1] - lifted[0] < 0.75 * lifted[0] and lifted[2] > 0.9
+    assert all(abs(a - b) < 0.02 for a, b in zip(lifted, deep, strict=True))
     assert _total(sheet) + stump.load == pytest.approx(laid, rel=1e-5)
     # a heavy pastel fills it in one rub, and the next takes nothing
-    sheet, laid = _toned(pastels.soft(BLUE), 9.0)
+    sheet, laid = _toned(pastels.soft(BLUE), 9.0, seed=seed)
     stump = Smudger(tools.STUMP)
     sheet.rub(INNER, stump, 0.7)
     assert 0.9 * full < float(stump._carried[0, IV]) <= full * (1 + 1e-9)
+    assert 0.9 * deep_full < stump.deep <= deep_full * (1 + 1e-9)
     assert abs(sheet.rub(INNER, stump, 0.7)) < 0.05 * full
     # an eraser, a chamois or a tool of one's own holds whatever it takes
     eraser = Smudger(tools.KNEADED)
@@ -251,13 +272,14 @@ def test_a_tool_never_takes_more_than_it_has_room_for(medium):
     # back later): pigment, paste and wax alike, and none of it lost
     for tool in (tools.STUMP, tools.ERASER):
         tiny = tool.with_(holds=1e-6)
-        full = tiny.holds * np.pi * (0.5 * tiny.width + 0.5) ** 2
+        full, deep_full = _capacity(tiny)
         sheet, _ = _toned(medium)
         total, wax = _total(sheet), _wax(sheet)
         held = Smudger(tiny)
         for y in (60, 100, 140):
             sheet.smudge([(40, y), (360, y)], held, 0.9)
             assert 0.0 < float(held._carried[0, IV]) <= full * (1 + 1e-6)
+            assert 0.0 <= held.deep <= deep_full * (1 + 1e-6)
         assert _total(sheet) + held.load == pytest.approx(total, rel=1e-6)
         assert _wax(sheet) + held.wax == pytest.approx(wax, rel=1e-6, abs=1e-9)
         # paste and wax in proportion to the pigment: never more than all
@@ -459,33 +481,135 @@ def test_a_loaded_stump_draws_a_pale_tone_on_bare_paper():
     assert load > 0 and _total(sheet) + load == pytest.approx(laid, rel=1e-5)
     assert sheet.pigment()[:, 150:].max() == 0
     taken = sheet.smudge([(200, 60), (480, 60)], stump, 0.6)
-    # it left most of what it carried: less than nothing taken (0.87 of it;
-    # 0.92 when the rub that loaded it strayed past the patch and spent some
-    # of its load on the bare paper there, so that it carried 7% less)
-    assert taken == pytest.approx(stump.load - load) and taken < -0.85 * load
+    # it left much of what it carried: less than nothing taken (0.48 of it,
+    # on sheets 1 to 3; the rest is deep in it, and comes out more slowly.
+    # With no deep load it left 0.87 of it, and 0.92 when the rub that loaded
+    # it strayed past the patch and spent some on the bare paper there)
+    assert taken == pytest.approx(stump.load - load) and taken < -0.4 * load
+    assert stump.deep > 0.3 * stump.load
     trail = sheet.pigment()[:, 150:]
     assert float(trail.sum(dtype=np.float64)) == pytest.approx(-taken, rel=1e-4)
     assert trail[:50].max() == 0 and trail[70:].max() == 0  # only where it went
     # a tone paler than the patch it was loaded on, deepest where the stump
     # lands and fading as it goes: bare tooth takes the dust off a loaded
-    # stump readily. It tones the paper for longer than it did: it used to
-    # lay 0.59, 0.92, 0.98 and 0.99 of the paper's tone over these 28 widths
+    # stump readily. It tones the paper for longer than it did: 0.745, 0.85,
+    # 0.89 and 0.92 of the paper's tone over these 28 widths (on sheets 1 to
+    # 3), where with no deep load it laid 0.73, 0.84, 0.90 and 0.945, and in
+    # the first build 0.59, 0.92, 0.98 and 0.99
     tone = _luminance(sheet)
     along = [float(tone[56:64, x : x + 20].mean()) for x in (200, 280, 360, 440)]
     assert along == sorted(along)
-    assert float(tone[40:160, 40:100].mean()) < 0.15 < 0.5 < along[0] < 0.76
-    assert 0.76 < along[1] < 0.88 and 0.86 < along[2] < 0.95
-    assert 0.93 < along[3] < 0.98
+    assert float(tone[40:160, 40:100].mean()) < 0.15 < 0.5 < along[0] < 0.78
+    assert 0.78 < along[1] < 0.88 and 0.85 < along[2] < 0.93
+    assert 0.88 < along[3] < 0.95
     assert _total(sheet) + stump.load == pytest.approx(laid, rel=1e-5)
+
+
+def _along_bare_paper(held: Smudger, seed: int) -> list[float]:
+    """The tone ``held`` lays on bare paper, dragged over 28 of its widths:
+    where it lands and 8, 16 and 24 widths on."""
+    sheet = Sheet(500, 120, seed=seed)
+    sheet.smudge([(200, 60), (480, 60)], held, 0.6)
+    tone = _luminance(sheet)
+    return [float(tone[56:64, x : x + 20].mean()) for x in (200, 280, 360, 440)]
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_one_pass_through_a_dark_tone_loads_a_stump(seed):
+    # (fusain-bbq: with one shallow load, one pass through 32 widths of
+    # charcoal lifted 0.11 to 0.13 of what the stump holds, and it laid
+    # that out in eight widths of bare paper)
+    full, deep_full = _capacity()
+    sheet, laid = _toned(charcoal.VINE, 9.0, seed=seed)
+    stump = Smudger(tools.STUMP)
+    sheet.smudge([(40, 100), (360, 100)], stump, 0.7)
+    surface = float(stump._carried[0, IV])
+    # it lifts twice as much and more (0.26 to 0.32), and the deep load has
+    # nearly half of it: the surface, which governs what it carries out of
+    # the tone, has hardly more than it had (0.14 to 0.17)
+    assert surface + stump.deep > 0.22 * full
+    assert 0.35 * (surface + stump.deep) < stump.deep < 0.2 * deep_full
+    assert surface < 0.2 * full
+    assert _total(sheet) + stump.load == pytest.approx(laid, rel=1e-5)
+    # on bare paper it lays a tone that lasts, its surface filling again
+    # from the deep load as it goes: 0.97 and 0.98 of the paper's tone 16
+    # and 24 widths on, where it laid 0.98 and 0.99 (and it still has a
+    # half of what it lifted, most of it deep in it)
+    lifted = surface + stump.deep
+    along = _along_bare_paper(stump, seed)
+    assert along == sorted(along) and along[0] < 0.85
+    assert along[2] < 0.978 and along[3] < 0.985
+    assert 0.35 * lifted < stump.load < 0.65 * lifted
+    assert stump.deep > float(stump._carried[0, IV])
+
+
+def test_a_stump_used_for_long_stays_grey():
+    # rubbed for long in a tone of 6B, a stump is full through and through,
+    # and drawn over bare paper again and again it lays a tone each time,
+    # lighter and lighter; with no deep load it was spent in two
+    full, deep_full = _capacity()
+
+    def used(tool) -> Smudger:
+        sheet = Sheet(300, 200, seed=1)
+        for angle in (30, -40):
+            sheet.shade((20, 20, 200, 180), pencils.B6, 0.8, 7.0, angle=angle)
+        held = Smudger(tool)
+        for _ in range(4):
+            sheet.rub((25, 25, 195, 175), held, 0.7)
+        return held
+
+    stump = used(tools.STUMP)
+    assert stump.deep > 0.9 * deep_full and stump.load > 0.9 * (full + deep_full)
+    load = stump.load
+    landed = [_along_bare_paper(stump, 10 + k)[0] for k in range(5)]
+    # (0.70, 0.90, 0.93, 0.96 and 0.97 of the paper's tone where it lands,
+    # on sheets 1 to 3, where with no deep load it was 0.70, 0.95, 0.996 and
+    # then nothing; it still carries a tenth of what it did)
+    assert landed == sorted(landed)
+    assert landed[0] < 0.75 and landed[2] < 0.95 and landed[4] < 0.98
+    assert 0.0 < stump.load < 0.2 * load
+    shallow = used(tools.STUMP.with_(deep=0.0))
+    spent = [_along_bare_paper(shallow, 10 + k)[0] for k in range(3)]
+    assert spent[0] < 0.75 and spent[2] > 0.99
+    # a finger keeps a little in the grain of its skin: a fifth of its load
+    finger = used(tools.FINGER)
+    assert 0.1 * finger.load < finger.deep < 0.3 * finger.load
+
+
+def test_what_a_stump_works_into_it_and_back_out_is_all_still_there():
+    # the surface and the deep load of a tool even out as it is rubbed: the
+    # gap in how full they are closes by 1 - exp(-rate) for each of its
+    # widths, and every part of what it carries moves in proportion
+    room, depth, rng = 3.0, 5.0, np.random.default_rng(1)
+    for there, within, rate in ((2.4, 0.5, eng.SOAK_IN), (0.3, 4.0, eng.SOAK_OUT)):
+        load, deep = rng.uniform(0.1, 1.0, (2, CARRIED))
+        load *= there / load[IV]
+        deep *= within / deep[IV]
+        was_load, was_deep = load.copy(), deep.copy()
+        gap = there / room - within / depth
+        eng.soak(load, deep, room, depth, 2.5)
+        np.testing.assert_allclose(load + deep, was_load + was_deep, rtol=1e-12)
+        now = load[IV] / room - deep[IV] / depth
+        assert now == pytest.approx(gap * np.exp(-rate * 2.5), rel=1e-9)
+        # (what gives keeps the same share of each of its parts)
+        kept = load / was_load if gap > 0 else deep / was_deep
+        np.testing.assert_allclose(kept, kept[IV], rtol=1e-12)
+        assert 0.0 < kept[IV] < 1.0
+    # a tool with no deep load, or not rubbed, keeps all on its surface
+    load, deep = np.ones(CARRIED), np.zeros(CARRIED)
+    eng.soak(load, deep, room, 0.0, 2.5)
+    eng.soak(load, deep, room, depth, 0.0)
+    assert (load == 1.0).all() and (deep == 0.0).all()
 
 
 def test_a_bare_tool_and_a_cleaned_one_bring_nothing_to_bare_paper():
     sheet, stump, laid = _loaded()
     on_the_sheet = _total(sheet)
     assert sheet.smudge([(200, 60), (480, 60)], tools.STUMP, 0.6) == 0.0
-    load = stump.load
-    assert stump.clean() == pytest.approx(load) and load > 0
+    load, deep = stump.load, stump.deep
+    assert stump.clean() == pytest.approx(load) and load > deep > 0
     assert stump.load == 0.0 and not stump.carried.any() and stump.wax == 0.0
+    assert stump.deep == 0.0 and not stump._carried.any()
     assert sheet.smudge([(200, 100), (480, 100)], stump, 0.6) == 0.0
     assert sheet.pigment()[:, 150:].max() == 0
     # what was cleaned off is no longer anywhere

@@ -15,7 +15,9 @@ class Smudger:
     it is cleaned. A stump fills slowly as it is rubbed in a tone and takes
     nothing more once it is full, so it blends a tone without wearing it
     away; and bare paper takes the dust off it, so it draws a tone of its
-    own there::
+    own there. What it picks up works into its fibres, and back out slowly
+    as bare paper empties its surface (``Tool.deep``), so one that has been
+    used for long stays grey::
 
         from fusain import Sheet, Smudger, pencils, tools
         stump = Smudger(tools.STUMP)
@@ -33,8 +35,9 @@ class Smudger:
     width:
         Its width in pixels (by default the tool's own).
 
-    ``load`` is the volume of pigment it carries now, and ``wax`` the volume
-    of wax that came with it (a finger that smears an oil pastel takes its
+    ``load`` is the volume of pigment it carries now (``deep`` the part of
+    it worked into its fibres), and ``wax`` the volume of wax that came
+    with it (a finger that smears an oil pastel takes its
     wax along with its paste). An eraser can be held this way too: it lays
     nothing back, so its load is what it has taken off since it was cleaned.
     """
@@ -44,16 +47,22 @@ class Smudger:
             raise TypeError(f"tool must be a Tool, such as tools.STUMP, got {tool!r}")
         self.tool = tool
         self.width = _width("width", tool.width if width is None else width)
-        # what it has lifted, the dust on its face and the held graphite it
-        # is pushing along, each packed as the dust of a sheet is, with the
-        # volume of it that is paste and the volume of wax that came with it
-        # after
-        self._carried = np.zeros((3, CARRIED))
+        # what it has lifted (on its surface), the dust on its face, the
+        # held graphite it is pushing along and what it has worked deep into
+        # its fibres, each packed as the dust of a sheet is, with the volume
+        # of it that is paste and the volume of wax that came with it after
+        self._carried = np.zeros((4, CARRIED))
 
     @property
     def load(self) -> float:
         """Volume of pigment it carries now."""
         return float(self._carried[:, IV].sum())
+
+    @property
+    def deep(self) -> float:
+        """Volume of pigment it has worked deep into its fibres: part of its
+        load, which comes back out to its surface slowly."""
+        return float(self._carried[3, IV])
 
     @property
     def carried(self) -> np.ndarray:
