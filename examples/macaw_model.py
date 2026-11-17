@@ -451,7 +451,7 @@ TORSO = [
 #: far one behind, the near one ahead.
 THIGHS = [
     ((-2.0, -3.78, -0.16), (0.5, 0.46, 0.4)),
-    ((-1.68, -3.55, 0.2), (0.42, 0.4, 0.34)),
+    ((-1.58, -3.72, 0.02), (0.38, 0.38, 0.32)),
 ]
 
 
@@ -663,22 +663,21 @@ def branch_blobs() -> list[Blob]:
 #: feet are mirror images of each other along the branch.
 TOES = ((100, -18, 0.2, 0.1, 3, 70), (100, 8, -0.1, 0.095, 2, 64),
         (100, 222, 0.22, 0.1, 4, 50), (100, 196, -0.16, 0.092, 1, 46))  # fmt: skip
-#: How thick the scaly tarsus is; each leg runs from the ball of its foot up
-#: into the feathers of its thigh, where its heel lies hidden.
-TARSUS = 0.135
+#: How thick the scaly tarsus is; each leg runs from the ball of its foot
+#: straight up into the belly's feathers, where its heel lies hidden.
+TARSUS = 0.15
 
 
 def foot(f: float):
     """The foot gripping ``f`` along the branch: its point on the branch's
     axis, which way along the branch its outer side lies (+1 or -1), the
-    ball of the foot on top of the branch and the heel above it, inside the
-    thigh over it (the near one over the foot ahead)."""
+    ball of the foot on top of the branch and the heel straight above it, a
+    little behind, hidden in the belly's feathers."""
     b, up, _ = branch_frame()
     centre = np.asarray(BRANCH_AT) + b * f
     outward = 1.0 if f > 0 else -1.0
     ball = centre + up * (BRANCH_R + 0.05)
-    thigh = np.asarray(THIGHS[1 if f > 0 else 0][0])
-    heel = thigh + np.array([0.0, -0.26, 0.0])
+    heel = ball + np.array([-0.06, 0.5, 0.0])
     return centre, outward, ball, heel
 
 
@@ -724,7 +723,7 @@ def feet_blobs() -> list[Blob]:
         leg = np.linspace(heel, ball, 7)
         thick = np.linspace(TARSUS, 0.9 * TARSUS, 7)
         out += chain(leg, thick, thick, "toes", side=b, overlap=2.0)
-        out.append(blob(ball, (0.14, 0.085, 0.14), "toes", along=b))
+        out.append(blob(ball, (0.12, 0.07, 0.12), "toes", along=b))
         for toe_of in TOES:
             spine, radius, _ = toe_path(c, toe_of, outward)
             out += chain(spine, radius, radius, "toes", side=b, overlap=2.4)
