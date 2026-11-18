@@ -439,15 +439,22 @@ UNDER_LIFT = 0.7
 #: holds, of a film and of what is set, an eraser lifts WAX_HOLDS less where
 #: the wax is WAX_FAST thick or more (a third of what makes it as slick as
 #: it gets to a pencil) and has kept its tooth, and POLISH_HOLDS less where
-#: it has been polished flat: a light layer of coloured pencil comes off
-#: fairly well, a dense one badly, a burnished one hardly. A blade or grit
-#: does not slide: as far as a tool scrapes, it takes what it would take of
-#: a medium without wax. Polished wax keeps the tooth level as far as it is
-#: WAX_FAST thick, and as a tool takes it off the tooth comes back
+#: it has been polished POLISH_FLAT or further: a light layer of coloured
+#: pencil comes off fairly well, a dense one badly, a burnished one hardly.
+#: (Wax a firm hand has pressed in layer after layer is polished only half
+#: the way, as far as its load presses it (:func:`settled`), but it holds
+#: nearly as burnished wax does: four firm layers of coloured pencil, 0.52
+#: polished, leave 0.62, 0.40 and 0.23 after one, two and three rubs at
+#: 0.9 (on two sheets), burnished ones 0.69, 0.49 and 0.35; had it held
+#: as polished by half, they left 0.45, 0.17 and 0.03: fusain-dhx.) A blade
+#: or grit does not slide: as far as a tool scrapes, it takes what it would
+#: take of a medium without wax. Polished wax keeps the tooth level as far
+#: as it is WAX_FAST thick, and as a tool takes it off the tooth comes back
 #: (:func:`bare_tooth`).
 WAX_FAST = 0.1
 WAX_HOLDS = 0.6
 POLISH_HOLDS = 0.9
+POLISH_FLAT = 0.55
 #: Wax carries its pigment into the fibres of the paper, which it stains: of
 #: what the paper holds of a waxy medium, this thickness (on the covered
 #: share of the pixel) is out of reach of any eraser that does not cut the
@@ -2271,14 +2278,14 @@ def waxy_at(held, bonded, iy, ix):
 def wax_grip(held, cover, polish, iy, ix, scrape):
     """The share of its lift a tool keeps on what a pixel holds, for the
     wax there: all of it where there is none, less the thicker the wax is
-    and the further it has been polished (``polish``: the wax's own, not
-    what a dry tip crushed of the paper under it), which a tool gets
-    through as far as it scrapes (``scrape``, 0..1)."""
+    and the further it has been polished, up to POLISH_FLAT (``polish``:
+    the wax's own, not what a dry tip crushed of the paper under it), which
+    a tool gets through as far as it scrapes (``scrape``, 0..1)."""
     covered, wax, polished = cover[iy, ix], held[iy, ix, IW], polish[iy, ix]
     if covered <= 0.0 or wax <= 0.0:
         return 1.0
     waxy = min(wax / covered / WAX_FAST, 1.0)
-    fast = WAX_HOLDS + (POLISH_HOLDS - WAX_HOLDS) * polished
+    fast = WAX_HOLDS + (POLISH_HOLDS - WAX_HOLDS) * min(polished / POLISH_FLAT, 1.0)
     return 1.0 - (1.0 - scrape) * waxy * fast
 
 
