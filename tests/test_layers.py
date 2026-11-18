@@ -9,11 +9,12 @@ import pytest
 from murex import spectral as sp
 
 from fusain import Sheet, Smudger, charcoal, crayons, papers, pastels, pencils, tools
-from fusain._engine import IP, IV, IW, IX, PASTY, SET, STICKS, N, dry_film, paste_of
+from fusain._engine import ID, IP, IV, IW, IX, PASTY, SET, STICKS, N, dry_film, paste_of
 
 BOX = (20, 20, 180, 130)
 INSIDE = (slice(50, 100), slice(50, 150))
 RED, YELLOW, BLUE = "#c0392b", "#f2c40f", "#2456a6"
+DARK, WHITE = "#141416", "#f4f1ea"
 WIDTH = 9.0
 
 
@@ -383,6 +384,47 @@ def test_a_crayon_still_takes_over_one_line_of_crayon():
     assert again > 0.3 * bare.stroke(path, crayons.wax(BLUE), 0.8, 8)
 
 
+def _over_rubbed_charcoal(pressure, seed) -> Sheet:
+    """A white crayon line drawn at ``pressure`` over vine charcoal rubbed
+    into a tone with a finger."""
+    sheet = _sheet(seed)
+    for angle in (30, -40):
+        sheet.shade(BOX, charcoal.VINE, 0.7, 12.0, angle=angle)
+    sheet.rub(BOX, Smudger(tools.FINGER), 0.6)
+    sheet.stroke([(30, 75), (170, 75)], crayons.wax(WHITE), pressure, 8)
+    return sheet
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_a_firm_crayon_line_over_rubbed_charcoal_skips_charcoal_and_a_light_one_less(
+    seed,
+):
+    # (fusain-3jj) the film a firm crayon line laid over a tooth full of dust
+    # was a starved one, half as thick as covers the tooth, and charcoal took
+    # on it at about half the rate it took beside it (0.56). Now that the
+    # crayon rides on the dust (fusain-14f) its film covers the tooth, and
+    # wax is as slick to charcoal there as on bare paper; a film thinner
+    # than COVERS is slick in proportion
+    taken, kept = [], []
+    for pressure in (0.9, 0.5, 0.3):
+        line = _over_rubbed_charcoal(pressure, seed)
+        over = line.copy()
+        over.shade(BOX, charcoal.COMPRESSED, 0.4, WIDTH, angle=60)
+        brought = (over.pigment() - line.pigment()).astype(np.float64)
+        taken.append(brought[LINE].mean() / brought[AROUND].mean())
+        kept.append(_luminance(over, LINE) / _luminance(line, LINE))
+    assert taken[0] < 0.15 and kept[0] > 0.95
+    assert taken[0] < taken[1] < taken[2] and kept[0] > kept[1] > kept[2]
+    assert taken[1] < 0.75
+    # and the line is as light where a loaded stump has crossed it as beside
+    line = _over_rubbed_charcoal(0.9, seed)
+    paper = _luminance(_sheet(seed))
+    line.smudge([(100, 25), (102, 125)], tools.STUMP, 0.8, 14)
+    crossed = _luminance(line, (LINE[0], slice(94, 108)))
+    assert crossed > 0.6 * paper
+    assert crossed > 0.95 * _luminance(line, (LINE[0], slice(40, 80)))
+
+
 # --------------------------------------------------------------------------
 # a dry medium over a bed of dust (fusain-wo4)
 
@@ -651,20 +693,94 @@ def test_a_firm_stick_marks_the_dust_of_a_crumbly_one_and_not_the_other_way():
     assert not over.bonded.any()
 
 
-def test_pastel_rubbed_into_the_paper_takes_a_pencil_while_dust_is_left_on_it():
-    on_paper, dark_on_paper = _pencilled(_sheet(), pencils.B2)
-    once, twice = _bed(), _bed()
-    once.rub(BOX, tools.FINGER, 0.6)
-    for angle in (0, 90):
-        twice.rub(BOX, tools.FINGER, 0.6, angle=angle)
-    # blended once, the pastel still has dust on it for the point to ride on
-    # (it took a hundredth of what bare paper takes)
-    laid, dark = _pencilled(once, pencils.B2)
-    assert laid > 0.55 * on_paper and dark > 0.5 * dark_on_paper
-    # rubbed in further, it fills the tooth: what the paper holds is in the
-    # way of every medium alike
-    laid, dark = _pencilled(twice, pencils.B2)
-    assert laid < 0.5 * on_paper and dark < 0.4 * dark_on_paper
+def _blended(times, seed=1) -> Sheet:
+    """The two layers of pale pastel, rubbed with a finger ``times`` times,
+    across each other."""
+    sheet = _bed(seed=seed)
+    for angle in (0, 90)[:times]:
+        sheet.rub(BOX, tools.FINGER, 0.6, angle=angle)
+    return sheet
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+@pytest.mark.parametrize("medium", [pencils.B2, charcoal.PENCIL])
+def test_pastel_rubbed_into_the_paper_takes_a_pencil_less_the_more_it_is(medium, seed):
+    # (fusain-bq2) dust pressed into the paper is still dust, packed in the
+    # valleys of the tooth: no part of the tip's mark, and with some tooth
+    # of its own. Blended once with a finger, the pastel took a 2B 0.87 as
+    # dark as bare paper, blended again crosswise 0.23, and a charcoal
+    # pencil, which took the pressed pastel for crumbs of its own mark,
+    # 0.25 and 0.02: now a 2B 0.83, 0.66 and 0.56 (loose, once, twice), a
+    # charcoal pencil 1.00, 0.90 and 0.58 (over seeds 1 to 3)
+    on_paper, dark_on_paper = _pencilled(_sheet(seed), medium)
+    darks, shares = [], []
+    for times in (0, 1, 2):
+        laid, dark = _pencilled(_blended(times, seed), medium)
+        darks.append(dark / dark_on_paper)
+        shares.append(laid / on_paper)
+    assert darks[0] > darks[1] > darks[2] > 0.45
+    assert shares[0] > shares[1] > shares[2] > 0.25
+    assert darks[1] > 0.55
+    assert darks[2] < 0.75
+
+
+def test_what_is_pressed_into_the_paper_is_counted_as_dust_and_goes_with_it():
+    sheet = _bed()
+    pressed = sheet.held[..., ID]
+    # a tip presses part of the dust under it into the paper as it lays
+    assert 0.0 < _sum(pressed) < _sum(sheet.held[..., IV])
+    assert (pressed <= sheet.held[..., IV] * (1 + 1e-5) + 1e-7).all()
+    # a finger presses more of it in
+    once = _blended(1)
+    assert _sum(once.held[..., ID]) > 3.0 * _sum(pressed)
+    # and a tool that lifts what the paper holds takes it as it takes the
+    # rest: it is still that share of what the paper holds
+    erased = once.copy()
+    erased.rub(BOX, tools.ERASER, 0.8)
+    inside = (once.held[INSIDE][..., ID], once.held[INSIDE][..., IV])
+    left = (erased.held[INSIDE][..., ID], erased.held[INSIDE][..., IV])
+    assert _sum(left[1]) < 0.6 * _sum(inside[1])
+    share, kept = _sum(inside[0]) / _sum(inside[1]), _sum(left[0]) / _sum(left[1])
+    assert kept == pytest.approx(share, rel=0.05)
+    # the paste of an oil pastel is no dust: what a finger presses of it in
+    # the paper holds as it holds the rest of the pastel
+    # (but for what float32 rounds)
+    oil = _drawn(pastels.oil(RED), 0.7)
+    oil.rub(BOX, tools.FINGER, 0.7)
+    assert _sum(oil.paste) > 0
+    assert _sum(oil.held[..., ID]) < 1e-4 * _sum(oil.held[..., IV])
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+@pytest.mark.parametrize(
+    "medium, pressure",
+    [
+        (pencils.coloured(DARK), 0.6),
+        (pencils.coloured(DARK), 0.9),
+        (crayons.wax(DARK), 0.8),
+    ],
+    ids=["coloured 0.6", "coloured 0.9", "crayon 0.8"],
+)
+def test_a_waxy_medium_marks_a_tooth_full_of_pastel_dust(medium, pressure, seed):
+    # (fusain-14f) a waxy tip meets a bed of dust as a dry one does: it is
+    # not in its way, and it rides on it, laying less. It took a fifteenth
+    # to a thirtieth of what bare paper takes, and left the tone at 0.87 to
+    # 0.96 of the pastel's; now 0.78 to 0.89 of it, and it darkens the pale
+    # pastel more than the paper (the paper shows between its grains)
+    bare, base = _sheet(seed), _bed(seed=seed)
+    paper, ground = _luminance(bare), _luminance(base)
+    on_paper = bare.shade(BOX, medium, pressure, 6.0)
+    over = base.copy()
+    laid = over.shade(BOX, medium, pressure, 6.0)
+    assert 0.7 * on_paper < laid < 0.95 * on_paper
+    assert 1.0 - _luminance(over) / ground > 0.9 * (1.0 - _luminance(bare) / paper)
+    # what the paper would have held is a film on the pastel, on top, and it
+    # binds part of the pastel under it
+    film = _sum(over.film)
+    assert film > 0.85 * laid and _sum(over.film[..., 1]) > 0.9 * film
+    assert 0.3 * _dust(base) < _sum(over.fixed) < 0.6 * _dust(base)
+    assert _total(over) == pytest.approx(_total(base) + laid, rel=1e-6)
+    assert _nothing_negative(over) and _bonded_within_bounds(over)
 
 
 @pytest.mark.parametrize(
@@ -739,7 +855,6 @@ def test_what_a_dry_medium_lays_over_a_bed_is_on_the_sheet_or_on_the_tool(over, 
 # --------------------------------------------------------------------------
 # a film apart from the dust it lies on (fusain-r56, fusain-fxc)
 
-DARK, WHITE = "#141416", "#f4f1ea"
 SEEDS = [1, 2, 3]
 
 
@@ -816,12 +931,12 @@ def test_dust_a_film_held_is_loose_again_once_the_film_is_taken_off(seed, fixed)
     assert np.allclose(sheet.fixed, sheet.bound + by_fixative)
     sheet.rub(BOX, tools.ERASER, 0.5)
     film_left = _sum(sheet.film[inside]) / film
-    assert 0.3 < film_left < 0.6  # (0.43 to 0.53)
+    assert 0.3 < film_left < 0.6  # (0.50 to 0.54 over seeds 1 to 10)
     if not fixed:
         # the eraser takes what the film holds as it takes the film, and
         # what it leaves of it is loose as far as the film over it has
-        # gone: 0.19 to 0.26 of it is still held, where 0.43 to 0.49 of
-        # the film is left
+        # gone: 0.27 to 0.31 of it is still held, where 0.50 to 0.54 of
+        # the film is left (over seeds 1 to 10)
         assert _sum(sheet.bound[inside]) / bound < 0.7 * film_left
     for k in range(1, 3):
         sheet.rub(BOX, tools.ERASER, 0.8, angle=45 * k)
@@ -829,8 +944,14 @@ def test_dust_a_film_held_is_loose_again_once_the_film_is_taken_off(seed, fixed)
     assert _sum(sheet.film[inside]) < 0.02 * film and dust > 0.0
     if fixed:  # what fixative set stays set, film or no film
         assert _sum(by_fixative[inside]) > 0.99 * dust
-    else:  # (0.003 to 0.03 of it; it was over a third)
-        assert _sum(sheet.fixed[inside]) < 0.06 * dust
+    else:
+        # (it was over a third.) What is still set is held by what is
+        # left of the film, 0.010 to 0.016 of it, in proportion: 0.032 to
+        # 0.061 of the dust over seeds 1 to 10 (0.020 to 0.044 before the
+        # crayon rode on the pastel and laid a heavier film over it,
+        # fusain-14f; 0.028 to 0.053 before wax held against an eraser
+        # short of being burnished, fusain-dhx)
+        assert _sum(sheet.fixed[inside]) < 0.08 * dust
     assert _nothing_negative(sheet) and _bonded_within_bounds(sheet)
 
 

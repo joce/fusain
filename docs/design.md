@@ -56,14 +56,15 @@ Per pixel, all `float32`:
 | (`press`) | Not stored: what a tip meets, worked out from the two (`Sheet.press`, `crush + polish - crush * polish`). A tooth pressed flat is level: a tip touches all of it, as it would its peaks, and in the relief its peaks have come down to its valleys. |
 | `dent` | How far the paper has been indented here: the depth of a groove below the peaks of the tooth, in depths of the tooth of a paper of depth 1. By a stylus, and by the ball of a pen. |
 | `cover` | Share of the pixel that carries pigment (0 to 1); the rest shows bare paper. |
-| `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite) and how much is wax. The wax counts all the wax at the pixel, wherever it lies: in what the paper holds, in a film or in paste. |
+| `held` | Pigment fixed to the paper: absorption K over 24 spectral bands, scattering S, volume, how much of the volume shines (graphite), how much is wax, and how much is dust pressed into the paper (by a tip or a tool: still dust to a tip, see "A bed of dust"). The wax counts all the wax at the pixel, wherever it lies: in what the paper holds, in a film or in paste. |
 | `ink`, `inked` | The ink of pens, a stain in the paper under everything else: K, S and volume, and the colour it bronzes (linear RGB, times the volume); and the share of the pixel it is on. Allocated when a pen first draws. |
 | `under`, `loose` | Pigment lying on what the paper holds: K, S, volume and sheen, in two layers. `loose` is on top; what a new pass covers goes `under`. Most of it is dust. |
 | `films` | The film that lies on each of the two layers, each a mixture of its own, packed as `held` is: what a medium laid on the dust and not on the paper, a waxy one wherever dust lay and a dry one on a bed of it. Its wax is the wax the film was laid with (which the wax in `held` counts too): a film is dry as far as it has none. |
 | `bonded` | For each of the two layers, four volumes. Three say what in the layer is not loose dust: dust that fixative has set; dust that a film of wax holds (`bound`), set for as long as the film is there (the two together are `fixed`); and `paste`, what the paper does not hold of a greasy medium. The fourth, `film`, is the volume of the film that lies on the layer (that of `films`): on the dust underneath, under the dust on top; or on top of all. |
 
-That is about 0.6 KB per pixel (154 numbers of four bytes; 96 while a
-film was part of the layer it lay on, fusain-r56), more than oilpaint. As there, storing summed
+That is about 0.6 KB per pixel (157 numbers of four bytes; 96 while a
+film was part of the layer it lay on, fusain-r56, and 154 before `held`
+counted the dust pressed into it, fusain-bq2), more than oilpaint. As there, storing summed
 absorption and scattering lets any number of pigments mix correctly at a fixed
 cost.
 
@@ -173,12 +174,15 @@ each is not. The rule is that a medium lies on what it meets:
   stick marks over the dust of a crumbly one, not the other way about:
   vine charcoal over pastel is dust on dust, and finds the tooth full.
   On cartridge paper, over two layers of a pale soft pastel laid at 0.6, a
-  2B line drawn at 0.6 lays 0.77 of what it lays on bare paper and is 0.83
+  2B line drawn at 0.6 lays 0.72 of what it lays on bare paper and is 0.79
   as dark against its ground (0.02 and 0.01 before, the little there was
-  lying under the dust), an HB 0.75 and 0.79, a charcoal pencil 0.76 and
-  0.99; over the same fixed, 0.77 and 0.83, 0.77 and 0.80, 0.77 and 0.99
+  lying under the dust), an HB 0.69 and 0.73, a charcoal pencil 0.71 and
+  0.97; over the same fixed, 0.74 and 0.80, 0.72 and 0.75, 0.73 and 0.98
   (0.15 and 0.03 before for the 2B). (With the film one mixture with the
-  pastel of its layer the lines were 0.78, 0.70 and 0.87 as dark.)
+  pastel of its layer the lines were 0.78, 0.70 and 0.87 as dark; while
+  the pastel the tips had pressed into the paper was out of reach of a
+  tip riding on the dust over it, 0.77 and 0.83, 0.75 and 0.79, 0.76 and
+  0.99.)
   All of the line's graphite lies on the pastel, where 0.15 of it did,
   its crumbs; over a light layer of pastel 0.8 of it, and over the dust of
   vine charcoal 0.7, the point reaching the paper through the rest.
@@ -209,15 +213,45 @@ each is not. The rule is that a medium lies on what it meets:
   as on bare paper, and the point of a knife drawn along it leaves a
   hundredth of what lay in its way.
   A medium laid over its own layers, or on a ground no dustier than its
-  own mark, meets no bed and draws as it did, to the bit: graphite layer
-  on layer, of one grade or of several, pastel over pastel, fixed or not.
-  Two limits. What the paper holds fills the tooth for every medium
-  alike, so pastel rubbed into the paper takes a pencil only while dust is
-  left on it for the point to ride on: over those two layers blended with
-  a finger a 2B line is 0.77 as dark as on bare paper, blended again
-  crosswise 0.23; and a stick that leaves more crumbs of its own takes
-  blended pastel for a ground like its own, a tooth that is full: a
-  charcoal pencil over the pastel blended once, 0.21.
+  own mark, meets no bed and draws as it did: graphite layer on layer, of
+  one grade or of several, pastel over pastel, fixed or not. (To the bit,
+  but for the last bit of rounding since the dust pressed in is counted
+  apart: graphite drawn over graphite comes out within 6e-8 of what it
+  was.)
+  *A waxy tip meets a bed too* (fusain-14f). Its film lies on the dust in
+  any case (see "A film"), but the dust took all of the room in the tooth
+  from it as from a dry tip, so a crayon or a coloured pencil hardly
+  marked a tooth full of pastel. It meets a bed as a dry tip does: one
+  that leaves no crumbs (a crayon) in any dust, so a tooth full of it is
+  no longer in its way, and it rides on it, laying `BED_BITE` less. Over
+  the two layers of pale pastel, shaded across at 0.6 with a width of 6,
+  a near-black coloured pencil lays 0.78 to 0.85 of what it lays on
+  bare paper over three sheets (a thirtieth before, which left the tone
+  at 0.96 of the pastel's: now 0.20), at 0.9 0.80 to 0.87 (a fifteenth;
+  the tone 0.90, now 0.08), and a near-black crayon at 0.8 0.83 to 0.89
+  (a fourteenth; 0.87, now 0.06). Over the pale pastel it darkens more than on bare paper, which
+  shows white between its grains. The same holds of graphite's crumbs: a
+  crayon over a heavy shading of 8B rides on them and lays 0.67 of what
+  it lays on bare paper (0.12, the tooth full), so a white crayon there
+  lightens it far more. An oil pastel's paste is no dust, and its join
+  with another, rubbed or not, is as it was.
+  *Dust pressed into the paper* (fusain-bq2). What a tip or a tool presses
+  into the paper of the dust is counted apart in `held`; what it presses
+  of paste is not, the paper holding that as it holds a mark. It is
+  still dust: no part of the tip's own mark, so no crumbs are owed for
+  it (a stick that leaves many crumbs took pastel pressed in for a ground
+  like its own, a tooth that was full); and packed in the valleys of the
+  tooth it is no bed, but the ground the tip meets, riding on loose dust
+  over it or not, and keeps some tooth of its own, as set dust does: it
+  takes `FIXED_ROOM` of the room it took loose. Of what is pressed in,
+  the crumbs the tip's own mark would have that do not lie on the paper
+  are taken to be its own, which fill the tooth as they did. So pastel
+  rubbed into the paper takes a pencil less the more it is rubbed in, and
+  still takes it: over those two layers, a 2B line is 0.83, 0.66 and 0.56
+  as dark as on bare paper, loose, blended once with a finger and blended
+  again crosswise (over three sheets; 0.87 and 0.23 for the blended ones
+  before), a charcoal pencil 1.00, 0.90 and 0.58 (0.25 and 0.02), and an
+  HB 0.78, 0.52 and 0.40.
   A film of graphite shines under the lamp as what the paper holds does
   (see Rendering).
 - **Dust that is set.** A film of wax binds part of the loose dust it is
@@ -890,7 +924,15 @@ At each step, for each pixel under the tip:
    coloured pencil build; but a dry medium has no tooth left to scrape it
    off as soon as the wax covers the tooth, which is the thickness at which
    any layer covers what is under it (`COVERS`). One firm line of crayon is
-   that thick, so charcoal shaded over it skips it: wax resist. Pressed hard, the tip polishes the film: it raises `polish`
+   that thick, so charcoal shaded over it skips it: wax resist. The wax is
+   slick in proportion to its thickness up to there, so a light line is
+   only partly slick. Over a tooth full of dust too, since a crayon rides on
+   the dust (see "A bed of dust"): over vine charcoal rubbed into a tone,
+   compressed charcoal shaded across a firm line of white crayon takes on
+   it 0.08 of what it takes beside it, over three sheets, on a line at 0.5
+   0.47 and at 0.3 0.83 (on bare paper 0.04, 0.26 and 0.63). While the
+   crayon was starved of room there its film was half as thick as covers
+   the tooth, and the firm line took 0.56 (fusain-3jj). Pressed hard, the tip polishes the film: it raises `polish`
    towards the level its pressure reaches (see "Pressed flat"),
    which levels the tooth so that every part of the pixel is touched, and it
    drags some of the waxy layer along and lays it back down, valleys
