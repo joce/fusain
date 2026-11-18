@@ -14,6 +14,7 @@ from fusain import (
     Smudger,
     Stick,
     crayons,
+    hatching,
     papers,
     pastels,
     pencils,
@@ -30,6 +31,7 @@ from fusain._engine import (
     IV,
     IW,
     KINDS,
+    POLISH_FLAT,
     POLISH_HOLDS,
     SET,
     SETTLE,
@@ -485,8 +487,8 @@ def _patchy(sheet, where=INSIDE) -> float:
 @pytest.mark.parametrize(
     "make, width, most",
     [
-        (pencils.coloured, 6.0, (0.55, 0.5, 0.45)),
-        (pastels.oil, 14.0, (0.72, 0.65, 0.58)),
+        (pencils.coloured, 6.0, (0.42, 0.38, 0.35)),
+        (pastels.oil, 14.0, (0.55, 0.5, 0.45)),
     ],
 )
 def test_strokes_near_where_a_tip_begins_to_polish_polish_alike(make, width, most):
@@ -496,8 +498,11 @@ def test_strokes_near_where_a_tip_begins_to_polish_polish_alike(make, width, mos
     # (two layers of a dark: 0.91, 0.78 and 0.68 for coloured pencil, 1.34,
     # 1.08 and 0.87 for oil pastel, when it began at 0.6 sharp; 0.63, 0.58
     # and 0.54, 0.81, 0.73 and 0.67 with the soft onset, every pass adding
-    # to the polish; 0.47, 0.41 and 0.38, 0.64, 0.57 and 0.51 now that each
-    # polishes to the level of its load: fusain-2z5)
+    # to the polish; 0.47, 0.41 and 0.38, 0.64, 0.57 and 0.51 once each
+    # polished to the level of its load, fusain-2z5; 0.36, 0.32 and 0.29,
+    # 0.48, 0.42 and 0.38 now that a hand's strokes are firm by 5% either
+    # way and not 15%, fusain-zhr: at most 0.38, 0.34 and 0.31, 0.49, 0.44
+    # and 0.40 over four sheets)
     pressed = []
     for pressure, bound in zip((0.55, 0.6, 0.65), most, strict=True):
         sheet = _sheet()
@@ -654,31 +659,54 @@ def test_many_light_layers_fill_the_tooth_and_do_not_polish_it():
 @pytest.mark.parametrize(
     "make, width, most, ruled",
     [
-        (pencils.coloured, 6.0, (0.55, 0.32), (0.16, 0.1)),
-        (crayons.wax, 9.0, (0.65, 0.36), (0.16, 0.1)),
+        (pencils.coloured, 6.0, (0.45, 0.31), (0.16, 0.1)),
+        (crayons.wax, 9.0, (0.5, 0.33), (0.16, 0.1)),
         (pastels.oil, 14.0, (0.68, 0.42), (0.15, 0.08)),
     ],
 )
 def test_one_layer_is_polished_as_evenly_as_the_hand_bears(make, width, most, ruled):
     # (fusain-2z5) one layer at 0.7 and at full pressure: how unevenly it is
     # polished, with the hand as it is and with ruled strokes, all alike.
-    # Coloured pencil 0.48 and 0.28 (0.44 and 0.28 while the passes of the
-    # strokes that overlap added up), crayon 0.59 and 0.31 (0.60 and 0.39),
-    # oil pastel 0.54 and 0.30 (0.65 and 0.44); ruled, 0.13 and 0.07 (0.35
-    # and 0.21), 0.10 and 0.06 for the oil pastel (0.42 and 0.24). With the
-    # hand as it is, it varies from one sample of the hand to the next by
-    # about a tenth either way (coloured pencil at 0.7 from 0.36 to 0.61
-    # over a dozen sheets). What is
-    # left with the hand as it is is the hand's: its strokes are firm by
-    # 15% either way, which near where a tip begins to polish is the
-    # difference between a little and a lot, they are lighter at their
-    # ends, and they stray, so that some paper is under the rim of a tip
-    # and never under its flat.
+    # Coloured pencil 0.36 and 0.25, crayon 0.45 and 0.29, oil pastel 0.45
+    # and 0.31; ruled, 0.13 and 0.07, 0.10 and 0.06 for the oil pastel.
+    # With the hand as it is, it varies from one sample of the hand to the
+    # next (at 0.7 over eight sheets, coloured pencil from 0.32 to 0.44,
+    # crayon 0.34 to 0.46, oil pastel 0.45 to 0.68). (While each stroke was
+    # firm by 15% either way and not 5%, fusain-zhr: 0.48 and 0.28, 0.59
+    # and 0.31, 0.54 and 0.30. While the passes of the strokes that overlap
+    # added up: 0.44 and 0.28, 0.60 and 0.39, 0.65 and 0.44; ruled, 0.35 and
+    # 0.21, 0.42 and 0.24 for the oil pastel.) What is left with the hand as
+    # it is is the hand's: its strokes are lighter at their ends, and they
+    # stray, so that some paper is under the rim of a tip and never under
+    # its flat (test_the_strokes_of_one_layer_differ_little_in_firmness).
     for pressure, bound, even in zip((0.7, 1.0), most, ruled, strict=True):
         sheet, straight = _sheet(), _sheet()
         sheet.shade(BOX, make(DARK), pressure, width)
         straight.shade(BOX, make(DARK), pressure, width, hand=0.0)
         assert _patchy(straight) < even < _patchy(sheet) < bound, pressure
+
+
+@pytest.mark.parametrize("make, width", [(pencils.coloured, 6.0), (pastels.oil, 14.0)])
+def test_the_strokes_of_one_layer_differ_little_in_firmness(make, width, monkeypatch):
+    # (fusain-zhr) a hand keeps its firmness from one stroke to the next,
+    # and near where a tip begins to polish the strokes of a layer at 0.7
+    # differ in polish little more than if they were all as firm: what
+    # makes it uneven is where they lie, and that they land and lift. Over
+    # three sheets, coloured pencil 1.09 times as uneven as with every
+    # stroke as firm, oil pastel 1.02. (At 15% either way, 1.47 and 1.20:
+    # the firmest strokes polished it four times as far as the lightest.)
+    def uneven() -> float:
+        spread = []
+        for seed in (1, 2, 3):
+            sheet = Sheet(200, 150, paper=papers.CARTRIDGE, seed=seed)
+            sheet.shade(BOX, make(DARK), 0.7, width)
+            spread.append(_patchy(sheet))
+        return float(np.mean(spread))
+
+    assert 0.0 < hatching.FIRMNESS <= 0.05
+    hand = uneven()
+    monkeypatch.setattr(hatching, "FIRMNESS", 0.0)
+    assert hand < 1.15 * uneven()
 
 
 def test_a_tip_presses_flat_by_its_pressure_and_not_by_the_streaks_of_its_lead():
@@ -773,15 +801,17 @@ def test_coloured_pencil_leaves_a_stain_that_only_what_cuts_the_paper_takes(pape
 
 def test_a_dense_dark_comes_off_by_degrees_and_a_burnished_one_hardly():
     # (what one rub leaves of it; what three leave, and its tone against
-    # the paper's.) fusain-2z5: four firm layers polish the wax by half,
-    # as far as 0.8 presses it, and hold as wax that has half kept its
-    # tooth: a rub leaves 0.45 of them and three 0.03, at 0.57 of the
-    # paper's tone. They polished it by 0.84 while every pass added, and
-    # held nearly as the burnished ones do: 0.63 and 0.27, at 0.10. The
-    # burnished ones are as they were: 0.68 and 0.32 (0.69 and 0.33), as
+    # the paper's.) Four firm layers polish the wax by half, as far as 0.8
+    # presses it, and hold nearly as the burnished ones do (POLISH_FLAT): a
+    # rub leaves 0.62 of them and three 0.23, at 0.11 of the paper's tone
+    # (0.62 to 0.67 and 0.22 to 0.30, at 0.07 to 0.14, over four sheets).
+    # Before the rework of press (fusain-2z5) they polished it by 0.84,
+    # every pass adding, and left 0.63 and 0.27, at 0.10; after it, held as
+    # wax polished by half, 0.45 and 0.03, at 0.53 (fusain-dhx). The
+    # burnished ones are as they were: 0.70 and 0.36 (0.69 and 0.33), as
     # dark as before.
     cases = (
-        (False, (0.35, 0.6), (0.02, 0.15), 0.62),
+        (False, (0.5, 0.75), (0.12, 0.4), 0.25),
         (True, (0.55, 0.85), (0.25, 0.45), 0.05),
     )
     for burnished, once, thrice, tone in cases:
@@ -790,16 +820,21 @@ def test_a_dense_dark_comes_off_by_degrees_and_a_burnished_one_hardly():
         dark = _luminances(sheet, RUBBED).mean()
         took = sheet.rub(AREA, tools.ERASER, 0.9)
         assert took > 0.0
-        # one rub, to and fro, takes a half or a quarter of it, and it is
+        # one rub, to and fro, takes a third or a quarter of it, and it is
         # as dark as ever
         assert once[0] < _left(sheet, before, RUBBED) < once[1]
         assert _luminances(sheet, RUBBED).mean() < dark + 0.02
-        # three take most of what kept its tooth, which lightens, and what
-        # was burnished is as dark as it was
+        # three take most of it, and what kept its tooth lightens, to three
+        # times as light as it was, if still dark (2.5 to 3.9 over four
+        # sheets; fusain-rz1: an eraser hardly lightened it); what was
+        # burnished is as dark as it was
         for _ in range(2):
             sheet.rub(AREA, tools.ERASER, 0.9)
         assert thrice[0] < _left(sheet, before, RUBBED) < thrice[1]
-        assert _luminances(sheet, RUBBED).mean() < tone * _paper(sheet)
+        light = _luminances(sheet, RUBBED).mean()
+        assert light < tone * _paper(sheet)
+        if not burnished:
+            assert light > 2.0 * dark
 
 
 def test_burnished_wax_holds_faster_than_wax_that_kept_its_tooth():
@@ -808,9 +843,10 @@ def test_burnished_wax_holds_faster_than_wax_that_kept_its_tooth():
         sheet.rub(AREA, tools.ERASER, 0.9) / sheet.pigment()[RUBBED].sum()
         for sheet in (plain.copy(), burnished.copy())
     ]
-    # (fusain-2z5: 0.40 of what it takes of the firm layers alone; 0.75
-    # while those had polished themselves by 0.84)
-    assert took[1] < 0.6 * took[0]
+    # (0.74 of what it takes of the firm layers alone, which hold nearly as
+    # burnished wax does: fusain-dhx; 0.75 while those had polished
+    # themselves by 0.84, and 0.40 while they held as polished by half)
+    assert took[1] < 0.9 * took[0]
     # (the issue's dab: a stroke less than a pixel long with the eraser is
     # one pass of it on the paper under it, which lifts a quarter of what
     # is there, and no light shows)
@@ -906,6 +942,15 @@ def test_how_fast_wax_holds():
     assert wax_grip(held, cover, flat, 0, 0, 0.0) == pytest.approx(1.0 - WAX_HOLDS)
     flat[0, 0] = 1.0
     assert wax_grip(held, cover, flat, 0, 0, 0.0) == pytest.approx(1.0 - POLISH_HOLDS)
+    # (fusain-dhx) wax polished POLISH_FLAT holds as wax polished flat, and
+    # short of that in proportion
+    flat[0, 0] = POLISH_FLAT
+    assert wax_grip(held, cover, flat, 0, 0, 0.0) == pytest.approx(1.0 - POLISH_HOLDS)
+    flat[0, 0] = 0.5 * POLISH_FLAT
+    assert wax_grip(held, cover, flat, 0, 0, 0.0) == pytest.approx(
+        1.0 - 0.5 * (WAX_HOLDS + POLISH_HOLDS)
+    )
+    flat[0, 0] = 1.0
     # as far as a tool scrapes, the wax does not hold
     assert wax_grip(held, cover, flat, 0, 0, 1.0) == 1.0
     assert wax_grip(held, cover, flat, 0, 0, 0.5) == pytest.approx(

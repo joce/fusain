@@ -311,7 +311,7 @@ Each is read for what it is:
 | The relief the lamp lights | Both: the peaks come down by `press` of their height. |
 | The sheen of graphite, which lies flat on a level tooth (`SHEEN_FLAT`) | Both, as `press`: it lies on what the tip met. |
 | The gloss of wax | `polish` alone: wax laid lightly on a tooth that a hard lead crushed is not polished. |
-| How wax holds against an eraser (`POLISH_HOLDS`) | `polish` alone. |
+| How wax holds against an eraser (`POLISH_HOLDS`, `POLISH_FLAT`) | `polish` alone. |
 | What a rubber eraser gives back as it takes the wax | `polish`, and never `crush`. |
 
 `Sheet.press` is what a tip meets, worked out from the two; it is read,
@@ -429,16 +429,32 @@ and 0.15, now 0.13 and 0.17.
 Under strokes all alike, a layer is now polished about evenly, to within
 0.13 at 0.7 and 0.08 at full pressure (it was 0.35 to 0.42 and 0.21 to
 0.24: the passes that overlapped added up). What is left with the hand as it is, is the hand's, and it is most of
-what there was. Its strokes are firm by 15% either way (`FIRMNESS`), and
+what there was. Its strokes were firm by 15% either way (`FIRMNESS`), and
 near where a tip begins to polish that is the difference between a little
-and a lot: at 0.7 the levels of such strokes run from 0.18 to 0.77, a
+and a lot: at 0.7 the levels of such strokes ran from 0.18 to 0.77, a
 spread of 0.39 of their mean before anything is drawn (0.49 at 0.6, 0.20
 at 0.85, none at full pressure, where all are flat). They are lighter at
 their ends (`LANDING`), and they stray (`STRAY_ACROSS`), so that some
 paper lies under the rim of a tip and never under its flat, and is
-pressed less. With every stroke as firm, an oil pastel at 0.7 comes down
+pressed less. With every stroke as firm, an oil pastel at 0.7 came down
 from 0.63 to 0.47; as firm at its ends, to 0.43; and in its place, to
-0.13. And for one layer of a medium that does not melt into its film,
+0.13.
+
+A hand keeps its firmness from one stroke to the next better than that
+(fusain-zhr): its strokes are now firm by 5% either way, while each still
+lands and lifts as lightly. At 0.7 the levels of its strokes run over 1.6
+times, not four, a spread of 0.13 of their mean (0.17 at 0.6, 0.10 at
+0.85). Over eight sheets, one layer at 0.7 is uneven by 0.38 of its mean
+for coloured pencil (0.52), 0.41 for a crayon (0.53) and 0.54 for an oil
+pastel (0.67), and at 0.6 by 0.43, 0.46 and 0.59 (0.60, 0.62 and 0.78);
+at full pressure it hardly changes. With every stroke as firm the oil
+pastel is at 0.52: what is left is where the strokes lie. Of the hand's
+parts, with each switched off alone: as firm at their ends, 0.50; ending
+where they were meant to (`STRAY_ALONG`), 0.52; not wandering, 0.52; all
+as wide, 0.55; but each in its place across the shading, 0.39, and with
+only that left on, 0.40 (0.11 with nothing).
+
+And for one layer of a medium that does not melt into its film,
 the film itself is not yet slick all over: a quarter to three quarters
 as slick as it gets, uneven by 0.11 to 0.24, and polished no further than
 it is slick. A level does not even out the hand; it stops
@@ -646,16 +662,20 @@ A tool is a tip plus, usually, a medium.
   eraser slides on it. Of what the paper holds at a pixel (and of a film
   and what is set there) an eraser lifts `WAX_HOLDS` less where the wax is
   `WAX_FAST` thick or more and has kept its tooth, less in proportion where
-  it is thinner, and `POLISH_HOLDS` less where it has been polished flat
-  (`polish`). One rub to and fro of a vinyl eraser at 0.9 takes five sixths
-  of one light layer of a dark coloured pencil, four fifths of three layers
-  at 0.5, over half of four firm layers and a third of those burnished;
-  three rubs leave a twentieth of the firm layers, lighter by then (under
-  half of the paper's tone), and a third of the burnished ones, as dark as
-  they were. (Four firm layers held as the burnished ones do, a rub taking
-  over a third and three leaving a quarter, while their passes added up to
-  a polish of 0.84; at 0.8 they polish the wax by half, and hold as wax
-  that has half kept its tooth.) A kneaded eraser takes over a quarter of
+  it is thinner, and `POLISH_HOLDS` less where it has been polished
+  `POLISH_FLAT` (0.55) or further (`polish`), in proportion short of that.
+  One rub to and fro of a vinyl eraser at 0.9 takes five sixths of one
+  light layer of a dark coloured pencil, four fifths of three layers at
+  0.5, nearly two fifths of four firm layers and a third of those
+  burnished; three rubs leave a quarter of the firm layers, lighter by then
+  (a ninth of the paper's tone), and a third of the burnished ones, as
+  dark as they were. (Four firm layers polish the wax by half, as far as
+  0.8 presses it, and held as wax that has half kept its tooth after the
+  rework of press: a rub left 0.45 of them and three 0.03, at half the
+  paper's tone. Their passes had added up to a polish of 0.84, and they
+  held nearly as burnished ones do, as they do again: wax pressed firmly
+  in layer after layer holds as polished flat from `POLISH_FLAT` on,
+  fusain-dhx.) A kneaded eraser takes over a quarter of
   the light layer in a rub and a fourteenth of the burnished ones. (Before, a vinyl eraser took nine
   tenths of anything in a rub, and a kneaded one a third.) A tool with
   `scrape` cuts through the wax by that share: a sand eraser
@@ -689,9 +709,9 @@ A tool is a tip plus, usually, a medium.
   each of its widths, on what is beside it and after it; wax sticks
   wherever it is laid. A vinyl eraser rubbed to and fro out of four firm
   layers of a near-black pencil, burnished, over the bare paper leaves a
-  grey halo 14 from the paper's colour (CIE 1976) within a width of the
-  dark, 6 at three to five widths and 1.4 at six to nine; not burnished,
-  11, 4 and 1.1; of a red, 5. (It left the paper clean.) What it drags is
+  grey halo 15 from the paper's colour (CIE 1976) within a width of the
+  dark, 7 at three to five widths and 2.0 at six to nine; not burnished,
+  13, 5 and 1.3; of a red, 6. (It left the paper clean.) What it drags is
   on the tool until it is laid, and counted with what it carries.
 - **Wax stains the paper** (built). A waxy medium carries its pigment into
   the fibres of the paper: of what the paper holds of it, `STAIN` thick on

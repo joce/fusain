@@ -44,6 +44,32 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Wax pressed firmly in layer after layer holds against an eraser nearly
+  as burnished wax does, as it did before the rework of press
+  (fusain-dhx). An eraser lifts `POLISH_HOLDS` less of wax polished
+  `POLISH_FLAT` (0.55) or further, and in proportion short of that, where
+  it went by the polish itself. Four firm layers of a dark coloured
+  pencil, polished by 0.52, leave 0.62, 0.40 and 0.23 after one, two and
+  three rubs of a vinyl eraser at 0.9, at 0.11 of the paper's tone (two
+  sheets; 0.45, 0.17 and 0.03, at 0.53, since the rework; 0.61, 0.40 and
+  0.24, at 0.14, before it); burnished, 0.69, 0.49 and 0.35, as before.
+  Fewer layers, polished less, hold a little more than before the rework:
+  after a rub one firm layer leaves 0.29 of itself (0.25 before it and
+  since), two 0.46 (0.41, 0.36), two of a crayon 0.64 (0.57, 0.48); a
+  light layer 0.16, as ever. What a vinyl eraser drags out of a
+  dense dark is darker beside it: 13 from the paper's colour within a
+  width (11).
+
+- A hand's strokes are firm by 5% either way, not 15% (`FIRMNESS`,
+  fusain-zhr), and what it does along a stroke is as it was. Near where a
+  tip begins to polish, neighbouring strokes of one layer at 0.7 polish
+  it 1.6 times as far as each other, not four, and the layer is uneven by
+  0.38 of its mean for coloured pencil, 0.41 for a crayon and 0.54 for an
+  oil pastel (0.52, 0.53 and 0.67; eight sheets), little more than with
+  every stroke as firm (0.52 for the oil pastel). What is left is where
+  the strokes lie across the shading (`STRAY_ACROSS`). Every shading
+  changes a little.
+
 - A film is stored apart from the dust it lies on (fusain-r56,
   fusain-fxc), and the picture changes wherever a film lies: a coloured
   pencil or a crayon over dust (its own crumbs included), an oil pastel

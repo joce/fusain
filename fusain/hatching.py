@@ -28,7 +28,14 @@ SPREAD = 0.6
 #: that a stub cut short by a corner of the area stays near the hatching's
 #: direction (a stroke of two widths or more wanders as far as ever).
 WANDER_SHARE = 0.05
-FIRMNESS = 0.15
+#: A hand keeps its firmness from one stroke to the next better than along
+#: one, where it lands and lifts (:data:`LANDING`): each stroke is firm by
+#: FIRMNESS either way. Near where a tip begins to polish a little
+#: firmness is a lot of polish: at 15%, the firmest strokes of a layer at
+#: 0.7 polished it four times as far as the lightest, and one layer of oil
+#: pastel was uneven by 0.67 of its mean over eight sheets; at 5%, 1.6
+#: times as far, and 0.54 (fusain-zhr).
+FIRMNESS = 0.05
 WIDTH = 0.1
 #: A stroke is lighter where the pencil lands and where it lifts: the share
 #: of its pressure it has lost at either end.
