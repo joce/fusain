@@ -8,8 +8,10 @@ delete it once they are done or sorted again.
 
 ## Where things stand
 
-One issue is open here, `fusain-fdh`, waiting for scans of real pencil from
-the owner, and two in murex, left aside by the owner for now.
+Two issues are open here, both waiting on the owner's hand: `fusain-fdh`
+(scans of real pencil) and `fusain-586` (white wax over heavy graphite,
+tried by hand, which picks how a waxy tip meets graphite crumbs). Two are
+open in murex, left aside by the owner for now.
 
 Neither library has been released since these passes. murex's requirement of
 NumPy 2 and its stored spectral tables reach users only with its next
@@ -34,8 +36,9 @@ closed with its measurements:
   takes `FIXED_ROOM` of the room it took loose.
 
 To look at, from #82: a crayon now rides on heavy graphite crumbs too (over
-8B at 0.95 it lays 0.67 of what it lays on bare paper, was 0.12), and wax
-over pale pastel renders darker than on bare paper.
+8B at 0.95 it lays 0.67 of what it lays on bare paper, was 0.12; a white
+crayon there reads nearly clean white), which `fusain-586` is to settle;
+and wax over pale pastel renders a little darker than on bare paper.
 
 ## What the passes of 16 and 17 November did
 
@@ -128,9 +131,11 @@ Results that the numbers cannot settle:
 
 ## The open issues
 
-### Needs material from the owner (1)
+### Needs material from the owner (2)
 
 - `fusain-fdh`: calibrating graphite tones needs scans of real pencil.
+- `fusain-586`: the owner tries white wax over heavy graphite by hand;
+  the issue lists what to do for each outcome.
 
 ### In murex (2)
 
