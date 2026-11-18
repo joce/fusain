@@ -1,20 +1,41 @@
-# Handoff: the open issues, 17 November 2026 (evening)
+# Handoff: the open issues, 18 November 2026
 
-Where the issues stand after the passes of 15 to 17 November (pull requests
-#49 to #78 here, #7 to #10 in murex), and what can be picked up next. The
+Where the issues stand after the passes of 15 to 18 November (pull requests
+#49 to #82 here, #7 to #10 in murex), and what can be picked up next. The
 issues themselves are in Beads: `bd show <id>` has the description and the
 measurements of each, and `bd ready` what is open. This file only sorts them;
 delete it once they are done or sorted again.
 
 ## Where things stand
 
-Seven issues are open here and two in murex. None can go without the owner:
-every one needs a decision on what the right behaviour is, material from the
-owner, or work in oilpaint.
+One issue is open here, `fusain-fdh`, waiting for scans of real pencil from
+the owner, and two in murex, left aside by the owner for now.
 
 Neither library has been released since these passes. murex's requirement of
 NumPy 2 and its stored spectral tables reach users only with its next
 release; fusain's picture has changed several times (below) since its last.
+
+## What the pass of 18 November did
+
+The six issues that needed the owner's view, each decided by the owner and
+closed with its measurements:
+
+- `fusain-6uj` (#80): a coloured pencil's `melts` follows its softness
+  (`Medium.pale`, `pencils.melts_at`); presets unchanged.
+- `fusain-dhx`, `fusain-zhr` (#81): the press law is kept as reworked; wax
+  holds as burnished from `POLISH_FLAT` (0.55) of polish on, so a
+  dense dark that is not burnished comes off a vinyl eraser as before the rework
+  (0.62, 0.40, 0.23 after one to three rubs). `hatching.FIRMNESS` is 0.05:
+  one layer at 0.7 is uneven by 0.38 to 0.54 (was 0.52 to 0.67); what is
+  left comes mostly from `STRAY_ACROSS`.
+- `fusain-14f`, `fusain-3jj`, `fusain-bq2` (#82): a waxy tip rides on a bed
+  of dust as a dry one does; a crayon's film over rubbed charcoal is slick
+  to it; `held` counts the dust pressed into the paper apart (`ID`), which
+  takes `FIXED_ROOM` of the room it took loose.
+
+To look at, from #82: a crayon now rides on heavy graphite crumbs too (over
+8B at 0.95 it lays 0.67 of what it lays on bare paper, was 0.12), and wax
+over pale pastel renders darker than on bare paper.
 
 ## What the passes of 16 and 17 November did
 
@@ -102,31 +123,10 @@ Results that the numbers cannot settle:
   measured over several sheets (#64, #65, #73, #74), the values in comments.
   A rub's rim is only asked to be rubbed at all.
 - From before: a rubbed patch keeps a rim of grain not rubbed, 3 to 5 pixels
-  wide (`fusain-soe`, the third row of `crayons.png`); a dense dark that is
-  not burnished comes off a vinyl eraser nearly to its stain in three rubs,
-  and several firm layers of a pencil do not add up. Both of the latter are
-  in `fusain-dhx`.
-- Measurements quoted in the open issues predate #74, which moved tones and
-  films; re-measure before acting on one.
+  wide (`fusain-soe`, the third row of `crayons.png`); several firm layers
+  of a pencil do not add up (kept by the owner in `fusain-dhx`).
 
 ## The open issues
-
-### Need the owner's view (6)
-
-What the right behaviour is, which the code cannot tell:
-
-- `fusain-dhx`: the choices of the rework of press (what several layers
-  do, how fast wax that is not burnished comes off an eraser, its
-  constants, 4 to 8% on strokes).
-- `fusain-zhr`: the hand's ±15% of firmness makes neighbouring strokes
-  differ four-fold in polish near the onset of burnishing. It is what
-  still polishes a shading in streaks.
-- `fusain-14f`: how well a crayon or a coloured pencil should mark a tooth
-  full of pastel dust.
-- `fusain-3jj`: how thick a film must be to be slick to dust.
-- `fusain-bq2`: how well pastel rubbed into the paper should take a pencil.
-- `fusain-6uj`: how the softness of a coloured pencil changes its
-  burnishing.
 
 ### Needs material from the owner (1)
 
