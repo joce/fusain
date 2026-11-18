@@ -23,8 +23,8 @@ closed with its measurements:
 - `fusain-6uj` (#80): a coloured pencil's `melts` follows its softness
   (`Medium.pale`, `pencils.melts_at`); presets unchanged.
 - `fusain-dhx`, `fusain-zhr` (#81): the press law is kept as reworked; wax
-  holds as burnished from `POLISH_FLAT` (0.55) of polish on, so an
-  unburnished dense dark comes off a vinyl eraser as before the rework
+  holds as burnished from `POLISH_FLAT` (0.55) of polish on, so a
+  dense dark that is not burnished comes off a vinyl eraser as before the rework
   (0.62, 0.40, 0.23 after one to three rubs). `hatching.FIRMNESS` is 0.05:
   one layer at 0.7 is uneven by 0.38 to 0.54 (was 0.52 to 0.67); what is
   left comes mostly from `STRAY_ACROSS`.
