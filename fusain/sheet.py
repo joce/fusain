@@ -108,7 +108,8 @@ class Sheet:
     in blotches, until a firm tip or a stump lays them down again. And how
     far it has been indented (``dent``: the depth of a groove below the peaks of the
     tooth, in depths of the tooth of a paper of depth 1), the pigment fixed
-    to the paper (``held``) and the pigment lying on it, in two layers,
+    to the paper (``held``, which counts apart the dust pressed into it)
+    and the pigment lying on it, in two layers,
     ``loose`` on top and ``under`` beneath it, so that what was laid last is
     seen over what was laid before. Most of that is dust, which is
     what a stump, an eraser or a later stroke can still move; ``bonded``

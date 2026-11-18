@@ -241,15 +241,18 @@ def test_a_light_line_over_pastel_shines_as_far_as_it_is_a_film_too(seed):
     # the film, it could not be told from pastel laid over the film, and
     # was taken to hide it: a 2B at 0.3 shone 0.33 as much as on bare
     # paper, where 0.82 as much of it was a film. The film lies on the
-    # pastel, its own: 0.76 to 0.89 at 0.3, 0.83 to 0.94 at 0.6 and 0.89
-    # to 0.97 at 1.0, over three sheets
+    # pastel, its own: 0.69 to 0.80 at 0.3, 0.71 to 0.81 at 0.6 and 0.73
+    # to 0.80 at 1.0, over three sheets (0.76 to 0.97 while the pastel the
+    # tips pressed into the paper was out of reach of a tip riding on the
+    # dust over it: it is the ground the tip meets, and takes half the
+    # room it took loose, fusain-bq2)
     for pressure in (0.3, 0.6, 1.0):
         on_paper = _lined(
             Sheet(200, 150, paper=papers.CARTRIDGE, seed=seed), pencils.B2, pressure
         )
         over = _lined(_bed(seed=seed), pencils.B2, pressure)
         share = _sum(over.film[ALONG]) / _sum(on_paper.held[..., IV][ALONG])
-        assert 0.7 < share < 0.95
+        assert 0.65 < share < 0.9
         ratio = _shine_along(over) / _shine_along(on_paper)
         assert share - 0.1 < ratio < share + 0.2
 

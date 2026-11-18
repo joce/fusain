@@ -389,6 +389,43 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A crayon or a coloured pencil marks a tooth full of pastel dust
+  (fusain-14f). It meets a bed of dust as a dry tip does (fusain-wo4):
+  the dust is not in its way, it rides on it and lays `BED_BITE` less.
+  Over two layers of a pale soft pastel a near-black coloured pencil
+  shaded at 0.6 lays 0.78 to 0.85 of what it lays on bare paper (a
+  thirtieth) and takes the tone to 0.20 of the pastel's (0.96); at 0.9
+  0.80 to 0.87 and 0.08 (0.90); a crayon at 0.8 0.83 to 0.89 and 0.06
+  (0.87). A 2B there is 0.79 as dark as on bare paper. A crayon, which
+  leaves no crumbs, also rides on the crumbs of a heavy graphite shading:
+  over an 8B at 0.95 it lays 0.67 of what it lays on bare paper (0.12).
+  The join of two oil pastels is as it was.
+
+- A firm crayon line over a tooth full of dust is slick to charcoal
+  (fusain-3jj). Starved of room there, its film was half as thick as
+  covers the tooth, and charcoal took on it at half the rate beside it;
+  it now covers the tooth (the slickness was a ramp to `COVERS` already,
+  and stays one). Over vine charcoal rubbed into a tone, compressed
+  charcoal shaded across a white line laid at 0.9 takes on it 0.08 of
+  what it takes beside it (0.56), at 0.5 0.47 and at 0.3 0.83. In
+  `examples/output/crayons.png`, third row, the white line is 0.79 to
+  0.83 of the paper's tone all along, where it was 0.48 where the stump
+  crosses it and 0.67 elsewhere (the stump never darkened it: the line
+  was thin there).
+
+- Pastel rubbed into the paper takes a pencil (fusain-bq2). `Sheet.held`
+  has a part more, the volume of what it holds that is dust a tip or a
+  tool pressed into the paper (`ID`; not paste). That dust is no part of
+  a tip's mark, so no crumbs are owed for it, and no bed: it is the
+  ground the tip meets, and keeps some tooth of its own, as set dust
+  does (`FIXED_ROOM`). Over two layers of a pale soft pastel, loose,
+  blended once with a finger and again crosswise, a 2B line is 0.83, 0.66
+  and 0.56 as dark as on bare paper (0.87, 0.87 and 0.23), a charcoal
+  pencil 1.00, 0.90 and 0.58 (1.02, 0.25 and 0.02). A pencil over loose
+  pastel lays a little less for the pastel its tips pressed in: a 2B line
+  0.72 of what it lays on bare paper (0.77). Graphite over graphite draws
+  as it did, but for the last bit of rounding.
+
 - A sand eraser over coloured pencil no longer makes NaN (fusain-6ru): where
   rounding had left a trace of wax at a pixel with nothing to hold it, an
   eraser that drags wax divided nothing by nothing, and the NaN spread over

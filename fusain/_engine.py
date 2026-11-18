@@ -73,13 +73,15 @@ def once(some):
 
 #: Pigment is packed per pixel as [K (N bands), S, volume, sheen], all
 #: extensive (summed over the pigment present; the sheen is the volume times
-#: the sheen of its medium); the held layer has a fifth part, the volume of
-#: wax at the pixel. There are three layers: what the paper holds, and
+#: the sheen of its medium); the held layer has two parts more, the volume
+#: of wax at the pixel and the volume of what it holds that is dust pressed
+#: into the paper (:func:`press_dust`), which is still dust to a tip
+#: (:func:`bed_of`). There are three layers: what the paper holds, and
 #: over it what lies on that, in two layers (``under`` and, on top,
 #: ``loose``) so that what was laid last is seen over what was laid before.
 N = N_BANDS
-IS, IV, IX, IW = N, N + 1, N + 2, N + 3
-LOOSE, HELD = N + 3, N + 4
+IS, IV, IX, IW, ID = N, N + 1, N + 2, N + 3, N + 4
+LOOSE, HELD = N + 3, N + 5
 #: Most of what lies in the two layers is loose dust, but not all. For each
 #: of the two (0 underneath, 1 on top) the sheet keeps the volume in it
 #: that is bonded, of three kinds: dust that fixative has set (SET); dust
@@ -218,7 +220,13 @@ BINDS = 0.7
 #: the paper under it is out of reach: what fills the tooth there is what
 #: lies on the bed (:func:`riding`). But dust scrapes less off a tip than
 #: the paper does, loose (it rolls) or set: riding on a bed, a tip lays
-#: BED_BITE less in a pass.
+#: BED_BITE less in a pass. A waxy tip meets a bed as a dry one does (a
+#: crayon, which leaves no crumbs, meets one in any dust): its film lies
+#: on the dust in any case, but the dust is no more in its way than in a
+#: dry tip's, so it marks a tooth full of pastel, a little less readily
+#: than bare paper. Dust pressed into the paper is no bed: packed in the
+#: valleys of the tooth, it is the ground a tip meets, and keeps some
+#: tooth of its own, taking FIXED_ROOM of the room it took loose.
 BED_FROM = 0.02
 BED_BITE = 0.2
 #: Wax films over the tooth: a film this thick is as slick as it gets to a
@@ -732,6 +740,7 @@ def press_dust(held, under, loose, bonded, cover, iy, ix, share):
             room = 1.0 - min(full, 1.0)
             from_loose *= 1.0 - (1.0 - room) * pasty_share(bonded, loose, iy, ix, 1)
             from_under *= 1.0 - (1.0 - room) * pasty_share(bonded, under, iy, ix, 0)
+        pressed = loose[iy, ix, IV] * from_loose + under[iy, ix, IV] * from_under
         for part in range(LOOSE):
             moved = loose[iy, ix, part] * from_loose
             loose[iy, ix, part] -= moved
@@ -740,9 +749,15 @@ def press_dust(held, under, loose, bonded, cover, iy, ix, share):
             under[iy, ix, part] -= moved
             held[iy, ix, part] += moved
         if bonded[iy, ix, 1, PASTE] > 0.0:
-            bonded[iy, ix, 1, PASTE] -= bonded[iy, ix, 1, PASTE] * share * room
+            pasted = bonded[iy, ix, 1, PASTE] * share * room
+            bonded[iy, ix, 1, PASTE] -= pasted
+            pressed -= pasted
         if bonded[iy, ix, 0, PASTE] > 0.0:
-            bonded[iy, ix, 0, PASTE] -= bonded[iy, ix, 0, PASTE] * share * room
+            pasted = bonded[iy, ix, 0, PASTE] * share * room
+            bonded[iy, ix, 0, PASTE] -= pasted
+            pressed -= pasted
+        # (of what goes in, the dust: paste the paper holds as it holds a mark)
+        held[iy, ix, ID] += max(pressed, 0.0)
 
 
 @_inlined
@@ -1175,48 +1190,62 @@ def lying_share(under, loose, covered, iy, ix):
 
 @_inlined
 def bed_of(held, under, loose, bonded, covered, iy, ix, crumbs):
-    """The bed of dust a dry tip meets at a pixel: how thick it is over the
+    """The bed of dust a tip meets at a pixel: how thick it is over the
     marked part of the pixel (``covered``), and the share of it that is
     loose, the rest being set. It is the dust, loose or set, beyond the
     crumbs the tip's own mark would have for what is fast there (``crumbs``
     times what the paper holds, a film and paste: how much dust the medium
-    leaves for each part that is held), by more than BED_FROM. (0, 0) on a
-    ground no dustier than the tip's own mark: bare paper, its own layers,
-    or those of a medium that holds better."""
+    leaves for each part that is held), by more than BED_FROM. (0, 0, ...) on
+    a ground no dustier than the tip's own mark: bare paper, its own layers,
+    or those of a medium that holds better.
+
+    Dust pressed into the paper (``held[ID]``) is no part of the tip's mark,
+    and no crumbs are owed for it; nor is it a bed. Of it, the crumbs of
+    the tip's own mark that do not lie on the paper were pressed in, and
+    the rest is foreign to the tip: the third thing returned is how thick
+    that is over the marked part of the pixel (:func:`riding`)."""
+    pressed = held[iy, ix, ID]
     lying = under[iy, ix, IV] + loose[iy, ix, IV]
     fixed = bonded[iy, ix, 0, SET] + bonded[iy, ix, 1, SET]
     fixed += bonded[iy, ix, 0, BOUND] + bonded[iy, ix, 1, BOUND]
     film = bonded[iy, ix, 0, FILM] + bonded[iy, ix, 1, FILM]
     paste = bonded[iy, ix, 0, PASTE] + bonded[iy, ix, 1, PASTE]
-    fast = held[iy, ix, IV] + film + paste
-    if lying <= 0.0:
-        return 0.0, 0.0  # (no dust here: most pixels of a first pass)
+    fast = held[iy, ix, IV] - pressed + film + paste
+    if lying + pressed <= 0.0:
+        return 0.0, 0.0, 0.0  # (no dust here: most pixels of a first pass)
     dust = lying - paste
-    bed = (dust - crumbs * fast) / covered - BED_FROM
+    owed = crumbs * fast
+    foreign = max(pressed - max(owed - dust, 0.0), 0.0) / covered
+    bed = (dust - owed) / covered - BED_FROM
     if bed <= 0.0:
-        return 0.0, 0.0
-    return bed, min(max(dust - fixed, 0.0) / dust, 1.0)
+        return 0.0, 0.0, foreign
+    return bed, min(max(dust - fixed, 0.0) / dust, 1.0), foreign
 
 
 @_inlined
 def riding(held, under, loose, bonded, covered, iy, ix, crumbs, beds):
-    """What a dry tip finds of a bed of dust at a pixel (:func:`bed_of`;
-    ``beds`` is how far the tip is dry): the thickness that is not in its
+    """What a tip finds of a bed of dust at a pixel (:func:`bed_of`;
+    ``beds`` is how far it meets one): the thickness that is not in its
     way in the tooth, and the share of the pixel on which it rides on the
     bed, where the mark the paper would have held is a film on the dust.
     The bed is not in its way, whether the tip ploughs through it or rides
     on it; and where it rides, the paper under the bed is out of its reach,
-    so what the paper holds there is not either (with the crumbs counted
-    for it): what fills the tooth for it there is what lies on the bed."""
-    bed, afloat = bed_of(held, under, loose, bonded, covered, iy, ix, crumbs)
-    paper = held[iy, ix, IV]
+    so the marks the paper holds there are not either (with the crumbs
+    counted for them): what fills the tooth for it there is what lies on
+    the bed. Dust pressed into the paper is no bed: packed in the valleys,
+    it is the ground the tip meets, riding or not, and keeps some tooth of
+    its own: as set dust, it takes FIXED_ROOM of the room it would take
+    loose, but for the tip's own crumbs (:func:`bed_of`)."""
+    bed, afloat, foreign = bed_of(held, under, loose, bonded, covered, iy, ix, crumbs)
+    paper = held[iy, ix, IV] - held[iy, ix, ID]
+    packed = beds * (1.0 - FIXED_ROOM) * foreign
     if bed <= 0.0:
-        return 0.0, 0.0
+        return packed, 0.0
     rides = beds * min(bed / COVERS, 1.0)
     # (dust that is set took less of the room than loose dust)
     took = afloat + FIXED_ROOM * (1.0 - afloat)
     below = (1.0 + crumbs * took) * paper / covered
-    return beds * bed * took + rides * below, rides
+    return packed + beds * bed * took + rides * below, rides
 
 
 @_inlined
@@ -1556,11 +1585,12 @@ def bear(
                 dv *= 1.0 - BED_BITE * rides
                 dv = min(dv * per_pass * slide, room) * touch
                 # the share of what is held that lies on what it met and not in
-                # the tooth, a film: all that a waxy tip lays over dust, and
-                # what a dry one lays where it rides on a bed
+                # the tooth, a film: what a tip lays where it rides on a bed,
+                # and all that a waxy one lays over dust elsewhere
                 over = rides
                 if filmy > 0.0:
-                    over += filmy * lying_share(under, loose, covered, iy, ix)
+                    lies = lying_share(under, loose, covered, iy, ix)
+                    over += (1.0 - rides) * filmy * lies
                 lying += deposit(
                     held, fresh, iy, ix, dv, binding, over, k, s, sheen, wax
                 )
@@ -1750,11 +1780,12 @@ def law_of(medium, paper):
     law[11] = FLAT_BITE * dryness
     law[12] = medium[5]  # how far it melts into the film it polishes
     # the crumbs of its own mark, for each part of it the paper holds, and
-    # how far it meets a bed in dust beyond those: as far as it is dry (a
-    # medium that is all dust has nothing for the paper to hold either way)
+    # how far it meets a bed in dust beyond those: any medium the paper
+    # holds, dry or waxy (one that is all dust has nothing for the paper to
+    # hold either way)
     law[13], law[14] = 0.0, 0.0
     if binding > 1e-9:
-        law[13], law[14] = (1.0 - binding) / binding, dryness
+        law[13], law[14] = (1.0 - binding) / binding, 1.0
     return law, reach
 
 
@@ -2172,7 +2203,11 @@ def push_along(
     given = 0.0
     # (else no graphite, or no wax, here or on the tool: most pixels)
     for _ in once(moves or slid[IV] > 0.0):
+        # (of the dust pressed into the paper, the share of what it holds
+        # that comes up as dust or onto the face goes)
+        kept = 1.0 - min(take, 1.0)
         if smears:
+            kept *= 1.0 - slip * SLIDE_LOOSE
             for part in range(LOOSE):
                 moved = held[iy, ix, part] * slip * SLIDE_LOOSE
                 held[iy, ix, part] -= moved
@@ -2183,6 +2218,7 @@ def push_along(
             wax = waxed * gone
             held[iy, ix, IW] -= wax
             slid[IC] += wax
+        held[iy, ix, ID] *= kept
         given, _ = spread_dust(held, slid, giving, iy, ix, take, lays)
         if not smears:
             wax = giving[IC] * back
@@ -2445,6 +2481,7 @@ def lift(held, under, loose, films, bonded, load, iy, ix, lifts, share):
         taken = held[iy, ix, part] * up_paper
         held[iy, ix, part] -= taken
         load[part] += taken
+    held[iy, ix, ID] -= held[iy, ix, ID] * up_paper
     return drift_below, drift_top
 
 
