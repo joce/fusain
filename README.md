@@ -1,5 +1,13 @@
 # fusain
 
+> **fusain has moved.** Since 19 November 2026 it is `murex.fusain`, a part of
+> [murex](https://github.com/joce/murex), which holds every medium in one
+> package so that they can one day meet on one sheet. Its code, with all of
+> its history, is there under `murex/fusain/`, and its open issues are in
+> murex's tracker. `from fusain import Sheet` is now
+> `from murex.fusain import Sheet`. This repository is no longer updated:
+> what follows is fusain as it was on that day.
+
 [![CI](https://github.com/joce/fusain/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/joce/fusain/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/joce/fusain/graph/badge.svg)](https://codecov.io/gh/joce/fusain)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
